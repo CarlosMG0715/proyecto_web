@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GroupRole {
+  ADMIN
+  MIEMBRO
+}
+
+enum PenaltyStatus {
+  PENDING
+  RESOLVED
+  WAIVED
+}
+
+model User {
+  id            String            @id @default(cuid())
+  name          String
+  email         String            @unique
+  passwordHash  String
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
+  memberships   GroupMembership[]
+  createdGroups Group[]           @relation("GroupCreator")
+  createdHabits Habit[]           @relation("HabitCreator")
+  checkIns      CheckIn[]
+  penalties     Penalty[]
+  messages      Message[]
+
+  @@map("users")
+}
+
+model Group {
+  id          String            @id @default(cuid())
+  name        String
+  inviteCode  String            @unique
+  timeZone    String            @default("America/Bogota")
+  createdById String
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+  createdBy   User              @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  memberships GroupMembership[]
+  habits      Habit[]
+  penalties   Penalty[]
+  messages    Message[]
+
+  @@index([createdById])
+  @@map("groups")
+}
+
+model GroupMembership {
+  id       String    @id @default(cuid())
+  groupId  String
+  userId   String
+  role     GroupRole @default(MIEMBRO)
+  joinedAt DateTime  @default(now()) @db.Timestamptz(3)
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@map("group_memberships")
+}
+
+model Habit {
+  id          String    @id @default(cuid())
+  groupId     String
+  createdById String
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation("HabitCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  checkIns    CheckIn[]
+  penalties   Penalty[]
+
+  @@index([groupId, isActive])
+  @@index([createdById])
+  @@map("habits")
+}
+
+model CheckIn {
+  id          String   @id @default(cuid())
+  habitId     String
+  userId      String
+  checkInDate DateTime @db.Date
+  checkedAt   DateTime @default(now()) @db.Timestamptz(3)
+  habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, userId, checkInDate])
+  @@index([userId, checkInDate])
+  @@map("check_ins")
+}
+
+model Penalty {
+  id             String        @id @default(cuid())
+  groupId        String
+  userId         String
+  habitId        String?
+  idempotencyKey String        @unique
+  reason         String
+  points         Int           @default(1)
+  status         PenaltyStatus @default(PENDING)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  group          Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habit          Habit?        @relation(fields: [habitId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, createdAt])
+  @@index([userId, status])
+  @@map("penalties")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, createdAt])
+  @@map("messages")
+}
