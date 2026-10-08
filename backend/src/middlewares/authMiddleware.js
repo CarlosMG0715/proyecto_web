@@ -1,12 +1,8 @@
 const jwt = require('jsonwebtoken')
+const { jwtSecret } = require('../config')
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jwt_secret_dev_cambiar_en_produccion'
-
-/**
- * Middleware para autenticar peticiones mediante Access Token (Bearer JWT).
- */
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']
+  const authHeader = req.headers.authorization
   const token = authHeader && authHeader.split(' ')[1]
 
   if (!token) {
@@ -17,10 +13,9 @@ function authenticateToken(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET)
-    req.user = payload
+    req.user = jwt.verify(token, jwtSecret)
     next()
-  } catch (error) {
+  } catch {
     return res.status(403).json({
       error: 'Token inválido o expirado',
       correlationId: req.correlationId,

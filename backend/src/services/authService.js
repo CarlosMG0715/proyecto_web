@@ -1,15 +1,32 @@
 const crypto = require('crypto')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
-const { prisma } = require('../models')
+const { prisma } = require('../prisma')
+const { jwtSecret, accessTokenExpiration, refreshTokenDays } = require('../config')
 
-const JWT_SECRET = process.env.JWT_SECRET || 'jwt_secret_dev_cambiar_en_produccion'
-const ACCESS_TOKEN_EXPIRATION = '15m'
-const REFRESH_TOKEN_DAYS = 7
+function createAccessToken(user) {
+  return jwt.sign(
+    { userId: user.id, email: user.email, name: user.name },
+    jwtSecret,
+    { expiresIn: accessTokenExpiration },
+  )
+}
 
-/**
- * Servicio de lógica de negocio para autenticación y sesiones.
- */
+function createRefreshToken() {
+  const refreshToken = crypto.randomBytes(40).toString('hex')
+  const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
+  const expiresAt = new Date(Date.now() + refreshTokenDays * 24 * 60 * 60 * 1000)
+  return { refreshToken, tokenHash, expiresAt }
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+  }
+}
+
 class AuthService {
   async register({ name, email, password }) {
     const existing = await prisma.user.findUnique({
@@ -24,7 +41,7 @@ class AuthService {
 
     const passwordHash = await bcrypt.hash(password, 12)
 
-    const user = await prisma.user.create({
+    return prisma.user.create({
       data: {
         name: name.trim(),
         email: email.toLowerCase().trim(),
@@ -37,8 +54,6 @@ class AuthService {
         createdAt: true,
       },
     })
-
-    return user
   }
 
   async login({ email, password, userAgent, ipAddress }) {
@@ -59,19 +74,9 @@ class AuthService {
       throw error
     }
 
-    // 1. Generar Access Token (vida corta en memoria)
-    const accessToken = jwt.sign(
-      { userId: user.id, email: user.email, name: user.name },
-      JWT_SECRET,
-      { expiresIn: ACCESS_TOKEN_EXPIRATION },
-    )
+    const accessToken = createAccessToken(user)
+    const { refreshToken, tokenHash, expiresAt } = createRefreshToken()
 
-    // 2. Generar Refresh Token rotativo
-    const refreshToken = crypto.randomBytes(40).toString('hex')
-    const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
-
-    // 3. Registrar la sesión en la base de datos
     await prisma.session.create({
       data: {
         userId: user.id,
@@ -85,11 +90,7 @@ class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-      },
+      user: publicUser(user),
     }
   }
 
@@ -101,7 +102,6 @@ class AuthService {
     }
 
     const tokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex')
-
     const session = await prisma.session.findUnique({
       where: { tokenHash },
       include: { user: true },
@@ -113,41 +113,28 @@ class AuthService {
       throw error
     }
 
-    // Rotar sesión: revocar la anterior
     await prisma.session.update({
       where: { id: session.id },
       data: { isRevoked: true },
     })
 
-    // Crear nuevo par de tokens
-    const newAccessToken = jwt.sign(
-      { userId: session.user.id, email: session.user.email, name: session.user.name },
-      JWT_SECRET,
-      { expiresIn: ACCESS_TOKEN_EXPIRATION },
-    )
-
-    const newRefreshToken = crypto.randomBytes(40).toString('hex')
-    const newTokenHash = crypto.createHash('sha256').update(newRefreshToken).digest('hex')
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
+    const accessToken = createAccessToken(session.user)
+    const nextRefresh = createRefreshToken()
 
     await prisma.session.create({
       data: {
         userId: session.user.id,
-        tokenHash: newTokenHash,
+        tokenHash: nextRefresh.tokenHash,
         userAgent: userAgent || session.userAgent,
         ipAddress: ipAddress || session.ipAddress,
-        expiresAt,
+        expiresAt: nextRefresh.expiresAt,
       },
     })
 
     return {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-      user: {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-      },
+      accessToken,
+      refreshToken: nextRefresh.refreshToken,
+      user: publicUser(session.user),
     }
   }
 

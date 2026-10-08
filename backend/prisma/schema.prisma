@@ -31,7 +31,7 @@ model User {
   checkIns      CheckIn[]
   penalties     Penalty[]
   messages      Message[]
-  sessions      Session[]         // <-- ¡NUEVO AGREGADO PARA TOKENS DE SESION!
+  sessions      Session[]
 
   @@map("users")
 }

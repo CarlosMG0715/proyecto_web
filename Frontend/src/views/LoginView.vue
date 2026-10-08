@@ -2,10 +2,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
-import AuthLayout from '../layouts/AuthLayout.vue'
-import { api } from '../services/api'
-import { useSessionStore } from '../stores/session'
-import type { AuthResponse, ApiErrorResponse } from '../types/auth'
+import AuthLayout from '@/layouts/AuthLayout.vue'
+import { api } from '@/services/api'
+import { useSessionStore } from '@/stores/session'
+import type { AuthResponse, ApiErrorResponse } from '@/types/auth'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
