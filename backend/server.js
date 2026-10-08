@@ -23,6 +23,8 @@ app.use((req, res, next) => {
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json({ limit: '1mb' }))
 
+const apiRoutes = require('./src/routes')
+
 app.get('/api/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
@@ -30,6 +32,8 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   })
 })
+
+app.use('/api', apiRoutes)
 
 app.use((_req, _res, next) => {
   const error = new Error('Ruta no encontrada')
