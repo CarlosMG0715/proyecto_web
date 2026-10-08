@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import { api } from '../services/api'
 import { useSessionStore } from '../stores/session'
+import type { AuthResponse, ApiErrorResponse } from '../types/auth'
 
 const router = useRouter()
 const sessionStore = useSessionStore()
@@ -22,16 +24,20 @@ async function handleLogin() {
 
   isLoading.value = true
   try {
-    const response = await api.post('/auth/login', {
+    const response = await api.post<AuthResponse>('/auth/login', {
       email: email.value,
       password: password.value,
     })
 
-    sessionStore.setAccessToken(response.data.accessToken)
+    sessionStore.setSession(response.data.accessToken, response.data.user)
     router.push('/groups')
-  } catch (error: any) {
-    errorMessage.value =
-      error.response?.data?.error || 'Error al iniciar sesión. Verifica tus credenciales.'
+  } catch (error: unknown) {
+    if (axios.isAxiosError<ApiErrorResponse>(error)) {
+      errorMessage.value =
+        error.response?.data?.error || 'Error al iniciar sesión. Verifica tus credenciales.'
+    } else {
+      errorMessage.value = 'Ocurrió un error inesperado al conectar con el servidor.'
+    }
   } finally {
     isLoading.value = false
   }
