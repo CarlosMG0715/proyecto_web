@@ -115,6 +115,18 @@ class AuthController {
     }
   }
 
+  async logoutAll(req, res, next) {
+    try {
+      // Revocar todas las sesiones activas del usuario en la base de datos
+      await authService.revokeAllUserSessions(req.user.userId)
+
+      res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: 0 })
+      res.status(200).json({ message: 'Se cerraron todas las sesiones en todos los dispositivos' })
+    } catch (error) {
+      next(error)
+    }
+  }
+
   async me(req, res) {
     res.status(200).json({ user: req.user })
   }
