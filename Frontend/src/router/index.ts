@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
-import { api } from '@/services/api'
+import { bootstrap } from '@/services/authService'
 import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 
@@ -37,17 +37,13 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   const session = useSessionStore()
 
-  if (to.meta.requiresAuth && !session.accessToken) {
-    try {
-      const { data } = await api.post<{ accessToken: string }>('/auth/refresh')
-      session.setAccessToken(data.accessToken)
-      return true
-    } catch {
-      return { name: 'login', query: { redirect: to.fullPath } }
-    }
-  }
+  // Una sola vez por carga de la app: recupera la sesión desde la cookie
+  await bootstrap()
 
-  if (to.meta.guestOnly && session.accessToken) {
+  if (to.meta.requiresAuth && !session.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.guestOnly && session.isAuthenticated) {
     return { name: 'groups' }
   }
 })

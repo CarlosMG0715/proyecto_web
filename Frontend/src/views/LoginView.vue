@@ -1,169 +1,157 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import axios from 'axios'
-import AuthLayout from '@/layouts/AuthLayout.vue'
-import { api } from '@/services/api'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
-import type { AuthResponse, ApiErrorResponse } from '@/types/auth'
+import { login, register } from '@/services/authService'
 
+const session = useSessionStore()
 const router = useRouter()
-const sessionStore = useSessionStore()
+const route = useRoute()
 
+const mode = ref<'login' | 'register'>('login')
+const name = ref('')
 const email = ref('')
 const password = ref('')
-const errorMessage = ref('')
-const isLoading = ref(false)
+const success = ref<string | null>(null)
 
-async function handleLogin() {
-  errorMessage.value = ''
-  if (!email.value || !password.value) {
-    errorMessage.value = 'Por favor ingresa tu correo y contraseña'
-    return
+const isRegister = computed(() => mode.value === 'register')
+
+function toggleMode(): void {
+  mode.value = isRegister.value ? 'login' : 'register'
+  session.setError(null)
+  success.value = null
+}
+
+function getRedirect(): string {
+  const redirect = route.query.redirect
+  if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+    return redirect
   }
+  return '/groups'
+}
 
-  isLoading.value = true
+async function onSubmit(): Promise<void> {
+  success.value = null
   try {
-    const response = await api.post<AuthResponse>('/auth/login', {
-      email: email.value,
-      password: password.value,
-    })
-
-    sessionStore.setSession(response.data.accessToken, response.data.user)
-    router.push('/groups')
-  } catch (error: unknown) {
-    if (axios.isAxiosError<ApiErrorResponse>(error)) {
-      errorMessage.value =
-        error.response?.data?.error || 'Error al iniciar sesión. Verifica tus credenciales.'
+    if (isRegister.value) {
+      await register({ name: name.value, email: email.value, password: password.value })
+      await login({ email: email.value, password: password.value })
     } else {
-      errorMessage.value = 'Ocurrió un error inesperado al conectar con el servidor.'
+      await login({ email: email.value, password: password.value })
     }
-  } finally {
-    isLoading.value = false
+    await router.push(getRedirect())
+  } catch {
+    /* el mensaje ya quedó en session.error */
   }
 }
 </script>
 
 <template>
-  <AuthLayout>
-    <form class="login-form" @submit.prevent="handleLogin">
-      <h2>Iniciar Sesión</h2>
+  <main class="login">
+    <form class="login__form" @submit.prevent="onSubmit">
+      <h1>{{ isRegister ? 'Crear cuenta' : 'Iniciar sesión' }}</h1>
 
-      <div v-if="errorMessage" class="error-banner">
-        ⚠️ {{ errorMessage }}
-      </div>
+      <label v-if="isRegister">
+        Nombre
+        <input v-model="name" type="text" autocomplete="name" required minlength="2" />
+      </label>
 
-      <div class="form-group">
-        <label for="email">Correo Electrónico</label>
+      <label>
+        Correo
+        <input v-model="email" type="email" autocomplete="email" required />
+      </label>
+
+      <label>
+        Contraseña
         <input
-          id="email"
-          v-model="email"
-          type="email"
-          placeholder="ejemplo@correo.com"
-          required
-          autocomplete="email"
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="password">Contraseña</label>
-        <input
-          id="password"
           v-model="password"
           type="password"
-          placeholder="••••••••"
+          :autocomplete="isRegister ? 'new-password' : 'current-password'"
           required
-          autocomplete="current-password"
+          :minlength="isRegister ? 8 : undefined"
         />
-      </div>
+      </label>
 
-      <button type="submit" class="submit-btn" :disabled="isLoading">
-        {{ isLoading ? 'Ingresando...' : 'Iniciar Sesión' }}
+      <p v-if="session.error" class="login__error" role="alert">{{ session.error }}</p>
+      <p v-if="success" class="login__success" role="status">{{ success }}</p>
+
+      <button type="submit" :disabled="session.isLoading">
+        {{
+          session.isLoading
+            ? 'Procesando...'
+            : isRegister
+              ? 'Crear cuenta'
+              : 'Ingresar'
+        }}
       </button>
 
-      <p class="demo-hint">
-        💡 Cuenta de prueba: <strong>admin@example.test</strong>
-      </p>
+      <button type="button" class="login__toggle" @click="toggleMode">
+        {{ isRegister ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate' }}
+      </button>
     </form>
-  </AuthLayout>
+  </main>
 </template>
 
 <style scoped>
-.login-form {
+.login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.login__form {
+  width: 100%;
+  max-width: 24rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
-h2 {
-  margin: 0;
-  font-size: 1.25rem;
-  color: #f8f8f2;
+.login__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
 }
 
-.error-banner {
-  background: rgba(255, 85, 85, 0.15);
-  border: 1px solid #ff5555;
-  color: #ff5555;
-  padding: 0.75rem;
+.login__form input {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #c4c4c4;
   border-radius: 6px;
-  font-size: 0.875rem;
+  font: inherit;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  text-align: left;
-}
-
-label {
-  font-size: 0.875rem;
-  color: #c0c0d0;
-  font-weight: 500;
-}
-
-input {
-  background: #191924;
-  border: 1px solid #3e3e58;
+.login__form button[type='submit'] {
+  padding: 0.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: #4f46e5;
   color: #fff;
-  padding: 0.7rem 0.9rem;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-input:focus {
-  border-color: #bd93f9;
-}
-
-.submit-btn {
-  background: #50fa7b;
-  color: #121214;
-  font-weight: 700;
-  padding: 0.75rem;
-  border: none;
-  border-radius: 6px;
+  font: inherit;
   cursor: pointer;
-  font-size: 1rem;
-  transition: opacity 0.2s;
-  margin-top: 0.5rem;
 }
 
-.submit-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.submit-btn:disabled {
+.login__form button[type='submit']:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.demo-hint {
-  font-size: 0.8rem;
-  color: #6272a4;
-  text-align: center;
-  margin-top: 0.5rem;
+.login__toggle {
+  background: none;
+  border: 0;
+  color: #4f46e5;
+  cursor: pointer;
+  font: inherit;
+}
+
+.login__error {
+  color: #b91c1c;
+  margin: 0;
+}
+
+.login__success {
+  color: #15803d;
+  margin: 0;
 }
 </style>

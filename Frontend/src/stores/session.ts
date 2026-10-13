@@ -6,6 +6,7 @@ export interface SessionState {
   user: User | null
   isLoading: boolean
   error: string | null
+  initialized: boolean
 }
 
 export const useSessionStore = defineStore('session', {
@@ -14,10 +15,11 @@ export const useSessionStore = defineStore('session', {
     user: null,
     isLoading: false,
     error: null,
+    initialized: false,
   }),
 
   getters: {
-    isAuthenticated: (state): boolean => Boolean(state.accessToken),
+    isAuthenticated: (state): boolean => Boolean(state.accessToken && state.user),
     currentUser: (state): User | null => state.user,
   },
 
@@ -27,23 +29,21 @@ export const useSessionStore = defineStore('session', {
       this.user = user
       this.error = null
     },
-
     setAccessToken(token: string): void {
       this.accessToken = token
     },
-
     setUser(user: User): void {
       this.user = user
     },
-
     setLoading(loading: boolean): void {
       this.isLoading = loading
     },
-
     setError(errorMessage: string | null): void {
       this.error = errorMessage
     },
-
+    setInitialized(value: boolean): void {
+      this.initialized = value
+    },
     clearSession(): void {
       this.accessToken = null
       this.user = null
