@@ -18,6 +18,24 @@ enum PenaltyStatus {
   WAIVED
 }
 
+enum MessageType {
+  USER
+  SYSTEM
+}
+
+enum ContextType {
+  CHECK_IN
+  PENALTY
+  DROPOUT_RISK
+  DAILY_CLOSURE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model User {
   id            String            @id @default(cuid())
   name          String
@@ -31,24 +49,29 @@ model User {
   checkIns      CheckIn[]
   penalties     Penalty[]
   messages      Message[]
-  sessions      Session[]         // <-- ¡NUEVO AGREGADO PARA TOKENS DE SESION!
+  sessions      Session[]
+  dropoutRisks  DropoutRisk[]
 
   @@map("users")
 }
 
 model Group {
-  id          String            @id @default(cuid())
-  name        String
-  inviteCode  String            @unique
-  timeZone    String            @default("America/Bogota")
-  createdById String
-  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
-  createdBy   User              @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  memberships GroupMembership[]
-  habits      Habit[]
-  penalties   Penalty[]
-  messages    Message[]
+  id               String            @id @default(cuid())
+  name             String
+  inviteCode       String            @unique
+  timeZone         String            @default("America/Bogota")
+  penaltyThreshold Float             @default(0.6)
+  version          Int               @default(0)
+  createdById      String
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+  createdBy        User              @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  memberships      GroupMembership[]
+  habits           Habit[]
+  penalties        Penalty[]
+  messages         Message[]
+  closures         DailyClosure[]
+  dropoutRisks     DropoutRisk[]
 
   @@index([createdById])
   @@map("groups")
@@ -101,11 +124,29 @@ model CheckIn {
   @@map("check_ins")
 }
 
+model DailyClosure {
+  id                String    @id @default(cuid())
+  groupId           String
+  localDate         DateTime  @db.Date
+  expectedCheckIns  Int
+  completedCheckIns Int
+  completionRate    Float
+  penaltyApplied    Boolean   @default(false)
+  processedAt       DateTime  @default(now()) @db.Timestamptz(3)
+  group             Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  penalties         Penalty[]
+
+  @@unique([groupId, localDate])
+  @@index([groupId, processedAt])
+  @@map("daily_closures")
+}
+
 model Penalty {
   id             String        @id @default(cuid())
   groupId        String
   userId         String
   habitId        String?
+  closureId      String?
   idempotencyKey String        @unique
   reason         String
   points         Int           @default(1)
@@ -114,36 +155,66 @@ model Penalty {
   group          Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   habit          Habit?        @relation(fields: [habitId], references: [id], onDelete: SetNull)
+  closure        DailyClosure? @relation(fields: [closureId], references: [id], onDelete: SetNull)
 
   @@index([groupId, createdAt])
   @@index([userId, status])
+  @@index([closureId])
   @@map("penalties")
 }
 
+model DropoutRisk {
+  id                  String    @id @default(cuid())
+  groupId             String
+  userId              String
+  score               Float
+  level               RiskLevel @default(LOW)
+  consecutiveMisses   Int       @default(0)
+  recentRate          Float     @default(0)
+  previousRate        Float     @default(0)
+  lastNotifiedLevel   RiskLevel?
+  computedAt          DateTime  @default(now()) @db.Timestamptz(3)
+  group               Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId, level])
+  @@map("dropout_risks")
+}
+
 model Message {
-  id        String   @id @default(cuid())
-  groupId   String
-  userId    String
-  content   String
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String       @id @default(cuid())
+  groupId     String
+  userId      String?
+  type        MessageType  @default(USER)
+  content     String
+  contextType ContextType?
+  contextId   String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([groupId, createdAt])
+  @@index([contextType, contextId])
   @@map("messages")
 }
 
 model Session {
   id           String    @id @default(cuid())
   userId       String
+  familyId     String    @default(cuid())
   tokenHash    String    @unique
+  replacedById String?
   userAgent    String?
   ipAddress    String?
   isRevoked    Boolean   @default(false)
+  revokedAt    DateTime? @db.Timestamptz(3)
+  lastUsedAt   DateTime? @db.Timestamptz(3)
   expiresAt    DateTime  @db.Timestamptz(3)
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRevoked])
+  @@index([familyId])
   @@map("sessions")
 }

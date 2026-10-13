@@ -1,31 +1,6 @@
 const authService = require('../services/authService')
-
-const COOKIE_NAME = 'refreshToken'
-
-function extractRefreshToken(req) {
-  if (req.cookies && req.cookies[COOKIE_NAME]) {
-    return req.cookies[COOKIE_NAME]
-  }
-
-  // Soporte manual si cookie-parser no está activo
-  const rawCookie = req.headers.cookie
-  if (!rawCookie) return null
-
-  const match = rawCookie
-    .split(';')
-    .map((c) => c.trim())
-    .find((c) => c.startsWith(`${COOKIE_NAME}=`))
-
-  return match ? decodeURIComponent(match.split('=')[1]) : null
-}
-
-const cookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: '/api/auth',
-}
+const { cookieName, cookieOptions } = require('../config')
+const { extractRefreshToken } = require('../utils/cookies')
 
 class AuthController {
   async register(req, res, next) {
@@ -52,23 +27,15 @@ class AuthController {
         return res.status(400).json({ error: 'Correo y contraseña son obligatorios' })
       }
 
-      const userAgent = req.headers['user-agent']
-      const ipAddress = req.ip
-
       const { accessToken, refreshToken, user } = await authService.login({
         email,
         password,
-        userAgent,
-        ipAddress,
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip,
       })
 
-      // Guardar Refresh Token en Cookie Segura HttpOnly
-      res.cookie(COOKIE_NAME, refreshToken, cookieOptions)
-
-      res.status(200).json({
-        accessToken,
-        user,
-      })
+      res.cookie(cookieName, refreshToken, cookieOptions)
+      res.status(200).json({ accessToken, user })
     } catch (error) {
       next(error)
     }
@@ -81,21 +48,14 @@ class AuthController {
         return res.status(401).json({ error: 'No hay sesión activa para renovar' })
       }
 
-      const userAgent = req.headers['user-agent']
-      const ipAddress = req.ip
-
       const { accessToken, refreshToken: newRefreshToken, user } = await authService.refresh({
         refreshToken,
-        userAgent,
-        ipAddress,
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip,
       })
 
-      res.cookie(COOKIE_NAME, newRefreshToken, cookieOptions)
-
-      res.status(200).json({
-        accessToken,
-        user,
-      })
+      res.cookie(cookieName, newRefreshToken, cookieOptions)
+      res.status(200).json({ accessToken, user })
     } catch (error) {
       next(error)
     }
@@ -108,7 +68,7 @@ class AuthController {
         await authService.logout({ refreshToken })
       }
 
-      res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: 0 })
+      res.clearCookie(cookieName, { ...cookieOptions, maxAge: 0 })
       res.status(200).json({ message: 'Sesión cerrada exitosamente' })
     } catch (error) {
       next(error)
@@ -117,10 +77,8 @@ class AuthController {
 
   async logoutAll(req, res, next) {
     try {
-      // Revocar todas las sesiones activas del usuario en la base de datos
       await authService.revokeAllUserSessions(req.user.userId)
-
-      res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: 0 })
+      res.clearCookie(cookieName, { ...cookieOptions, maxAge: 0 })
       res.status(200).json({ message: 'Se cerraron todas las sesiones en todos los dispositivos' })
     } catch (error) {
       next(error)
