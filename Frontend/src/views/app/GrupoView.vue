@@ -1,12 +1,6 @@
 <script setup lang="ts">
 /**
- * VISTA DE DETALLE DEL GRUPO (Gamificada estilo Duolingo).
- * Modificaciones solicitadas por Valeria:
- * 1. FUEGUITO SUPER GRANDE EN EL CENTRO 🔥 con la racha del equipo como protagonista.
- * 2. Contador de medianoche en formato limpio y original ("Tiempo para Medianoche").
- * 3. Sección de Hábitos del grupo donde se pueden tener diferentes hábitos (ej. Programar, Leer),
- *    con botón "+ Crear hábito", notas de avance para los usuarios y botones táctiles Duolingo.
- * 4. Chat lateral desplegable.
+  * VISTA DE GRUPO (GrupoView.vue)
  */
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'

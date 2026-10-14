@@ -1,15 +1,7 @@
 <script setup lang="ts">
 /**
  * INICIO (Dashboard General de Kordia).
- * Nueva mecánica gamificada solicitada por Valeria:
- * 1. Racha GENERAL en Kordia (personal, racha acumulada en la app).
- * 2. Botón épico "CHECK GENERAL DE RACHA":
- *    - Solo se puede activar si completaste todos los hábitos del día en tus grupos.
- *    - Si faltan hábitos, muestra un panel explicativo con recordatorios de lo que te falta y enlaces directos.
- *    - Si todos están listos: ¡PUM! Activa y blinda la racha general (+100 XP).
- * 3. Recordatorios de hoy (solo lectura, sin check directo aquí; te recuerdan lo pendiente con contador en rojo).
- * 4. Actividad general (simple, limpia y sin saturación).
- * 5. Stats y gráficas semanales de eficiencia limpias.
+ * 
  */
 import { computed, ref } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
