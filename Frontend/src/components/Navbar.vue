@@ -46,9 +46,9 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 2rem;
-  background-color: #1e1e2f;
-  border-bottom: 1px solid #383852;
+  padding: 0.85rem 2rem;
+  background-color: #151226;
+  border-bottom: 1px solid #282245;
   color: #f5f5f7;
 }
 

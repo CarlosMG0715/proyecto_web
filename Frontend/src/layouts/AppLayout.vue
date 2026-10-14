@@ -16,16 +16,16 @@ import Navbar from '@/components/Navbar.vue'
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #121214;
+  background-color: #0f0d1b;
   color: #e1e1e6;
   font-family: system-ui, -apple-system, sans-serif;
 }
 
 .main-container {
   flex: 1;
-  max-width: 1200px;
+  max-width: 1520px;
   width: 100%;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 1.5rem 1rem;
 }
 </style>
