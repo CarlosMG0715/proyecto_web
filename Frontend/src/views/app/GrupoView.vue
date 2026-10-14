@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
-  * VISTA DE GRUPO (GrupoView.vue)
+  * VISTA DE GRUPO (GrupoView.vue)   Aquí se muestra la vista principal de un grupo, incluyendo la racha del equipo, los hábitos diarios, las notas de los miembros y el chat del grupo.
  */
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'

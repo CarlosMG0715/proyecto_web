@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * INICIO (Dashboard General de Kordia).
+ * INICIO (Dashboard General de Kordia). Aqui se muestra la vista principal del usuario, incluyendo su perfil, racha general, hábitos pendientes y completados, estadísticas de eficiencia, gráficos semanales y actividad general.
  * 
  */
 import { computed, ref } from 'vue'
