@@ -27,9 +27,43 @@ export const router = createRouter({
     },
     {
       path: '/groups',
-      name: 'groups',
-      component: () => import('@/views/GroupsView.vue'),
+      redirect: '/app/inicio',
+    },
+    {
+      path: '/app',
+      component: () => import('@/layouts/DashboardLayout.vue'),
       meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          redirect: { name: 'inicio' },
+        },
+        {
+          path: 'inicio',
+          name: 'inicio',
+          component: () => import('@/views/app/InicioView.vue'),
+        },
+        {
+          path: 'grupo/:groupId',
+          name: 'grupo',
+          component: () => import('@/views/app/GrupoView.vue'),
+        },
+        {
+          path: 'calendario',
+          name: 'calendario',
+          component: () => import('@/views/app/CalendarioView.vue'),
+        },
+        {
+          path: 'perfil',
+          name: 'perfil',
+          component: () => import('@/views/app/PerfilView.vue'),
+        },
+        {
+          path: 'configuracion',
+          name: 'configuracion',
+          component: () => import('@/views/app/ConfiguracionView.vue'),
+        },
+      ],
     },
   ],
 })
@@ -44,6 +78,6 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.meta.guestOnly && session.isAuthenticated) {
-    return { name: 'groups' }
+    return { name: 'inicio' }
   }
 })
