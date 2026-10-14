@@ -1,751 +1,604 @@
 <script setup lang="ts">
 /**
- * PÁGINA PRINCIPAL / LANDING PAGE
- * Presentación explicativa en slides interactivos sobre el funcionamiento del sistema.
- * Si el usuario ya inició sesión, detecta su cuenta y le permite "Volver al Panel Principal".
+ * KORDIA - PÁGINA PRINCIPAL / LANDING HERO
+ * Réplica fiel del diseño cinemático de 3 cards grandes:
+ * - Slides grandes que ocupan la mayor parte de la pantalla
+ * - 3 ilustraciones de alta calidad generadas
+ * - Flechas de navegación `<` y `>` con glow cálido
+ * - Indicadores de puntos (dots)
+ * - Botón grande redondito: "INGRESAR" o "VOLVER ->" según el estado de la sesión
+ * - Logo oficial de Kordia arriba sin textos innecesarios
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import AppIcon, { type IconName } from '@/components/ui/AppIcon.vue'
-import UserAvatar from '@/components/ui/UserAvatar.vue'
-import { logout } from '@/services/authService'
+import kordiaLogo from '@/assets/kordia_logo.png'
+import slideTeam from '@/assets/slides/slide_team.jpg'
+import slideStreak from '@/assets/slides/slide_streak.jpg'
+import slideMonitor from '@/assets/slides/slide_monitor.jpg'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
 const session = useSessionStore()
 
-interface Slide {
-  badge: string
-  title: string
-  description: string
-  icon: IconName
-  highlight: string
-  color: string
+interface SlideData {
+  id: number
+  topTitle: string
+  image: string
+  headline: string
+  lines: string[]
+  accentColor: string
 }
 
-const slides: Slide[] = [
+const slides: SlideData[] = [
   {
-    badge: 'Paso 1 · Creación de Equipos',
-    title: 'Crea tu equipo con metas compartidas',
-    description:
-      'Arma tu grupo de compromiso e invita a tus amigos o compañeros con un código único (ej: POW-2026). Cada integrante define su hábito diario específico.',
-    icon: 'users',
-    highlight: 'Código de invitación único · Roles y miembros activos',
-    color: '#8b5cf6',
+    id: 0,
+    topTitle: 'ÚNETE A UN EQUIPO 🔥',
+    image: slideTeam,
+    headline: 'ÚNETE A UN EQUIPO',
+    lines: ['Colabora y crece juntos.', 'Supera metas compartidas.'],
+    accentColor: '#f97316',
   },
   {
-    badge: 'Paso 2 · Dynamic Daily Check-In',
-    title: 'Marca tu hábito diario con un solo clic',
-    description:
-      'Registra tu cumplimiento en tiempo real. Mira las tarjetas interactivas de tus compañeros, las rachas individuales de fuego 🔥 y cómo tu esfuerzo sube la salud del equipo.',
-    icon: 'target',
-    highlight: 'Check-in reactivo · Borde neón · Rachas de constancia',
-    color: '#22c55e',
+    id: 1,
+    topTitle: '🔥 ALCANZA RACHAS GRUPALES',
+    image: slideStreak,
+    headline: 'ALCANZA RACHAS GRUPALES',
+    lines: ['Mantén la constancia.', 'Evita penalizaciones por deserción.'],
+    accentColor: '#fb923c',
   },
   {
-    badge: 'Paso 3 · Regla de Medianoche',
-    title: 'Cierre automático diario a las 00:00:00',
-    description:
-      'Cada medianoche se ejecuta un proceso automático (Cron Job). Si algún integrante no cumplió su meta antes de las 12:00 AM, todo el equipo sufre una penalización en su barra de salud.',
-    icon: 'clock',
-    highlight: 'Detección de deserción · Penalización colectiva · Transacciones ACID',
-    color: '#f59e0b',
-  },
-  {
-    badge: 'Paso 4 · Chat y Alertas en Vivo',
-    title: 'Chat integrado y alertas automáticas',
-    description:
-      'Comunícate con tu equipo sin salir de la app. El sistema envía alertas destacadas avisando quién tiene pendiente su meta para que todos cumplan a tiempo.',
-    icon: 'message',
-    highlight: 'Presencia en vivo · Avisos automáticos de riesgo de racha',
-    color: '#38bdf8',
+    id: 2,
+    topTitle: '🔥 MONITOREA TU IMPACTO',
+    image: slideMonitor,
+    headline: 'MONITOREA TU IMPACTO',
+    lines: ['Visualiza el progreso de todos y cada uno.', 'Check-ins diarios, recordatorios y chat en vivo.'],
+    accentColor: '#f59e0b',
   },
 ]
 
-const currentSlide = ref(0)
-let autoplayInterval: number | undefined
+const activeIndex = ref(0)
+let autoPlayTimer: number | undefined
 
 function nextSlide(): void {
-  currentSlide.value = (currentSlide.value + 1) % slides.length
+  activeIndex.value = (activeIndex.value + 1) % slides.length
 }
 
 function prevSlide(): void {
-  currentSlide.value = (currentSlide.value - 1 + slides.length) % slides.length
+  activeIndex.value = (activeIndex.value - 1 + slides.length) % slides.length
 }
 
-function goToSlide(index: number): void {
-  currentSlide.value = index
+function selectSlide(index: number): void {
+  activeIndex.value = index
+  resetAutoplay()
+}
+
+function resetAutoplay(): void {
+  if (autoPlayTimer !== undefined) clearInterval(autoPlayTimer)
+  autoPlayTimer = window.setInterval(nextSlide, 6500)
 }
 
 onMounted(() => {
-  autoplayInterval = window.setInterval(nextSlide, 7000)
+  resetAutoplay()
 })
 
 onUnmounted(() => {
-  if (autoplayInterval !== undefined) clearInterval(autoplayInterval)
+  if (autoPlayTimer !== undefined) clearInterval(autoPlayTimer)
 })
 
 const userName = computed(() => session.currentUser?.name || 'Valeria')
-const userEmail = computed(() => session.currentUser?.email || '')
 
-async function handleLogout(): Promise<void> {
-  await logout()
+function handleMainAction(): void {
+  if (session.isAuthenticated) {
+    router.push('/app/inicio')
+  } else {
+    router.push('/login')
+  }
 }
 </script>
 
 <template>
-  <div class="landing-page">
-    <!-- Navbar superior moderna -->
-    <header class="landing-navbar">
-      <div class="nav-brand">
-        <span class="brand-badge">
-          <AppIcon name="check" :size="18" :stroke-width="3" />
-        </span>
-        <div class="brand-text">
-          <strong>Monitor de Hábitos</strong>
-          <small>Group Accountability</small>
-        </div>
+  <div class="kordia-landing">
+    <!-- Encabezado sutil: Solo el logo oficial y branding de Kordia -->
+    <header class="top-header">
+      <div class="brand-wrap">
+        <img :src="kordiaLogo" alt="Kordia Logo" class="kordia-logo-img" />
+        <span class="brand-name">Kordia</span>
       </div>
 
-      <div class="nav-actions">
-        <!-- Si el usuario YA inició sesión: muestra su perfil y botón para volver -->
+      <div class="top-auth">
         <template v-if="session.isAuthenticated">
-          <div class="user-chip">
-            <UserAvatar :name="userName" :size="30" online />
-            <span class="user-name">{{ userName }}</span>
-          </div>
-          <RouterLink to="/app/inicio" class="btn btn-primary">
-            <span>Volver al Panel Principal</span>
-            <AppIcon name="arrow-right" :size="15" />
-          </RouterLink>
-          <button type="button" class="btn btn-ghost" title="Cerrar sesión" @click="handleLogout">
-            <AppIcon name="logout" :size="16" />
+          <span class="logged-pill">
+            <span class="status-dot"></span>
+            {{ userName }}
+          </span>
+          <button type="button" class="mini-exit-btn" @click="handleMainAction">
+            Ir al panel →
           </button>
         </template>
-
-        <!-- Si NO hay sesión iniciada: botones de Ingresar / Registro -->
         <template v-else>
-          <RouterLink to="/login" class="btn btn-ghost">Iniciar Sesión</RouterLink>
-          <RouterLink to="/login" class="btn btn-primary">
-            <span>Registrarse gratis</span>
-            <AppIcon name="arrow-right" :size="15" />
+          <RouterLink to="/login" class="mini-login-link">
+            Iniciar Sesión
           </RouterLink>
         </template>
       </div>
     </header>
 
-    <!-- Contenido Principal: Hero + Carrusel Explicativo -->
-    <main class="landing-main">
-      <div class="hero-intro">
-        <span class="hero-pill">
-          <AppIcon name="flame" :size="14" />
-          Constancia Grupal & Detección de Deserción
-        </span>
-        <h1>Cómo funciona el Monitor de Hábitos</h1>
-        <p class="hero-sub">
-          Diseñado para que ningún miembro de tu equipo abandone. Un sistema donde la constancia individual protege el éxito de todos.
-        </p>
+    <!-- ÁREA PRINCIPAL: SLIDER DE TARJETAS GIGANTES -->
+    <main class="slider-viewport">
+      <!-- Flecha Izquierda -->
+      <button
+        type="button"
+        class="nav-arrow left"
+        title="Anterior"
+        @click="prevSlide(); resetAutoplay()"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+
+      <!-- Contenedor de las 3 Cards -->
+      <div class="cards-carousel">
+        <div
+          v-for="(s, idx) in slides"
+          :key="s.id"
+          class="slide-card"
+          :class="{
+            active: idx === activeIndex,
+            prev: (idx === (activeIndex - 1 + slides.length) % slides.length),
+            next: (idx === (activeIndex + 1) % slides.length),
+          }"
+          @click="selectSlide(idx)"
+        >
+          <!-- Título Superior -->
+          <div class="card-top-title">
+            <span>{{ s.topTitle }}</span>
+          </div>
+
+          <!-- Imagen Ilustrada Grande -->
+          <div class="card-image-box">
+            <img :src="s.image" :alt="s.headline" class="slide-illustration" />
+          </div>
+
+          <!-- Texto Inferior -->
+          <div class="card-caption">
+            <h3 class="caption-title">{{ s.headline }}</h3>
+            <p v-for="(line, lineIdx) in s.lines" :key="lineIdx" class="caption-line">
+              {{ line }}
+            </p>
+          </div>
+        </div>
       </div>
 
-      <!-- Carrusel / Slides Explicativos -->
-      <section class="slides-card panel">
-        <div class="slide-content-grid">
-          <!-- Información del Slide Actual -->
-          <div class="slide-text-col">
-            <span class="slide-step-badge" :style="{ color: slides[currentSlide]?.color }">
-              {{ slides[currentSlide]?.badge }}
-            </span>
-
-            <h2>{{ slides[currentSlide]?.title }}</h2>
-
-            <p class="slide-desc">
-              {{ slides[currentSlide]?.description }}
-            </p>
-
-            <div class="slide-highlight-box">
-              <AppIcon name="shield" :size="16" />
-              <span>{{ slides[currentSlide]?.highlight }}</span>
-            </div>
-          </div>
-
-          <!-- Gráfico visual del Slide -->
-          <div class="slide-visual-col">
-            <div
-              class="visual-card-preview"
-              :style="{ borderColor: slides[currentSlide]?.color }"
-            >
-              <div class="preview-glow" :style="{ background: slides[currentSlide]?.color }"></div>
-              <div class="preview-icon" :style="{ background: slides[currentSlide]?.color }">
-                <AppIcon :name="slides[currentSlide]?.icon ?? 'target'" :size="38" />
-              </div>
-
-              <!-- Vista previa simulada según el slide -->
-              <div v-if="currentSlide === 0" class="mini-mockup-team">
-                <div class="team-header">
-                  <strong>EQUIPO POW</strong>
-                  <span class="code-tag">POW-2026</span>
-                </div>
-                <div class="member-pills">
-                  <span>👨‍💻 Carlos · Admin</span>
-                  <span>👑 Valeria · Miembro</span>
-                </div>
-              </div>
-
-              <div v-else-if="currentSlide === 1" class="mini-mockup-check">
-                <div class="check-box-done">
-                  <AppIcon name="check" :size="20" :stroke-width="3" />
-                  <span>¡Meta cumplida hoy!</span>
-                </div>
-                <span class="streak-demo">🔥 6 Días de racha activa</span>
-              </div>
-
-              <div v-else-if="currentSlide === 2" class="mini-mockup-midnight">
-                <span class="timer-tag">Cierre de Medianoche</span>
-                <span class="clock-digits">00:00:00</span>
-                <span class="penalty-tag">⚠️ Salud del grupo: 88/100</span>
-              </div>
-
-              <div v-else class="mini-mockup-chat">
-                <div class="chat-bubble-demo">
-                  <span class="alert-tag">⚠️ ALERTA SISTEMA</span>
-                  <p>Valeria tiene 1 hábito pendiente antes de medianoche.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Controles del Carrusel (Flechas y Puntos) -->
-        <div class="slides-controls">
-          <button type="button" class="slide-nav-btn" @click="prevSlide" title="Slide anterior">
-            <AppIcon name="chevron-left" :size="18" />
-          </button>
-
-          <div class="dots-row">
-            <button
-              v-for="(s, idx) in slides"
-              :key="idx"
-              type="button"
-              class="dot-btn"
-              :class="{ active: currentSlide === idx }"
-              :title="s.badge"
-              @click="goToSlide(idx)"
-            ></button>
-          </div>
-
-          <button type="button" class="slide-nav-btn" @click="nextSlide" title="Slide siguiente">
-            <AppIcon name="chevron-right" :size="18" />
-          </button>
-        </div>
-      </section>
-
-      <!-- SECCIÓN INFERIOR: Botón de Acción Dinámico -->
-      <section class="landing-cta-box panel">
-        <template v-if="session.isAuthenticated">
-          <div class="cta-user-status">
-            <UserAvatar :name="userName" :size="48" online ring />
-            <div>
-              <h3>¡Sesión activa de {{ userName }}!</h3>
-              <p>Tu equipo y tus hábitos de hoy te están esperando en el panel.</p>
-            </div>
-          </div>
-          <RouterLink to="/app/inicio" class="cta-big-btn">
-            <span>Volver al Panel Principal (Dashboard)</span>
-            <AppIcon name="arrow-right" :size="18" />
-          </RouterLink>
-        </template>
-
-        <template v-else>
-          <div class="cta-user-status">
-            <div class="rocket-icon">🚀</div>
-            <div>
-              <h3>¿Lista para empezar a construir disciplina?</h3>
-              <p>Inicia sesión o crea tu cuenta gratuita para unirte a tu equipo.</p>
-            </div>
-          </div>
-          <div class="cta-buttons-row">
-            <RouterLink to="/login" class="cta-big-btn">
-              <span>Iniciar Sesión</span>
-              <AppIcon name="arrow-right" :size="18" />
-            </RouterLink>
-          </div>
-        </template>
-      </section>
+      <!-- Flecha Derecha -->
+      <button
+        type="button"
+        class="nav-arrow right"
+        title="Siguiente"
+        @click="nextSlide(); resetAutoplay()"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </button>
     </main>
 
-    <!-- Footer Discreto -->
-    <footer class="landing-footer">
-      <p>Monitor de Hábitos Grupales con Detección de Deserción · Proyecto POW 2026</p>
+    <!-- Indicador de Puntos (Dots) -->
+    <div class="dots-indicator">
+      <button
+        v-for="(s, idx) in slides"
+        :key="s.id"
+        type="button"
+        class="dot"
+        :class="{ active: idx === activeIndex }"
+        @click="selectSlide(idx)"
+      ></button>
+    </div>
+
+    <!-- SECCIÓN DE ACCIÓN INFERIOR -->
+    <footer class="bottom-action-area">
+      <!-- Botón grande redondeado con glow naranja/durazno idéntico a la imagen -->
+      <button type="button" class="cta-pill-btn" @click="handleMainAction">
+        <span v-if="!session.isAuthenticated">INGRESAR A LA PLATAFORMA</span>
+        <span v-else>VOLVER →</span>
+      </button>
+
+      <!-- Texto inferior con enlace -->
+      <div class="sub-link-row">
+        <template v-if="!session.isAuthenticated">
+          <span>¿Ya tienes cuenta?</span>
+          <RouterLink to="/login" class="text-link">Inicia Sesión aquí.</RouterLink>
+        </template>
+        <template v-else>
+          <span class="user-greeting">Sesión activa como <strong>{{ userName }}</strong>. Haz clic arriba para ir a tus grupos.</span>
+        </template>
+      </div>
     </footer>
   </div>
 </template>
 
 <style scoped>
-.landing-page {
+/* ================================================= */
+/* KORDIA LANDING - ESTÉTICA OSCURA CINEMÁTICA       */
+/* ================================================= */
+.kordia-landing {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(130% 130% at 50% 0%, rgba(139, 92, 246, 0.16), transparent 55%),
-    radial-gradient(90% 90% at 85% 85%, rgba(34, 197, 94, 0.08), transparent 50%),
-    var(--bg);
-  color: var(--text);
+  justify-content: space-between;
+  background-color: #08070d;
+  background-image:
+    radial-gradient(120% 90% at 50% 40%, rgba(251, 146, 60, 0.08), transparent 60%),
+    radial-gradient(80% 80% at 20% 90%, rgba(139, 92, 246, 0.06), transparent 50%),
+    radial-gradient(70% 70% at 80% 20%, rgba(249, 115, 22, 0.05), transparent 55%);
+  color: #f1f0f7;
+  overflow-x: hidden;
+  padding: 1.25rem 1.5rem 2rem;
+  user-select: none;
 }
 
-/* Navbar */
-.landing-navbar {
+/* Header */
+.top-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.1rem 2.5rem;
-  border-bottom: 1px solid var(--border);
-  background: rgba(16, 15, 23, 0.85);
-  backdrop-filter: blur(8px);
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.brand-badge {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(135deg, #a78bfa, var(--primary-strong));
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.5);
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.brand-text strong {
-  font-size: 0.96rem;
-  font-weight: 800;
-}
-
-.brand-text small {
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-.nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-}
-
-.user-chip {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.7rem;
-  border-radius: 99px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-}
-
-.user-name {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #fff;
-}
-
-/* Main */
-.landing-main {
-  flex: 1;
-  max-width: 980px;
+  max-width: 1420px;
   width: 100%;
   margin: 0 auto;
-  padding: 3rem 1.5rem 4rem;
+  padding: 0.5rem 1rem;
+}
+
+.brand-wrap {
   display: flex;
-  flex-direction: column;
-  gap: 2.5rem;
-}
-
-.hero-intro {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 0.85rem;
 }
 
-.hero-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.85rem;
-  border-radius: 99px;
-  background: rgba(139, 92, 246, 0.12);
-  border: 1px solid rgba(139, 92, 246, 0.35);
-  color: #c4b5fd;
-  font-size: 0.8rem;
-  font-weight: 700;
-  margin-bottom: 1.1rem;
+.kordia-logo-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 16px rgba(249, 115, 22, 0.55));
 }
 
-.hero-intro h1 {
-  margin: 0;
-  font-size: 2.3rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-}
-
-.hero-sub {
-  max-width: 620px;
-  margin: 0.75rem auto 0;
-  font-size: 1.02rem;
-  color: var(--text-soft);
-  line-height: 1.55;
-}
-
-/* Slides Card */
-.slides-card {
-  padding: 2.5rem;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.slide-content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: 2.5rem;
-  align-items: center;
-  min-height: 260px;
-}
-
-.slide-step-badge {
-  display: inline-block;
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.6rem;
-}
-
-.slide-text-col h2 {
-  margin: 0;
-  font-size: 1.6rem;
+.brand-name {
+  font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: -0.02em;
-  line-height: 1.25;
+  background: linear-gradient(135deg, #ffffff 30%, #fb923c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-.slide-desc {
-  margin: 0.85rem 0 1.25rem;
-  font-size: 0.95rem;
-  color: var(--text-soft);
-  line-height: 1.6;
-}
-
-.slide-highlight-box {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 0.85rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #c4b5fd;
-}
-
-/* Visual Mockup inside Slide */
-.slide-visual-col {
-  display: flex;
-  justify-content: center;
-}
-
-.visual-card-preview {
-  position: relative;
-  width: 100%;
-  max-width: 320px;
-  min-height: 240px;
-  padding: 1.8rem 1.4rem;
-  border-radius: var(--radius-lg);
-  background: var(--surface-2);
-  border: 1.5px solid;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  overflow: hidden;
-  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.5);
-}
-
-.preview-glow {
-  position: absolute;
-  top: -60px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  filter: blur(50px);
-  opacity: 0.25;
-  pointer-events: none;
-}
-
-.preview-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  margin-bottom: 1.25rem;
-  box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.4);
-}
-
-.mini-mockup-team {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  width: 100%;
-}
-
-.team-header {
+.top-auth {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 0.9rem;
+  gap: 1rem;
 }
 
-.code-tag {
-  font-family: monospace;
-  background: rgba(139, 92, 246, 0.2);
-  color: #c4b5fd;
-  padding: 0.15rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-}
-
-.member-pills {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  color: var(--text-soft);
-}
-
-.mini-mockup-check {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.check-box-done {
+.logged-pill {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.9rem;
+  gap: 0.45rem;
+  padding: 0.35rem 0.8rem;
   border-radius: 99px;
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ade80;
-  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.84rem;
+  color: #e5e5eb;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.mini-exit-btn,
+.mini-login-link {
   font-size: 0.85rem;
-}
-
-.streak-demo {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--flame);
-}
-
-.mini-mockup-midnight {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.timer-tag {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.clock-digits {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #a78bfa;
-}
-
-.penalty-tag {
-  font-size: 0.75rem;
-  color: #f59e0b;
   font-weight: 600;
+  color: #fb923c;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
 
-.mini-mockup-chat {
-  display: flex;
-  flex-direction: column;
+.mini-exit-btn:hover,
+.mini-login-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
-.chat-bubble-demo {
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  text-align: left;
-}
-
-.alert-tag {
-  display: block;
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: #f59e0b;
-  margin-bottom: 0.25rem;
-}
-
-.chat-bubble-demo p {
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-/* Controls */
-.slides-controls {
+/* ================================================= */
+/* SLIDER VIEWPORT (CASI TODA LA PANTALLA)           */
+/* ================================================= */
+.slider-viewport {
+  position: relative;
+  max-width: 1480px;
+  width: 100%;
+  margin: 1rem auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--border);
+  padding: 1rem 0;
+  flex: 1;
 }
 
-.slide-nav-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
-  color: var(--text-soft);
+/* Flechas de Navegación */
+.nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #ffb38a, #f97316);
+  color: #1a0f05;
   display: grid;
   place-items: center;
-  transition: all 0.15s ease;
+  cursor: pointer;
+  box-shadow: 0 8px 24px -4px rgba(249, 115, 22, 0.6);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.slide-nav-btn:hover {
-  background: var(--primary-soft);
-  color: #fff;
-  border-color: var(--primary);
+.nav-arrow.left {
+  left: 0.5rem;
 }
 
-.dots-row {
+.nav-arrow.right {
+  right: 0.5rem;
+}
+
+.nav-arrow:hover {
+  transform: translateY(-50%) scale(1.08);
+  box-shadow: 0 12px 32px -4px rgba(249, 115, 22, 0.85);
+}
+
+/* Carrusel de 3 Cards */
+.cards-carousel {
   display: flex;
-  gap: 0.6rem;
+  align-items: center;
+  justify-content: center;
+  gap: 1.8rem;
+  width: 100%;
+  padding: 1rem 3.5rem;
 }
 
-.dot-btn {
-  width: 10px;
-  height: 10px;
+/* TARJETA INDIVIDUAL (GRANDE) */
+.slide-card {
+  flex: 1;
+  max-width: 420px;
+  height: 540px;
+  border-radius: 24px;
+  background: #110e1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 1.6rem 1.6rem 2rem;
+  transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.7);
+}
+
+/* Efecto de Card Inactiva */
+.slide-card:not(.active) {
+  opacity: 0.55;
+  transform: scale(0.94);
+  filter: brightness(0.75);
+}
+
+.slide-card:not(.active):hover {
+  opacity: 0.75;
+  transform: scale(0.96);
+}
+
+/* Efecto de Card Activa (Como en la foto: marco brillante con glow cálido) */
+.slide-card.active {
+  opacity: 1;
+  transform: scale(1.03);
+  filter: brightness(1);
+  border: 1.5px solid rgba(251, 146, 60, 0.75);
+  box-shadow:
+    0 0 50px -10px rgba(249, 115, 22, 0.35),
+    0 25px 60px -15px rgba(0, 0, 0, 0.85),
+    inset 0 0 30px rgba(251, 146, 60, 0.08);
+  background: linear-gradient(180deg, #161224 0%, #0f0c18 100%);
+}
+
+/* Título Superior */
+.card-top-title {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+
+.card-top-title span {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #ffb885;
+  text-shadow: 0 0 14px rgba(251, 146, 60, 0.4);
+}
+
+/* Contenedor de la Imagen */
+.card-image-box {
+  flex: 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #090710;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
+.slide-illustration {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.slide-card.active .slide-illustration {
+  transform: scale(1.02);
+}
+
+/* Texto Caption Inferior */
+.card-caption {
+  margin-top: 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.caption-title {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #ffcb9e;
+}
+
+.caption-line {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #a49fb8;
+  line-height: 1.4;
+}
+
+.slide-card.active .caption-line {
+  color: #d1cde3;
+}
+
+/* ================================================= */
+/* DOTS INDICATOR                                    */
+/* ================================================= */
+.dots-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   border: none;
-  background: var(--border-strong);
-  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: all 0.25s ease;
   padding: 0;
 }
 
-.dot-btn.active {
-  width: 28px;
+.dot.active {
+  width: 26px;
   border-radius: 99px;
-  background: var(--primary);
+  background: #f97316;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.7);
 }
 
-/* CTA Box */
-.landing-cta-box {
-  padding: 1.8rem 2.2rem;
-  background:
-    radial-gradient(100% 120% at 0% 0%, rgba(139, 92, 246, 0.18), transparent 50%),
-    var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
+/* ================================================= */
+/* BOTTOM ACTION AREA (BOTÓN INGRESAR / VOLVER)     */
+/* ================================================= */
+.bottom-action-area {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
 }
 
-.cta-user-status {
-  display: flex;
-  align-items: center;
-  gap: 1.2rem;
-}
-
-.cta-user-status h3 {
-  margin: 0;
-  font-size: 1.15rem;
+/* Botón grande redondeado peach/orange */
+.cta-pill-btn {
+  padding: 1.05rem 3.5rem;
+  border-radius: 99px;
+  border: none;
+  font-size: 1.05rem;
   font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #1a0f05;
+  background: linear-gradient(135deg, #ffd3b6 0%, #ff9e66 50%, #f97316 100%);
+  cursor: pointer;
+  box-shadow:
+    0 10px 30px -6px rgba(249, 115, 22, 0.65),
+    0 0 20px rgba(255, 179, 138, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.cta-user-status p {
-  margin: 0.25rem 0 0;
+.cta-pill-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow:
+    0 14px 40px -6px rgba(249, 115, 22, 0.85),
+    0 0 28px rgba(255, 179, 138, 0.6);
+}
+
+.cta-pill-btn:active {
+  transform: translateY(0);
+}
+
+.sub-link-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.86rem;
-  color: var(--muted);
+  color: #928ca6;
 }
 
-.rocket-icon {
-  font-size: 2.2rem;
+.text-link {
+  color: #ffb885;
+  font-weight: 600;
+  text-decoration: underline;
+  transition: opacity 0.15s;
 }
 
-.cta-big-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.85rem 1.6rem;
-  border-radius: var(--radius);
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: #fff;
-  background: linear-gradient(135deg, #9f7aea, var(--primary-strong));
-  box-shadow: 0 8px 24px -6px rgba(124, 58, 237, 0.7);
-  transition: transform 0.15s, box-shadow 0.15s;
+.text-link:hover {
+  opacity: 0.8;
 }
 
-.cta-big-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -6px rgba(124, 58, 237, 0.85);
+.user-greeting {
+  font-size: 0.85rem;
+  color: #a49fb8;
 }
 
-.landing-footer {
-  text-align: center;
-  padding: 1.5rem;
-  font-size: 0.78rem;
-  color: var(--muted);
-  border-top: 1px solid var(--border);
+.user-greeting strong {
+  color: #f1f0f7;
 }
 
-@media (max-width: 800px) {
-  .slide-content-grid {
-    grid-template-columns: 1fr;
-    text-align: center;
+/* Responsive */
+@media (max-width: 1024px) {
+  .cards-carousel {
+    gap: 1rem;
+    padding: 1rem;
   }
-  .landing-cta-box {
-    flex-direction: column;
-    text-align: center;
+  .slide-card {
+    height: 480px;
   }
-  .cta-user-status {
-    flex-direction: column;
+}
+
+@media (max-width: 768px) {
+  .slide-card:not(.active) {
+    display: none;
+  }
+  .slide-card.active {
+    max-width: 360px;
+    height: 460px;
+    transform: none;
+  }
+  .nav-arrow.left {
+    left: 0;
+  }
+  .nav-arrow.right {
+    right: 0;
   }
 }
 </style>

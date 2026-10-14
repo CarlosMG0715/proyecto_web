@@ -11,6 +11,7 @@ import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
 import { logout } from '@/services/authService'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
+import kordiaLogo from '@/assets/kordia_logo.png'
 
 interface NavItem {
   name: string
@@ -59,12 +60,10 @@ async function handleLogout(): Promise<void> {
   <aside class="sidebar">
     <!-- Marca -->
     <RouterLink :to="{ name: 'inicio' }" class="brand">
-      <span class="brand-mark">
-        <AppIcon name="check" :size="16" :stroke-width="3" />
-      </span>
+      <img :src="kordiaLogo" alt="Kordia Logo" class="brand-logo-img" />
       <span class="brand-text">
-        <strong>Monitor de Hábitos</strong>
-        <small>Constancia en equipo</small>
+        <strong>Kordia</strong>
+        <small>Hábitos en equipo</small>
       </span>
     </RouterLink>
 
@@ -156,14 +155,11 @@ async function handleLogout(): Promise<void> {
   padding: 0 0.4rem;
 }
 
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(140deg, #a78bfa, var(--primary-strong));
+.brand-logo-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(249, 115, 22, 0.45));
 }
 
 .brand-text {

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import { useSessionStore } from '@/stores/session'
 import { login, register } from '@/services/authService'
+import kordiaLogo from '@/assets/kordia_logo.png'
 
 const session = useSessionStore()
 const router = useRouter()
@@ -52,10 +53,8 @@ async function onSubmit(): Promise<void> {
     <div class="login-card panel">
       <!-- Marca y Encabezado -->
       <div class="brand-header">
-        <div class="brand-badge">
-          <AppIcon name="check" :size="20" :stroke-width="3" />
-        </div>
-        <h1>{{ isRegister ? 'Crea tu cuenta' : '¡Bienvenida de nuevo!' }}</h1>
+        <img :src="kordiaLogo" alt="Kordia Logo" class="login-brand-logo" />
+        <h1>{{ isRegister ? 'Crea tu cuenta en Kordia' : '¡Bienvenida a Kordia!' }}</h1>
         <p>
           {{
             isRegister
@@ -206,16 +205,13 @@ async function onSubmit(): Promise<void> {
   margin-bottom: 1.6rem;
 }
 
-.brand-badge {
-  width: 44px;
-  height: 44px;
+.login-brand-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
   margin: 0 auto 0.9rem;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(135deg, #a78bfa, var(--primary-strong));
-  box-shadow: 0 8px 24px -6px rgba(139, 92, 246, 0.6);
+  display: block;
+  filter: drop-shadow(0 0 16px rgba(249, 115, 22, 0.55));
 }
 
 .brand-header h1 {
