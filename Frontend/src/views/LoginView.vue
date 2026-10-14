@@ -50,11 +50,19 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <main class="login-wrapper">
+    <!-- Flecha estética para volver al landing page -->
+    <RouterLink to="/" class="aesthetic-back-arrow" aria-label="Volver">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+    </RouterLink>
+
     <div class="login-card panel">
       <!-- Marca y Encabezado -->
       <div class="brand-header">
         <img :src="kordiaLogo" alt="Kordia Logo" class="login-brand-logo" />
-        <h1>{{ isRegister ? 'Crea tu cuenta en Kordia' : '¡Bienvenida a Kordia!' }}</h1>
+        <h1>{{ isRegister ? 'Crea tu cuenta en Kordia' : '¡Hola de nuevo!' }}</h1>
         <p>
           {{
             isRegister
@@ -209,6 +217,34 @@ async function onSubmit(): Promise<void> {
     0 0 40px rgba(139, 92, 246, 0.18);
 }
 
+/* Flecha estética para volver */
+.aesthetic-back-arrow {
+  position: absolute;
+  top: 1.8rem;
+  left: 1.8rem;
+  z-index: 10;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(21, 19, 31, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e5e5eb;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.6);
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  text-decoration: none;
+}
+
+.aesthetic-back-arrow:hover {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.55);
+  color: #ffffff;
+  transform: translateX(-4px);
+  box-shadow: 0 10px 30px -4px rgba(139, 92, 246, 0.5);
+}
+
 /* Marca */
 .brand-header {
   text-align: center;
@@ -216,12 +252,12 @@ async function onSubmit(): Promise<void> {
 }
 
 .login-brand-logo {
-  width: 52px;
-  height: 52px;
+  width: 76px;
+  height: 76px;
   object-fit: contain;
-  margin: 0 auto 0.9rem;
+  margin: 0 auto 1.1rem;
   display: block;
-  filter: drop-shadow(0 0 16px rgba(249, 115, 22, 0.55));
+  filter: drop-shadow(0 0 20px rgba(249, 115, 22, 0.65));
 }
 
 .brand-header h1 {

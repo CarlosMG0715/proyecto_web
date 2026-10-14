@@ -1,23 +1,18 @@
 <script setup lang="ts">
 /**
  * KORDIA - LANDING HERO PAGE
- * Basada fielmente en la inspiración y boceto de Valeria:
- * - Badge "Kordia" con logo oficial
- * - Título: "Bienvenido a Kordia. Los hábitos se construyen en equipo."
- * - Descripción concisa y humana (cero frases de IA).
- * - La gran ilustración de Kordia en el centro como pieza maestra.
- * - Botón grande redondito: "INGRESAR A KORDIA ↗" o "VOLVER ↗" si ya hay sesión.
+ * Ajustes solicitados por Valeria:
+ * 1. Ventanita en blanco transparente estilizado (glassmorphism dinámico y translúcido) para apreciar la ilustración.
+ * 2. Ventanita corrida ligeramente más hacia la izquierda (más centrada en el tercio derecho, sin pegarse a la esquina).
+ * 3. Explicación directa y simple de las funciones principales.
+ * 4. Botón inferior de acción un poco más grande e imponente ("INGRESAR A KORDIA ↗" / "VOLVER AL DASHBOARD ↗").
  */
-import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import kordiaLogo from '@/assets/kordia_logo.png'
-import kordiaHeroImg from '@/assets/kordia_landing_bg.png'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
 const session = useSessionStore()
-
-const userName = computed(() => session.currentUser?.name || 'Valeria')
 
 function handleAction(): void {
   if (session.isAuthenticated) {
@@ -29,398 +24,383 @@ function handleAction(): void {
 </script>
 
 <template>
-  <div class="landing-container">
-    <!-- Navbar Superior Limpia -->
-    <header class="top-nav">
-      <div class="brand-pill">
-        <img :src="kordiaLogo" alt="Kordia" class="logo-img" />
-        <span class="brand-text">Kordia</span>
-      </div>
-
-      <div class="top-right">
-        <template v-if="session.isAuthenticated">
-          <span class="user-status-pill">
-            <span class="online-dot"></span>
-            {{ userName }}
-          </span>
-          <button type="button" class="btn-top-panel" @click="handleAction">
-            Ir al Dashboard →
-          </button>
-        </template>
-        <template v-else>
-          <RouterLink to="/login" class="btn-top-login">
-            Iniciar sesión
-          </RouterLink>
-        </template>
+  <div class="kordia-fullscreen-landing">
+    <!-- 1. HEADER SUPERIOR: BIENVENIDO A KORDIA ANCHO E IMPONENTE -->
+    <header class="landing-top-header">
+      <div class="header-title-badge">
+        <h1 class="big-header-title">
+          BIENVENIDO A <span class="brand-gradient">KORDIA</span>
+        </h1>
       </div>
     </header>
 
-    <!-- Contenido Principal -->
-    <main class="hero-content">
-      <!-- Encabezado y Título Principal -->
-      <section class="title-section">
-        <span class="welcome-badge">
-          <span class="fire-emoji">🔥</span>
-          Bienvenido a Kordia
-        </span>
+    <!-- 2. ÁREA CENTRAL: VENTANITA BLANCA TRANSLÚCIDA MOVIDA LIGERAMENTE A LA IZQUIERDA -->
+    <main class="landing-main-area">
+      <section class="floating-hero-window">
+        <!-- Logo oficial destacado -->
+        <div class="logo-center-wrap">
+          <img :src="kordiaLogo" alt="Kordia Logo" class="window-logo" />
+        </div>
 
-        <h1 class="main-heading">
-          Los hábitos se construyen
-          <span class="purple-highlight">en equipo.</span>
-        </h1>
+        <!-- Título de presentación todo moradito -->
+        <h2 class="hero-window-title purple-gradient">
+          Monitorea tus hábitos en equipo
+        </h2>
 
-        <p class="sub-description">
+        <!-- Descripción simple y directa -->
+        <p class="hero-window-desc">
           Crea tu grupo, mantén tus rachas y alcanza metas juntos. Sin dejar a nadie atrás.
         </p>
-      </section>
 
-      <!-- Gran Ilustración Central de Kordia (Pieza Maestra) -->
-      <section class="illustration-frame">
-        <div class="frame-ambient-glow"></div>
-        <div class="image-wrapper">
-          <img
-            :src="kordiaHeroImg"
-            alt="Exploradores de Kordia construyendo hábitos en equipo"
-            class="kordia-art"
-          />
-        </div>
-      </section>
+        <!-- Funciones explicadas de forma simple y dinámica en cápsulas translúcidas -->
+        <div class="clean-features-list">
+          <div class="clean-feature-item">
+            <span class="feature-dot"></span>
+            <div class="feature-info">
+              <strong class="feature-label">Rachas grupales activas</strong>
+              <span class="feature-desc">Cumple tu hábito diario y protege la racha del equipo.</span>
+            </div>
+          </div>
 
-      <!-- Botón de Acción Principal y Enlace Inferior -->
-      <section class="cta-section">
-        <button type="button" class="cta-pill-btn" @click="handleAction">
-          <span v-if="!session.isAuthenticated">INGRESAR A KORDIA ↗</span>
-          <span v-else>VOLVER AL DASHBOARD ↗</span>
-        </button>
+          <div class="clean-feature-item">
+            <span class="feature-dot"></span>
+            <div class="feature-info">
+              <strong class="feature-label">Detección de deserción</strong>
+              <span class="feature-desc">Cierre diario a medianoche y penalizaciones automáticas.</span>
+            </div>
+          </div>
 
-        <div class="sub-caption-row">
-          <template v-if="!session.isAuthenticated">
-            <span>¿Ya tienes cuenta?</span>
-            <RouterLink to="/login" class="login-sublink">Inicia sesión aquí.</RouterLink>
-          </template>
-          <template v-else>
-            <span class="active-session-text">
-              Sesión activa de <strong>{{ userName }}</strong>. Haz clic para continuar donde lo dejaste.
-            </span>
-          </template>
+          <div class="clean-feature-item">
+            <span class="feature-dot"></span>
+            <div class="feature-info">
+              <strong class="feature-label">Chat & apoyo en vivo</strong>
+              <span class="feature-desc">Motivación en tiempo real para no dejar a nadie atrás.</span>
+            </div>
+          </div>
         </div>
       </section>
     </main>
+
+    <!-- 3. ÁREA INFERIOR: BOTÓN MÁS GRANDE REDONDITO DE ACCIÓN -->
+    <footer class="bottom-action-container">
+      <button type="button" class="cta-pill-button" @click="handleAction">
+        <span v-if="!session.isAuthenticated">INGRESAR A KORDIA ↗</span>
+        <span v-else>VOLVER AL DASHBOARD ↗</span>
+      </button>
+    </footer>
   </div>
 </template>
 
 <style scoped>
 /* ================================================= */
-/* KORDIA LANDING - ESTILO DARK CINEMÁTICO          */
+/* FONDO PANTALLA COMPLETA INMERSIVO                 */
 /* ================================================= */
-.landing-container {
+.kordia-fullscreen-landing {
+  position: relative;
   min-height: 100vh;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   background-color: #0b0914;
+  /* Imagen centrada como en login/registro */
   background-image:
-    radial-gradient(90% 80% at 50% 15%, rgba(139, 92, 246, 0.12), transparent 60%),
-    radial-gradient(80% 80% at 50% 90%, rgba(249, 115, 22, 0.08), transparent 50%);
+    linear-gradient(180deg, rgba(11, 9, 20, 0.4) 0%, rgba(11, 9, 20, 0.05) 35%, rgba(11, 9, 20, 0.7) 100%),
+    url('@/assets/kordia_landing_bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: #f1f0f7;
-  padding: 1.25rem 2rem 2.5rem;
   overflow-x: hidden;
+  padding: 1.4rem 2rem 2.2rem;
   user-select: none;
 }
 
-/* Navbar */
-.top-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  max-width: 1320px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 0.5rem 0.5rem 1rem;
-}
-
-.brand-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.4rem 1rem 0.4rem 0.5rem;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-}
-
-.logo-img {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 10px rgba(249, 115, 22, 0.6));
-}
-
-.brand-text {
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: #fff;
-}
-
-.top-right {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.user-status-pill {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.85rem;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.84rem;
-  color: #ddd9ee;
-}
-
-.online-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 8px #22c55e;
-}
-
-.btn-top-panel,
-.btn-top-login {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #fb923c;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  text-decoration: none;
-}
-
-.btn-top-panel:hover,
-.btn-top-login:hover {
-  opacity: 0.85;
-  text-decoration: underline;
-}
-
 /* ================================================= */
-/* HERO CONTENT                                     */
+/* 1. HEADER SUPERIOR ANCHO E IMPONENTE              */
 /* ================================================= */
-.hero-content {
-  flex: 1;
-  max-width: 1240px;
-  width: 100%;
-  margin: 0 auto;
+.landing-top-header {
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 2rem;
+  align-items: center;
+  width: 100%;
+  padding-top: 0.4rem;
+  z-index: 10;
+}
+
+.header-title-badge {
+  width: min(920px, 94%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.85rem 3rem;
+  border-radius: 99px;
+  background: rgba(14, 11, 25, 0.72);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.7),
+    0 0 35px rgba(168, 85, 247, 0.15);
+}
+
+.big-header-title {
+  margin: 0;
+  font-size: 2.35rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: #ffffff;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.85);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.brand-gradient {
+  background: linear-gradient(135deg, #ff9a4d 0%, #f97316 45%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.6));
+}
+
+/* ================================================= */
+/* 2. ÁREA PRINCIPAL: VENTANITA BLANCA TRANSLÚCIDA   */
+/* ================================================= */
+.landing-main-area {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+  max-width: 1600px;
+  margin: 1rem auto;
+  padding-right: 0.8rem;
+  z-index: 5;
+}
+
+.floating-hero-window {
+  position: relative;
+  max-width: 400px;
+  width: 100%;
+  padding: 1.8rem 1.9rem;
+  border-radius: 30px;
+  /* Efecto blanco transparente / frosted glass para apreciar el dibujo */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 24px 60px -12px rgba(0, 0, 0, 0.75),
+    0 0 35px rgba(255, 255, 255, 0.12),
+    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  animation: floatWindow 5s ease-in-out infinite alternate;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.floating-hero-window:hover {
+  box-shadow:
+    0 28px 70px -10px rgba(0, 0, 0, 0.8),
+    0 0 45px rgba(255, 255, 255, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes floatWindow {
+  0% {
+    transform: translateY(0px);
+  }
+  100% {
+    transform: translateY(-6px);
+  }
+}
+
+/* Logo Oficial */
+.logo-center-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.8rem;
+}
+
+.window-logo {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 22px rgba(249, 115, 22, 0.85));
+  transition: transform 0.3s ease;
+}
+
+.window-logo:hover {
+  transform: scale(1.06) rotate(3deg);
+}
+
+/* Título de la Ventanita   */
+.hero-window-title {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
   text-align: center;
 }
 
-/* Títulos */
-.title-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  max-width: 820px;
-}
-
-.welcome-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.35rem 0.9rem;
-  border-radius: 99px;
-  background: rgba(139, 92, 246, 0.14);
-  border: 1px solid rgba(139, 92, 246, 0.35);
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: #c4b5fd;
-  margin-bottom: 0.9rem;
-  letter-spacing: 0.02em;
-}
-
-.fire-emoji {
-  font-size: 1rem;
-}
-
-.main-heading {
-  margin: 0;
-  font-size: 2.8rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.18;
-  color: #ffffff;
-}
-
-.purple-highlight {
+.purple-gradient {
   display: inline-block;
-  background: linear-gradient(135deg, #c084fc 20%, #a855f7 70%, #ec4899 100%);
+  background: linear-gradient(135deg, #d354cf 0%, #8636c7 35%, #5d1a87 70%, #8f52c4 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
 }
 
-.sub-description {
-  margin: 0.9rem 0 0;
-  font-size: 1.1rem;
-  color: #a7a2bc;
-  line-height: 1.55;
-  max-width: 600px;
+/* Descripción */
+.hero-window-desc {
+  margin: 0.5rem 0 1.15rem;
+  font-size: 0.86rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.48;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
-/* ================================================= */
-/* LA GRAN ILUSTRACIÓN CENTRAL (PIEZA MAESTRA)      */
-/* ================================================= */
-.illustration-frame {
-  position: relative;
-  width: 100%;
-  max-width: 1080px;
-  border-radius: 28px;
-  padding: 0.75rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 30px 80px -20px rgba(0, 0, 0, 0.9),
-    0 0 50px -15px rgba(139, 92, 246, 0.25);
-}
-
-.frame-ambient-glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80%;
-  height: 70%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.18), transparent 70%);
-  filter: blur(60px);
-  pointer-events: none;
-}
-
-.image-wrapper {
-  position: relative;
-  width: 100%;
-  border-radius: 22px;
-  overflow: hidden;
-  background: #090710;
-  aspect-ratio: 16 / 9;
-  max-height: 520px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.kordia-art {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.illustration-frame:hover .kordia-art {
-  transform: scale(1.02);
-}
-
-/* ================================================= */
-/* CTA BUTTON (IDÉNTICO AL BOCETO)                  */
-/* ================================================= */
-.cta-section {
+/* Lista de funciones limpias sin líneas divisorias ni cajas encerradas */
+.clean-features-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.85rem;
-  margin-top: 0.5rem;
+  gap: 0.75rem;
+  width: 100%;
+  margin-top: 0.25rem;
 }
 
-.cta-pill-btn {
-  padding: 1.1rem 4rem;
+.clean-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.2rem 0;
+  text-align: left;
+}
+
+.feature-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff9a4d;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.9);
+}
+
+.feature-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.feature-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.feature-desc {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.82);
+  margin-top: 1px;
+}
+
+/* ================================================= */
+/* 3. BOTÓN INFERIOR MÁS GRANDE                      */
+/* ================================================= */
+.bottom-action-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.2rem 1rem 0.6rem;
+  z-index: 10;
+}
+
+.cta-pill-button {
+  padding: 1.25rem 5.2rem; /* Más grande y cómodo */
   border-radius: 99px;
   border: none;
-  font-size: 1.1rem;
+  font-size: 1.25rem; /* Letra un poquis más grande */
   font-weight: 800;
   letter-spacing: 0.05em;
   color: #1a0f05;
   background: linear-gradient(135deg, #ff9a4d 0%, #f97316 60%, #ea580c 100%);
   cursor: pointer;
   box-shadow:
-    0 12px 36px -6px rgba(249, 115, 22, 0.75),
-    0 0 24px rgba(251, 146, 60, 0.4);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-}
-
-.cta-pill-btn:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow:
     0 16px 44px -6px rgba(249, 115, 22, 0.9),
-    0 0 32px rgba(251, 146, 60, 0.6);
-  filter: brightness(1.06);
+    0 0 38px rgba(251, 146, 60, 0.6);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, filter 0.25s ease;
 }
 
-.cta-pill-btn:active {
+.cta-pill-button:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow:
+    0 20px 52px -6px rgba(249, 115, 22, 1),
+    0 0 44px rgba(251, 146, 60, 0.8);
+  filter: brightness(1.08);
+}
+
+.cta-pill-button:active {
   transform: translateY(0);
 }
 
-.sub-caption-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.88rem;
-  color: #928ca6;
-}
-
-.login-sublink {
-  color: #fb923c;
-  font-weight: 700;
-  text-decoration: underline;
-  transition: opacity 0.15s;
-}
-
-.login-sublink:hover {
-  opacity: 0.85;
-}
-
-.active-session-text {
-  font-size: 0.86rem;
-  color: #a49fb8;
-}
-
-.active-session-text strong {
-  color: #ffffff;
-}
-
-/* Responsive */
-@media (max-width: 900px) {
-  .main-heading {
-    font-size: 2.1rem;
+/* ================================================= */
+/* RESPONSIVE DESIGN                                 */
+/* ================================================= */
+@media (max-width: 1024px) {
+  .big-header-title {
+    font-size: 1.85rem;
+    letter-spacing: 0.12em;
   }
-  .image-wrapper {
-    max-height: 380px;
+  .header-title-badge {
+    padding: 0.75rem 2rem;
   }
-  .cta-pill-btn {
-    padding: 1rem 2.8rem;
-    font-size: 1rem;
+  .landing-main-area {
+    justify-content: center;
+    padding-right: 0;
+  }
+  .floating-hero-window {
+    max-width: 380px;
+    padding: 1.6rem 1.5rem;
   }
 }
 
 @media (max-width: 600px) {
-  .landing-container {
-    padding: 1rem 1rem 2rem;
+  .kordia-fullscreen-landing {
+    padding: 1rem 1rem 1.5rem;
   }
-  .main-heading {
-    font-size: 1.7rem;
+  .header-title-badge {
+    padding: 0.5rem 1.2rem;
+    border-radius: 20px;
   }
-  .sub-description {
-    font-size: 0.95rem;
+  .big-header-title {
+    font-size: 1.25rem;
+    letter-spacing: 0.06em;
+    white-space: normal;
   }
-  .image-wrapper {
-    max-height: 260px;
+  .floating-hero-window {
+    border-radius: 24px;
+    padding: 1.4rem 1.2rem;
+    max-width: 340px;
+  }
+  .hero-window-title {
+    font-size: 1.25rem;
+  }
+  .window-logo {
+    width: 52px;
+    height: 52px;
+  }
+  .cta-pill-button {
+    padding: 1.1rem 2.8rem;
+    font-size: 1.05rem;
+    width: 100%;
+    max-width: 320px;
   }
 }
 </style>
