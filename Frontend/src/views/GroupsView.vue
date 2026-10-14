@@ -5,7 +5,7 @@ import AppLayout from '@/layouts/AppLayout.vue'
 <template>
   <AppLayout>
     <div class="groups-header">
-      <h1>👥 Mis Grupos de Hábitos</h1>
+      <h1>Mis Grupos de Hábitos</h1>
       <button class="create-btn">+ Crear Nuevo Grupo</button>
     </div>
 
@@ -17,7 +17,7 @@ import AppLayout from '@/layouts/AppLayout.vue'
         </div>
         <p class="card-desc">Grupo de prueba sincronizado con la base de datos.</p>
         <div class="card-footer">
-          <span class="status">🟢 Racha activa</span>
+          <span class="status">Racha activa</span>
           <button class="view-btn">Ver Hábitos y Chat →</button>
         </div>
       </div>

@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue'
 <template>
   <AppLayout>
     <div class="home-container">
-      <h1>🔥 Monitor de Hábitos Grupales</h1>
+      <h1>Monitor de Hábitos Grupales</h1>
       <p class="desc">
         Cumple tus metas diarias en equipo, mantén la racha grupal y evita las penalizaciones por deserción.
       </p>
