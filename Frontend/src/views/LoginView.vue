@@ -178,25 +178,35 @@ async function onSubmit(): Promise<void> {
 
 <style scoped>
 .login-wrapper {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1.5rem 1rem;
-  background:
-    radial-gradient(120% 120% at 50% 10%, rgba(139, 92, 246, 0.15), transparent 60%),
-    radial-gradient(80% 80% at 80% 90%, rgba(34, 197, 94, 0.08), transparent 50%),
-    var(--bg);
+  background-color: #0b0914;
+  background-image:
+    linear-gradient(180deg, rgba(11, 9, 20, 0.82) 0%, rgba(11, 9, 20, 0.92) 100%),
+    url('@/assets/kordia_landing_bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .login-card {
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 440px;
   padding: 2.2rem 2rem;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
+  background: rgba(21, 19, 31, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-lg);
-  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, 0.85),
+    0 0 40px rgba(139, 92, 246, 0.18);
 }
 
 /* Marca */
