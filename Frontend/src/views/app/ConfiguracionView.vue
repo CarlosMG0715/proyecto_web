@@ -48,7 +48,7 @@ function handleSave() {
           <label class="setting-row">
             <div class="setting-info">
               <strong>Mensajes del chat del equipo</strong>
-              <p>Notificaciones cuando Carlos o los miembros de tu grupo envíen mensajes.</p>
+              <p>Notificaciones cuando los miembros de tu grupo envíen mensajes.</p>
             </div>
             <input v-model="notifyChat" type="checkbox" class="toggle" />
           </label>

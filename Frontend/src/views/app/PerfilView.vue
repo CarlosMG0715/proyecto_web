@@ -50,7 +50,6 @@ const avatarSrc = computed(() => {
             <h2>{{ userName }}</h2>
             <span class="email">{{ userEmail }}</span>
             <div class="badges">
-              <span class="pill role">Estudiante POW</span>
               <span class="pill online-badge">🟢 Activa</span>
             </div>
           </div>

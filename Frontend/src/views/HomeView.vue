@@ -85,7 +85,7 @@ function handleAction(): void {
     <footer class="bottom-action-container">
       <button type="button" class="cta-pill-button" @click="handleAction">
         <span v-if="!session.isAuthenticated">INGRESAR A KORDIA ↗</span>
-        <span v-else>VOLVER AL DASHBOARD ↗</span>
+        <span v-else>REGRESAR ↗</span>
       </button>
     </footer>
   </div>

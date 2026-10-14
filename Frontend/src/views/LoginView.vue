@@ -94,17 +94,17 @@ async function onSubmit(): Promise<void> {
 
       <!-- Formulario -->
       <form class="login-form" @submit.prevent="onSubmit">
-        <!-- Campo Nombre (solo en registro) -->
+        <!-- Campo Apodo (solo en registro) -->
         <div v-if="isRegister" class="field">
-          <label for="reg-name">Nombre completo</label>
+          <label for="reg-name">Apodo</label>
           <div class="input-wrap">
             <span class="input-icon"><AppIcon name="user" :size="16" /></span>
             <input
               id="reg-name"
               v-model="name"
               type="text"
-              placeholder="Ej: Valeria Torres"
-              autocomplete="name"
+              placeholder="ej. AlexRacha"
+              autocomplete="nickname"
               required
               minlength="2"
             />

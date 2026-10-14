@@ -1,21 +1,34 @@
 <script setup lang="ts">
 /**
- * VISTA DE DETALLE DEL GRUPO (como en la imagen de referencia).
- * - Marcador de racha del equipo (🔥) y barra de salud
- * - Dynamic Daily Check-In con tarjetas de Carlos y Valeria
- * - Cuenta regresiva para medianoche en grande
- * - Chat lateral desplegable con fotos de perfil y alertas
+ * VISTA DE DETALLE DEL GRUPO (Gamificada estilo Duolingo).
+ * Modificaciones solicitadas por Valeria:
+ * 1. FUEGUITO SUPER GRANDE EN EL CENTRO 🔥 con la racha del equipo como protagonista.
+ * 2. Contador de medianoche en formato limpio y original ("Tiempo para Medianoche").
+ * 3. Sección de Hábitos del grupo donde se pueden tener diferentes hábitos (ej. Programar, Leer),
+ *    con botón "+ Crear hábito", notas de avance para los usuarios y botones táctiles Duolingo.
+ * 4. Chat lateral desplegable.
  */
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'
+import UserAvatar from '@/components/ui/UserAvatar.vue'
 import GroupChat from '@/components/group/GroupChat.vue'
-import MemberCheckCard from '@/components/group/MemberCheckCard.vue'
 import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
 import { useGroupsStore } from '@/stores/groups'
+import carlosAvatar from '@/assets/avatars/carlos.jpg'
+import valeriaAvatar from '@/assets/avatars/valeria.jpg'
+
+interface GroupHabit {
+  id: string
+  name: string
+  icon: string
+  carlosCompleted: boolean
+  carlosNote?: string
+  valeriaCompleted: boolean
+  valeriaNote?: string
+}
 
 const route = useRoute()
-const router = useRouter()
 const groupsStore = useGroupsStore()
 const { hours, minutes, seconds } = useMidnightCountdown()
 
@@ -23,6 +36,60 @@ const isChatOpen = ref(true)
 
 const groupId = computed(() => String(route.params.groupId || 'equipo-pow'))
 const group = computed(() => groupsStore.groupById(groupId.value) || groupsStore.groups[0])
+
+// Hábitos específicos del grupo
+const habits = ref<GroupHabit[]>([
+  {
+    id: 'h1',
+    name: 'Programar 1 hora',
+    icon: '💻',
+    carlosCompleted: true,
+    carlosNote: 'Terminé las migraciones de Prisma y endpoints 🚀',
+    valeriaCompleted: false,
+    valeriaNote: '',
+  },
+  {
+    id: 'h2',
+    name: 'Leer 30 mins',
+    icon: '📖',
+    carlosCompleted: true,
+    carlosNote: 'Capítulo 4 de Clean Code completado 📚',
+    valeriaCompleted: true,
+    valeriaNote: 'Hábitos Atómicos capítulo 2 leído ✨',
+  },
+])
+
+function toggleHabit(habit: GroupHabit): void {
+  habit.valeriaCompleted = !habit.valeriaCompleted
+  if (habit.id === 'h1' && group.value) {
+    groupsStore.toggleMyCheckIn(group.value.id)
+  }
+}
+
+// Modal para crear nuevo hábito en el grupo
+const isCreateHabitModalOpen = ref(false)
+const newHabitName = ref('')
+const newHabitIcon = ref('🎯')
+const availableIcons = ['💻', '📖', '🏋️', '🎧', '🎯', '⚡', '🧠', '🧘']
+
+function openCreateHabitModal(): void {
+  newHabitName.value = ''
+  newHabitIcon.value = '🎯'
+  isCreateHabitModalOpen.value = true
+}
+
+function saveNewHabit(): void {
+  if (!newHabitName.value.trim()) return
+  habits.value.push({
+    id: `h-${Date.now()}`,
+    name: newHabitName.value.trim(),
+    icon: newHabitIcon.value,
+    carlosCompleted: false,
+    valeriaCompleted: false,
+    valeriaNote: '',
+  })
+  isCreateHabitModalOpen.value = false
+}
 
 const systemAlert = computed(() => {
   if (!group.value) return null
@@ -36,10 +103,6 @@ const systemAlert = computed(() => {
 
 function formatTwoDigits(n: number): string {
   return String(n).padStart(2, '0')
-}
-
-function handleCheckIn(groupId: string) {
-  groupsStore.toggleMyCheckIn(groupId)
 }
 
 function handleSendMessage(text: string) {
@@ -89,48 +152,111 @@ function handleSendMessage(text: string) {
           </div>
         </div>
 
-        <!-- Marcador Hero (Racha de Equipo y Barra de Salud) -->
-        <section class="scoreboard">
-          <div class="streak-box">
-            <span class="box-caption">Racha de Equipo: {{ group.streak }} Días</span>
-            <div class="fire-value">
-              <span class="fire-emoji">🔥</span>
-              <span class="streak-num">{{ group.streak }}</span>
+        <!-- 1. FUEGUITO SUPER GRANDE EN EL CENTRO 🔥 (ESTILO DUOLINGO) -->
+        <section class="duo-streak-hero-centered">
+          <div class="giant-flame-bubble">
+            <span class="giant-flame-icon">🔥</span>
+          </div>
+          <div class="streak-center-texts">
+            <div class="streak-pill-tag">
+              <span>RACHA DE EQUIPO</span>
             </div>
+            <div class="streak-center-count">
+              <strong class="giant-num">{{ group.streak }}</strong>
+              <span class="giant-label">DÍAS EN LLAMAS</span>
+            </div>
+            <p class="streak-center-desc">
+              ¡El fuego del equipo está en su punto máximo! Cumplan sus hábitos de hoy antes de medianoche para conservarlo.
+            </p>
+          </div>
+        </section>
+
+        <!-- 2. HÁBITOS DE HOY EN EL GRUPO (CON DIFERENTES HÁBITOS, NOTAS Y CREAR HÁBITO) -->
+        <section class="habits-section">
+          <div class="habits-header-row">
+            <div>
+              <h2>Hábitos del equipo hoy</h2>
+              <p class="habits-sub">Cumple cada meta diaria y deja una nota de tu avance.</p>
+            </div>
+            <!-- Botón para añadir un hábito nuevo al grupo -->
+            <button type="button" class="btn-create-habit" @click="openCreateHabitModal">
+              <AppIcon name="plus" :size="16" :stroke-width="3" />
+              <span>Crear hábito</span>
+            </button>
           </div>
 
-          <div class="health-box">
-            <div class="health-header">
-              <span class="box-caption">Salud del Grupo</span>
-              <strong class="health-num">{{ group.health }}/100</strong>
-            </div>
-            <div class="health-track">
-              <div
-                class="health-fill"
-                :style="{ width: `${group.health}%` }"
-              ></div>
+          <div class="habits-list">
+            <div v-for="habit in habits" :key="habit.id" class="habit-group-block">
+              <!-- Barra del Hábito -->
+              <div class="habit-block-head">
+                <div class="habit-title-wrap">
+                  <span class="habit-emoji-icon">{{ habit.icon }}</span>
+                  <strong class="habit-block-name">{{ habit.name }}</strong>
+                </div>
+                <span class="habit-active-tag">2 miembros asignados</span>
+              </div>
+
+              <!-- Tarjetas de Miembros con Notas -->
+              <div class="habit-members-grid">
+                <!-- Carlos -->
+                <div class="member-card teammate">
+                  <div class="member-top">
+                    <UserAvatar name="Carlos" :src="carlosAvatar" :size="42" online />
+                    <div class="member-info">
+                      <strong class="member-name">Carlos</strong>
+                      <span class="member-role">Admin</span>
+                    </div>
+                    <span class="done-pill">✓ Cumplió</span>
+                  </div>
+                  <div v-if="habit.carlosNote" class="member-note-box">
+                    <span class="note-icon">💬</span>
+                    <span class="note-text">"{{ habit.carlosNote }}"</span>
+                  </div>
+                </div>
+
+                <!-- Valeria (Tú) -->
+                <div class="member-card is-me" :class="{ 'is-completed': habit.valeriaCompleted }">
+                  <div class="member-top">
+                    <UserAvatar name="Valeria" :src="valeriaAvatar" :size="42" online />
+                    <div class="member-info">
+                      <strong class="member-name">Valeria</strong>
+                      <span class="member-role you">Tú</span>
+                    </div>
+                    <span v-if="habit.valeriaCompleted" class="done-pill success">✓ Cumplido</span>
+                    <span v-else class="done-pill pending">⏳ Pendiente</span>
+                  </div>
+
+                  <!-- Campo de Nota para que la persona escriba su avance -->
+                  <div class="note-input-wrap">
+                    <input
+                      v-model="habit.valeriaNote"
+                      type="text"
+                      placeholder="Escribe una nota rápida... ej. Avancé en los componentes"
+                      class="note-field"
+                    />
+                  </div>
+
+                  <!-- Botón Táctil Duolingo -->
+                  <button
+                    type="button"
+                    class="duo-habit-btn"
+                    :class="habit.valeriaCompleted ? 'completed' : 'todo'"
+                    @click="toggleHabit(habit)"
+                  >
+                    <span v-if="!habit.valeriaCompleted">
+                      MARCAR COMO HECHO 🔥
+                    </span>
+                    <span v-else>
+                      ¡COMPLETADO HOY! ✨
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <!-- Dynamic Daily Check-In -->
-        <section class="checkin-section">
-          <div class="section-title-row">
-            <h2>Dynamic Daily Check-In</h2>
-            <span class="today-tag">Hoy</span>
-          </div>
-
-          <div class="cards-grid">
-            <MemberCheckCard
-              v-for="member in group.members"
-              :key="member.id"
-              :member="member"
-              @toggle="handleCheckIn(group.id)"
-            />
-          </div>
-        </section>
-
-        <!-- Cuenta Regresiva de Medianoche -->
+        <!-- 3. CUENTA REGRESIVA DE MEDIANOCHE (LIMPIO COMO ESTABA ANTES) -->
         <section class="countdown-hero">
           <span class="countdown-label">Tiempo para Medianoche</span>
           <div class="countdown-digits">
@@ -140,6 +266,56 @@ function handleSendMessage(text: string) {
             El cierre automático se ejecuta a las 00:00:00 con transacciones ACID para evitar penalizaciones.
           </p>
         </section>
+      </div>
+    </div>
+
+    <!-- Modal para Crear Nuevo Hábito en el Grupo -->
+    <div v-if="isCreateHabitModalOpen" class="modal-overlay" @click.self="isCreateHabitModalOpen = false">
+      <div class="modal-card">
+        <header class="modal-head">
+          <div>
+            <h3>Crear hábito para el equipo</h3>
+            <p>Agrega un hábito compartido para que todos hagan check-in diario.</p>
+          </div>
+          <button type="button" class="modal-close-btn" @click="isCreateHabitModalOpen = false">
+            <AppIcon name="x" :size="18" />
+          </button>
+        </header>
+
+        <form class="modal-body" @submit.prevent="saveNewHabit">
+          <div class="form-field">
+            <label>Nombre del hábito</label>
+            <input
+              v-model="newHabitName"
+              type="text"
+              placeholder="ej. Leer 30 mins, Ir al gym, Estudiar inglés"
+              required
+              autofocus
+              class="modal-input"
+            />
+          </div>
+
+          <div class="form-field">
+            <label>Elige un icono</label>
+            <div class="icon-selector">
+              <button
+                v-for="icon in availableIcons"
+                :key="icon"
+                type="button"
+                class="icon-option"
+                :class="{ selected: newHabitIcon === icon }"
+                @click="newHabitIcon = icon"
+              >
+                {{ icon }}
+              </button>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" @click="isCreateHabitModalOpen = false">Cancelar</button>
+            <button type="submit" class="btn-save">Guardar hábito 🔥</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -160,7 +336,8 @@ function handleSendMessage(text: string) {
 <style scoped>
 .group-layout {
   display: flex;
-  height: 100%;
+  height: 100vh;
+  width: 100%;
   overflow: hidden;
   background: var(--bg);
 }
@@ -168,33 +345,31 @@ function handleSendMessage(text: string) {
 .group-main {
   flex: 1;
   min-width: 0;
-  height: 100%;
+  height: 100vh;
   overflow-y: auto;
   padding: 1.5rem 2rem 3rem;
 }
 
 .group-container {
-  max-width: 860px;
+  max-width: 900px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.8rem;
 }
 
-/* Top bar */
+/* Nav */
 .top-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
 }
 
 .breadcrumb {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .crumb-link {
@@ -222,24 +397,25 @@ function handleSendMessage(text: string) {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.85rem;
+  padding: 0.5rem 0.95rem;
   border-radius: 99px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text-soft);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(22, 19, 32, 0.6);
+  color: #d1cde3;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 700;
+  cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .chat-toggle-btn:hover {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
 .chat-toggle-btn.active {
-  background: var(--primary-soft);
-  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(168, 85, 247, 0.4);
   color: #c4b5fd;
 }
 
@@ -247,214 +423,581 @@ function handleSendMessage(text: string) {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 8px var(--success);
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
 }
 
 /* Heading */
 .group-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
+  flex-wrap: wrap;
 }
 
 .group-heading h1 {
   margin: 0;
-  font-size: 1.8rem;
-  font-weight: 800;
+  font-size: 1.95rem;
+  font-weight: 900;
   letter-spacing: -0.02em;
+  color: #ffffff;
 }
 
 .group-heading p {
   margin: 0.35rem 0 0;
-  font-size: 0.9rem;
-  color: var(--muted);
+  font-size: 0.92rem;
+  color: #94a3b8;
 }
 
 .code-chip {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.4rem 0.75rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  padding: 0.55rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 0.82rem;
 }
 
 .code-label {
-  color: var(--muted);
+  color: #94a3b8;
 }
 
 .code-chip strong {
   font-family: monospace;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   color: #c4b5fd;
   letter-spacing: 0.05em;
 }
 
-/* Scoreboard */
-.scoreboard {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.9fr);
-  gap: 1.25rem;
-  padding: 1.4rem 1.6rem;
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(130% 150% at 0% 0%, rgba(139, 92, 246, 0.18), transparent 60%),
-    radial-gradient(120% 130% at 100% 100%, rgba(34, 197, 94, 0.12), transparent 50%),
-    var(--surface);
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 16px 36px -16px rgba(0, 0, 0, 0.6);
-}
-
-.box-caption {
-  display: block;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
-}
-
-.fire-value {
+/* ================================================= */
+/* 1. FUEGUITO SUPER GRANDE EN EL CENTRO 🔥          */
+/* ================================================= */
+.duo-streak-hero-centered {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 1.2rem;
+  padding: 2.2rem 2rem;
+  border-radius: 32px;
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.18) 0%, rgba(22, 19, 32, 0.88) 100%);
+  border: 2px solid rgba(249, 115, 22, 0.4);
+  box-shadow:
+    0 20px 50px -15px rgba(0, 0, 0, 0.8),
+    0 0 50px rgba(249, 115, 22, 0.2);
+}
+
+.giant-flame-bubble {
+  width: 110px;
+  height: 110px;
+  border-radius: 32px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.3) 0%, rgba(234, 88, 12, 0.15) 100%);
+  border: 2px solid rgba(251, 146, 60, 0.5);
+  box-shadow: 0 0 40px rgba(249, 115, 22, 0.5);
+  animation: pulseGiantFlame 3s ease-in-out infinite alternate;
+}
+
+@keyframes pulseGiantFlame {
+  0% { transform: scale(1); box-shadow: 0 0 30px rgba(249, 115, 22, 0.4); }
+  100% { transform: scale(1.08); box-shadow: 0 0 55px rgba(249, 115, 22, 0.7); }
+}
+
+.giant-flame-icon {
+  font-size: 4.6rem;
+  filter: drop-shadow(0 0 20px rgba(249, 115, 22, 1));
+}
+
+.streak-center-texts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 0.4rem;
 }
 
-.fire-emoji {
-  font-size: 1.7rem;
-}
-
-.streak-num {
-  font-size: 2.2rem;
+.streak-pill-tag {
+  font-size: 0.76rem;
   font-weight: 800;
-  color: #fff;
-  letter-spacing: -0.03em;
+  letter-spacing: 0.1em;
+  padding: 0.25rem 0.85rem;
+  border-radius: 99px;
+  background: rgba(249, 115, 22, 0.22);
+  color: #ffba88;
+  border: 1px solid rgba(249, 115, 22, 0.45);
 }
 
-.health-box {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.health-header {
+.streak-center-count {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 0.7rem;
 }
 
-.health-num {
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: #fff;
+.giant-num {
+  font-size: 3.5rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 4px 20px rgba(249, 115, 22, 0.75);
 }
 
-.health-track {
-  margin-top: 0.4rem;
-  height: 12px;
-  border-radius: 99px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  overflow: hidden;
+.giant-label {
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #f97316;
 }
 
-.health-fill {
-  height: 100%;
-  border-radius: 99px;
-  background: linear-gradient(90deg, #10b981, #22c55e, #f59e0b);
-  box-shadow: 0 0 14px rgba(34, 197, 94, 0.6);
-  transition: width 0.4s ease;
+.streak-center-desc {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #cbd5e1;
+  max-width: 520px;
+  line-height: 1.5;
 }
 
-/* Dynamic Daily Check-In */
-.checkin-section {
+/* ================================================= */
+/* 2. HÁBITOS DEL GRUPO (MÚLTIPLES HÁBITOS Y NOTAS)   */
+/* ================================================= */
+.habits-section {
   display: flex;
   flex-direction: column;
+  gap: 1.2rem;
+}
+
+.habits-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
 }
 
-.section-title-row {
+.habits-header-row h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.habits-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+/* Botón Crear Hábito (Tactile 3D Duolingo) */
+.btn-create-habit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.35rem;
+  border-radius: 99px;
+  border: none;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #1a0f05;
+  background: linear-gradient(135deg, #ff9a4d 0%, #f97316 100%);
+  cursor: pointer;
+  box-shadow: 0 4px 0 #c2410c, 0 6px 16px rgba(249, 115, 22, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.btn-create-habit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0 #c2410c, 0 8px 20px rgba(249, 115, 22, 0.5);
+}
+
+.btn-create-habit:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #c2410c;
+}
+
+.habits-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.habit-group-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.4rem;
+  border-radius: 24px;
+  background: rgba(22, 19, 32, 0.65);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.habit-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.habit-title-wrap {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.section-title-row h2 {
-  margin: 0;
-  font-size: 1.15rem;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+.habit-emoji-icon {
+  font-size: 1.35rem;
 }
 
-.today-tag {
-  font-size: 0.72rem;
+.habit-block-name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.habit-active-tag {
+  font-size: 0.74rem;
   font-weight: 700;
-  padding: 0.15rem 0.55rem;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.2rem 0.6rem;
   border-radius: 99px;
-  background: var(--primary-soft);
-  color: #c4b5fd;
+}
+
+.habit-members-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+/* Tarjeta del Miembro */
+.member-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.15rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.member-card.is-me {
+  background: rgba(249, 115, 22, 0.04);
+  border-color: rgba(249, 115, 22, 0.25);
+}
+
+.member-card.is-completed {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.member-top {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.member-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.member-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.member-role {
+  font-size: 0.7rem;
+  color: #94a3b8;
   text-transform: uppercase;
 }
 
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.1rem;
+.member-role.you {
+  color: #fb923c;
+  font-weight: 800;
 }
 
-/* Countdown */
+.done-pill {
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.done-pill.pending {
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+  border-color: rgba(249, 115, 22, 0.3);
+}
+
+/* Caja de Notas */
+.member-note-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  font-style: italic;
+}
+
+.note-input-wrap {
+  width: 100%;
+}
+
+.note-field {
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+  color: #f1f0f7;
+  font-size: 0.8rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.note-field:focus {
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+/* Botón Táctil Duolingo */
+.duo-habit-btn {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border-radius: 14px;
+  border: none;
+  font-size: 0.88rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  user-select: none;
+}
+
+.duo-habit-btn.todo {
+  background: linear-gradient(180deg, #fb923c 0%, #ea580c 100%);
+  color: #1a0f05;
+  box-shadow: 0 4px 0 #9a3412;
+}
+
+.duo-habit-btn.todo:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0 #9a3412;
+}
+
+.duo-habit-btn.todo:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #9a3412;
+}
+
+.duo-habit-btn.completed {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+  color: #052e16;
+  box-shadow: 0 4px 0 #15803d;
+}
+
+.duo-habit-btn.completed:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #15803d;
+}
+
+/* ================================================= */
+/* 3. CUENTA REGRESIVA DE MEDIANOCHE (LIMPIO)        */
+/* ================================================= */
 .countdown-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 1.8rem 1rem 1.2rem;
+  padding: 1.8rem;
+  border-radius: 24px;
+  background: rgba(22, 19, 32, 0.5);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
 }
 
 .countdown-label {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: var(--muted);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  color: #94a3b8;
   margin-bottom: 0.4rem;
 }
 
 .countdown-digits {
-  font-size: 2.4rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: #a78bfa;
-  text-shadow: 0 0 24px rgba(167, 139, 250, 0.45);
-  font-variant-numeric: tabular-nums;
+  font-family: monospace;
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #f8fafc;
+  text-shadow: 0 0 16px rgba(255, 255, 255, 0.25);
 }
 
 .countdown-hint {
-  max-width: 460px;
   margin: 0.5rem 0 0;
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 1.4;
+  font-size: 0.8rem;
+  color: #64748b;
+  max-width: 500px;
+}
+
+/* Modal Crear Hábito */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 440px;
+  border-radius: 24px;
+  background: rgba(22, 19, 32, 0.95);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  padding: 1.8rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.modal-head p {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.form-field label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.modal-input {
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.modal-input:focus {
+  border-color: #f97316;
+}
+
+.icon-selector {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.icon-option {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 1.2rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.icon-option.selected {
+  background: rgba(249, 115, 22, 0.25);
+  border-color: #f97316;
+  transform: scale(1.08);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.btn-cancel {
+  padding: 0.65rem 1rem;
+  border-radius: 12px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-save {
+  padding: 0.65rem 1.4rem;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #ff9a4d, #f97316);
+  color: #1a0f05;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 /* Chat Pane */
 .group-chat-pane {
-  width: 360px;
-  height: 100%;
-  flex-shrink: 0;
+  width: 380px;
+  height: 100vh;
   border-left: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
 }
 
-/* Animaciones */
 .slide-chat-enter-active,
 .slide-chat-leave-active {
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease;
 }
 
 .slide-chat-enter-from,
@@ -463,9 +1006,13 @@ function handleSendMessage(text: string) {
   opacity: 0;
 }
 
-@media (max-width: 900px) {
-  .scoreboard {
-    grid-template-columns: 1fr;
+@media (max-width: 1024px) {
+  .group-chat-pane {
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 50;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.8);
   }
 }
 </style>

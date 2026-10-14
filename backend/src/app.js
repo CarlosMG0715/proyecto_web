@@ -8,7 +8,7 @@ const apiRoutes = require('./routes')
 const app = express()
 
 app.use(correlationId)
-app.use(cors({ origin: allowedOrigins, credentials: true }))
+app.use(cors({ origin: allowedOrigins, credentials: true, exposedHeaders: ['x-correlation-id'] }))
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/api/health', (_req, res) => {
