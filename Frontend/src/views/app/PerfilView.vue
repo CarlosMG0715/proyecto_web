@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
-import UserAvatar from '@/components/ui/UserAvatar.vue'
 import StreakFlame from '@/components/ui/StreakFlame.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import AdventureCharacter from '@/components/ui/AdventureCharacter.vue'
@@ -16,13 +15,10 @@ const characters = useCharacterStore()
 
 const name = computed(() => session.currentUser?.name ?? 'Valeria')
 const email = computed(() => session.currentUser?.email ?? '')
-const memberships = computed(() =>
-  store.groups.flatMap((group) => {
-    const member = group.members.find((m) => m.isCurrentUser)
-    return member ? [{ group, member }] : []
-  })
-)
-const avatar = computed(() => memberships.value[0]?.member.avatarUrl ?? null)
+const memberships = computed(() => store.groups.flatMap(group => {
+  const member = group.members.find(m => m.isCurrentUser)
+  return member ? [{ group, member }] : []
+}))
 const days = computed(() => new Set(store.checkInHistory).size)
 
 const milestones = computed(() => [
@@ -58,15 +54,13 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
             <span class="orbit one"></span>
             <span class="orbit two"></span>
             <div class="avatar-ring">
-              <CharacterIcon v-if="characters.selected" :character="characters.selected" :size="124" />
-              <UserAvatar v-else :name="name" :src="avatar" :size="124" />
+              <CharacterIcon :character="characters.current" :size="124" />
             </div>
-            <span class="avatar-tag">{{ characters.selected?.name ?? 'Aventurero' }}</span>
+
           </div>
         </div>
 
         <div class="identity-info">
-          <span class="identity-label">AVENTURERO</span>
           <h2>{{ name }}</h2>
           <p>{{ email }}</p>
           <span class="member-label">
@@ -92,7 +86,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
       >
         <div class="game-title">
           <h2>Personalizar</h2>
-          <small>6 personajes · 6 temas</small>
         </div>
 
         <div class="personalization-grid">
@@ -101,17 +94,17 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
               v-for="c in CHARACTERS"
               :key="c.id"
               class="character-option"
-              :class="{ chosen: characters.selected?.id === c.id }"
+              :class="{ chosen: characters.current.id === c.id }"
               :style="{ '--option-color': c.color }"
               :aria-label="`Elegir ${c.name}`"
-              :aria-pressed="characters.selected?.id === c.id"
+              :aria-pressed="characters.current.id === c.id"
               @click="characters.select(c.id)"
             >
               <div class="option-icon-wrap">
                 <CharacterIcon :character="c" :size="62" />
               </div>
               <strong>{{ c.name }}</strong>
-              <span v-if="characters.selected?.id === c.id">
+              <span v-if="characters.current.id === c.id">
                 <AppIcon name="check" :size="12" />Elegido
               </span>
               <span v-else>Elegir</span>
@@ -148,7 +141,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 
         <p v-if="characters.error" role="status" class="game-muted">{{ characters.error }}</p>
         <p v-else-if="characters.selected" class="character-saved" role="status">
-          <AppIcon name="check" :size="13" />{{ characters.selected.name }} seleccionado
+          <AppIcon name="check" :size="13" />{{ characters.current.name }} seleccionado
         </p>
       </section>
 
@@ -318,27 +311,41 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
   border-color: color-mix(in srgb, var(--profile-accent, #a37bbd) 25%, transparent);
 }
 
-.avatar-tag {
+.avatar-actions {
   position: relative;
   z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.avatar-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #f7edff;
   background: color-mix(in srgb, var(--profile-accent, #a37bbd) 35%, #1d1527);
   border: 1px solid color-mix(in srgb, var(--profile-accent, #a37bbd) 65%, transparent);
-  padding: 4px 12px;
+  padding: 5px 11px;
   border-radius: 20px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
-  transition: background 0.3s, border-color 0.3s;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
 }
 
-.identity-label {
-  letter-spacing: 0.18em;
-  font-size: 9px;
-  font-weight: 800;
-  color: #d1b8eb;
+.avatar-tag:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--profile-accent, #a37bbd) 50%, #1d1527);
+}
+
+.switch-char-tag {
+  background: #271e35;
+  border-color: #6b5285;
 }
 
 .identity-info {
@@ -419,7 +426,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 }
 
 .unlocked .medal {
-  background: #d7ad6b;
+  background: var(--theme-accent, #d7ad6b);
   color: #47301e;
   filter: drop-shadow(0 4px 0 #755133);
 }
@@ -431,7 +438,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 }
 
 .unlocked .badge-state {
-  color: #f0c886;
+  color: var(--theme-accent, #f0c886);
 }
 
 .badge h3 {
@@ -453,7 +460,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 
 .badge > small {
   font-size: 9px;
-  color: #cbb3e1;
+  color: var(--theme-accent, #cbb3e1);
 }
 
 .mission {
@@ -626,7 +633,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 
 .theme-options {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -649,9 +656,9 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 }
 
 .theme-swatch {
-  width: 35px;
-  height: 35px;
-  background: linear-gradient(135deg, var(--swatch) 50%, var(--swatch-dark) 50%);
+  width: 52px;
+  height: 38px;
+  background: radial-gradient(ellipse at 75% 20%, #ffffff75 0 8%, transparent 9%), linear-gradient(160deg, var(--swatch) 0 48%, color-mix(in srgb,var(--swatch),white 20%) 49% 58%, var(--swatch-dark) 59%);
   border: 2px solid var(--swatch);
   border-radius: 10px;
   display: grid;

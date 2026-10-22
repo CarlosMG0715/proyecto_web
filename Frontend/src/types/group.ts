@@ -65,4 +65,7 @@ export interface Group {
 export interface CreateGroupPayload {
   name: string
   category: string
+  habit?: string
+  color?: string
+  inviteCode?: string
 }

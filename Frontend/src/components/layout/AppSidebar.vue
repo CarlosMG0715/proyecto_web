@@ -6,7 +6,6 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon, { type IconName } from '@/components/ui/AppIcon.vue'
-import UserAvatar from '@/components/ui/UserAvatar.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import { useCharacterStore } from '@/stores/characters'
 import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
@@ -118,12 +117,16 @@ async function handleLogout(): Promise<void> {
         <AppIcon name="plus" :size="16" :stroke-width="2.5" />
         Crear grupo
       </button>
+      <button type="button" class="join-btn" @click="createModal.openJoin">
+        <AppIcon name="link" :size="15" :stroke-width="2.3" />
+        Unirme a un grupo
+      </button>
     </div>
 
     <!-- Tu cuenta -->
     <div class="account">
       <RouterLink :to="{ name: 'perfil' }" class="account-link">
-        <CharacterIcon v-if="characters.selected" :character="characters.selected" :size="34" /><UserAvatar v-else :name="userName" :size="34" online />
+        <CharacterIcon :character="characters.current" :size="34" />
         <span class="account-info">
           <span class="account-name">{{ userName }}</span>
           <span class="account-email">{{ userEmail }}</span>
@@ -341,6 +344,28 @@ async function handleLogout(): Promise<void> {
   box-shadow: 0 10px 24px -6px rgba(124, 58, 237, 0.85);
 }
 
+.join-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  border: 1px dashed rgba(167, 139, 250, 0.45);
+  border-radius: var(--radius);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #ddd6fe;
+  background: rgba(139, 92, 246, 0.1);
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.join-btn:hover {
+  transform: translateY(-1px);
+  border-color: #a78bfa;
+  background: rgba(139, 92, 246, 0.2);
+  color: #fff;
+}
+
 /* Cuenta */
 .account {
   margin-top: auto;
@@ -396,5 +421,5 @@ async function handleLogout(): Promise<void> {
   background: rgba(244, 63, 94, 0.12);
   color: var(--danger);
 }
-@media(max-width:700px){.sidebar{position:fixed;top:auto;bottom:0;left:0;right:0;height:68px;width:100%;z-index:100;padding:5px 10px;background:#1d1628;border-right:0;border-top:1px solid #604674;overflow:visible;display:block}.brand,.groups,.account,.nav>.section-label{display:none}.nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.nav-link{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:8px 3px;font-size:9px;min-height:55px}.nav-link.active{background:#3b2850;color:#e0c0ff}}
+@media(max-width:700px){.sidebar{position:fixed;top:auto;bottom:0;left:0;right:0;height:68px;width:100%;z-index:100;padding:5px 10px;background:#1d1628;border-right:0;border-top:1px solid #604674;overflow:visible;display:block}.brand,.groups,.account,.nav>.section-label{display:none}.nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.nav-link{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:8px 3px;font-size:9px;min-height:55px}.nav-link.active{background:color-mix(in srgb,var(--theme-accent) 22%,#2a2034);color:color-mix(in srgb,var(--theme-accent),white 38%)}}
 </style>

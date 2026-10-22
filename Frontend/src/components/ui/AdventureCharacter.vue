@@ -44,4 +44,18 @@ withDefaults(defineProps<{ character: Character; size?: number; complete?: boole
 .royal .body{top:65%;left:22%;width:56%;height:23%;background:#bd9bea}
 .royal .arm{top:74%;height:13%;background:#c39bd5}.royal .arm.left{left:12%}.royal .arm.right{right:12%}
 .royal .leg{width:19%;height:13%;transform:none}.royal .leg.left{left:26%}.royal .leg.right{right:26%}
+/* Violeta: audífonos gemelos y mechones redondeados del retrato. */
+.royal .headphones{left:10%;top:29%;width:80%;height:28%;border:0;background:none;box-shadow:none;border-radius:0}
+.royal .headphones:before,.royal .headphones:after{content:'';display:block;position:absolute;top:0;width:27%;height:100%;box-sizing:border-box;background:#675075;border:3px solid #47334f;border-bottom-width:4px;border-radius:35%;box-shadow:inset 2px 0 #a67eaa;clip-path:none}
+.royal .headphones:before{left:0}.royal .headphones:after{left:auto;right:0}
+.royal .ear{display:block;position:absolute;top:36%;width:11%;height:10%;background:#e4b55f;clip-path:polygon(0 0,25% 40%,50% 0,75% 40%,100% 0,90% 100%,10% 100%);z-index:9}
+.royal .ear.left{left:15%}.royal .ear.right{right:15%}
+.royal .hair-back:before,.royal .hair-back:after{top:44%;height:92%;border-radius:35% 35% 45% 45%}
+/* Brote: capucha oscura, ribete y pañuelo rojos como su icono. */
+.sprout .hood{background:#443344;border-color:#392b3c;border-bottom-color:#392b3c;box-shadow:inset 6px 4px #735061,inset -6px 0 #302636}
+.sprout .head{background:#f4d5be;border-color:#d45c50;box-shadow:inset 0 5px #b53e40}
+.sprout .fringe{position:absolute;left:29%;top:23%;width:44%;height:13%;background:#a93d43;clip-path:polygon(0 0,100% 0,100% 75%,70% 28%,51% 90%,28% 25%,0 70%);z-index:7}
+.sprout .muzzle{position:absolute;left:0;right:0;bottom:0;height:30%;background:#4b3547;border-radius:0 0 8px 8px}
+.sprout .scarf{background:#d15a47;border-color:#733c3d}.sprout .scarf:after{background:#ba483f;border-color:#733c3d}
+.sprout .leaf{display:none}.sprout .body,.sprout .arm{background:#54414f;border-color:#392b3c}
 </style>

@@ -25,8 +25,8 @@ test('los seis personajes seleccionan su icono y tema correspondiente', () => {
   storage.clear()
   const { characters } = fresh()
   assert.equal(CHARACTERS.length, 6)
-  assert.equal(CHARACTER_THEMES.length, 6)
-  assert.equal(characters.selected, null)
+  assert.equal(CHARACTER_THEMES.length, 8)
+  assert.equal(characters.current.id, 'sprout')
   for (const c of CHARACTERS) {
     characters.select(c.id)
     assert.equal(characters.selected.id, c.id)
@@ -42,7 +42,7 @@ test('el tema independiente y el personaje sobreviven a una recarga', () => {
   characters.select('pilot')
   characters.selectTheme('cap')
   characters = fresh().characters
-  assert.equal(characters.selected.name, 'Aviador')
+  assert.equal(characters.selected.id, 'pilot')
   assert.equal(characters.theme.name, 'Laguna')
   characters.select('unknown')
   characters.selectTheme('unknown')
@@ -57,7 +57,7 @@ test('las preferencias de dos cuentas se mantienen separadas', () => {
   characters.select('fox')
   characters.selectTheme('music')
   session.setUser({ id: 'b', name: 'B', email: 'b@example.test' })
-  assert.equal(characters.selected, null)
+  assert.equal(characters.current.id, 'sprout')
   characters.select('pilot')
   session.setUser({ id: 'a', name: 'A', email: 'a@example.test' })
   assert.equal(characters.selected.id, 'fox')
@@ -68,7 +68,31 @@ test('preferencias corruptas usan valores seguros', () => {
   storage.set('kordia:characters', '{invalid')
   storage.set('kordia:themes', '["unknown"]')
   const { characters } = fresh()
-  assert.equal(characters.selected, null)
+  assert.equal(characters.current.id, 'sprout')
   assert.equal(characters.current.id, 'sprout')
   assert.equal(characters.theme.id, 'sprout')
+})
+
+
+const demoModule = loadStore('../src/mocks/demoGroups.ts', {
+  '@/assets/avatars/carlos.jpg': 'carlos.jpg', '@/assets/avatars/valeria.jpg': 'valeria.jpg',
+})
+const { useGroupsStore } = loadStore('../src/stores/groups.ts', {
+  './session': sessionModule, './characters': { useCharacterStore }, '@/mocks/demoGroups': demoModule,
+})
+test('salir elimina la membresía, conserva el grupo y permite volver con el código', () => {
+  storage.clear()
+  const { session } = fresh()
+  session.setUser({ id: 'test-owner', name: 'Owner', email: 'owner@example.test' })
+  let groups = useGroupsStore()
+  const group = groups.createGroup({ name: 'Equipo de prueba', category: 'General' }, 'Owner')
+  groups.leaveGroup(group.id)
+  assert.equal(groups.groups.some(g => g.id === group.id), false)
+  assert.equal(groups.groupById(group.id), undefined)
+  assert.ok(groups.catalogGroups.some(g => g.id === group.id))
+  fresh().session.setUser({ id: 'test-owner', name: 'Owner', email: 'owner@example.test' })
+  groups = useGroupsStore()
+  assert.equal(groups.groupById(group.id), undefined)
+  assert.equal(groups.joinGroupByCode(group.inviteCode, 'Owner').ok, true)
+  assert.ok(groups.groupById(group.id))
 })

@@ -32,7 +32,7 @@ withDefaults(
       class="character-icon-art"
       :style="{
         backgroundImage: `url(${sheet})`,
-        backgroundPosition: `${character.x}% ${character.y}%`,
+        backgroundPosition: `${character.x === 0 ? 4.55 : character.x === 50 ? 51.14 : 98.48}% ${character.y === 0 ? 9.2 : 95.6}%`,
       }"
     />
   </span>
@@ -59,8 +59,8 @@ withDefaults(
 .character-icon-art {
   position: absolute;
   /* El zoom del 7% elimina los márgenes oscuros del recorte de la hoja y centra el retrato circular exactamente con el marco */
-  inset: -7%;
-  background-size: 300% 200%;
+  inset: 0;
+  background-size: 320% 213.333%;
   background-repeat: no-repeat;
   border-radius: 50%;
   pointer-events: none;

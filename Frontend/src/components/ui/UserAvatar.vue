@@ -70,6 +70,10 @@ const dotSize = computed(() => Math.max(8, Math.round(props.size * 0.26)))
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  object-position: center;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .initials {
