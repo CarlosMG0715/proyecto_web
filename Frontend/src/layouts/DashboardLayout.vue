@@ -3,15 +3,37 @@
  * Layout de la parte privada de la app (después de iniciar sesión):
  * menú lateral a la izquierda + la pantalla actual (RouterView) a la derecha.
  */
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import '@/assets/styles/game-views.css'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import CreateGroupModal from '@/components/group/CreateGroupModal.vue'
+import { useCharacterStore } from '@/stores/characters'
+import { useGroupsStore } from '@/stores/groups'
+
+const characters = useCharacterStore()
+const groups = useGroupsStore()
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+
+function refreshProfiles() {
+  if (document.visibilityState === 'hidden') return
+  void characters.refreshPreferences()
+  void groups.refreshRemoteGroups()
+}
+
 onMounted(() => {
+  refreshTimer = setInterval(refreshProfiles, 15000)
+  window.addEventListener('focus', refreshProfiles)
+  document.addEventListener('visibilitychange', refreshProfiles)
   try {
     const preferences = JSON.parse(localStorage.getItem('kordia:preferences') ?? '{}')
     document.documentElement.classList.toggle('kordia-reduce-motion', preferences.motion === false)
   } catch { /* Las preferencias inválidas usan los efectos predeterminados. */ }
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+  window.removeEventListener('focus', refreshProfiles)
+  document.removeEventListener('visibilitychange', refreshProfiles)
 })
 </script>
 

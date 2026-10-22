@@ -13,6 +13,7 @@ import { logout } from '@/services/authService'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
 import kordiaLogo from '@/assets/kordia_logo.png'
+import JoinRequestInbox from '@/components/group/JoinRequestInbox.vue'
 
 interface NavItem {
   name: string
@@ -72,16 +73,17 @@ async function handleLogout(): Promise<void> {
     <!-- Navegación principal -->
     <nav class="nav">
       <span class="section-label">Menú</span>
-      <RouterLink
-        v-for="item in NAV_ITEMS"
-        :key="item.name"
-        :to="{ name: item.name }"
-        class="nav-link"
-        :class="{ active: route.name === item.name }"
-      >
-        <AppIcon :name="item.icon" :size="17" />
-        <span>{{ item.label }}</span>
-      </RouterLink>
+      <template v-for="item in NAV_ITEMS" :key="item.name">
+        <RouterLink
+          :to="{ name: item.name }"
+          class="nav-link"
+          :class="{ active: route.name === item.name }"
+        >
+          <AppIcon :name="item.icon" :size="17" />
+          <span>{{ item.label }}</span>
+        </RouterLink>
+        <JoinRequestInbox v-if="item.name === 'perfil'" />
+      </template>
     </nav>
 
     <!-- Grupos -->

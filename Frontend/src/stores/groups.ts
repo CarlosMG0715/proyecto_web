@@ -4,6 +4,7 @@ import { DEMO_GROUPS, toDateKey } from '@/mocks/demoGroups'
 import { useCharacterStore } from './characters'
 import { useSessionStore } from './session'
 import type { ActivityItem, CreateGroupPayload, Group, GroupMember } from '@/types/group'
+import { groupService, type RemoteGroup } from '@/services/groupService'
 
 export interface DayProgress {
   key: string
@@ -84,6 +85,78 @@ export const useGroupsStore = defineStore('groups', () => {
   const userProgressMap = ref<Record<string, UserProgressData>>(loadUserProgressMap())
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  let loadedForUserId: string | null = null
+  let loadingForUserId: string | null = null
+  let loadSequence = 0
+
+  function fromRemote(remote: RemoteGroup, previous?: Group): Group {
+    characters.rememberProfiles(remote.memberships.map(membership => membership.user))
+    const priorMembers = new Map(previous?.members.map(member => [member.id, member]) ?? [])
+    return {
+      id: remote.id,
+      name: remote.name,
+      description: '',
+      category: remote.category,
+      inviteCode: remote.inviteCode,
+      color: remote.color,
+      streak: previous?.streak ?? 0,
+      health: previous?.health ?? 100,
+      completionHistory: previous?.completionHistory ?? [0, 0, 0, 0, 0, 0, 0],
+      members: remote.memberships.map((membership) => {
+        const old = priorMembers.get(membership.user.id)
+        return {
+          id: membership.user.id,
+          name: membership.user.name,
+          avatarUrl: null,
+          role: membership.role,
+          habit: old?.habit ?? 'Definir hábito diario',
+          daysCompleted: old?.daysCompleted ?? 0,
+          daysTotal: old?.daysTotal ?? 0,
+          streak: old?.streak ?? 0,
+          checkedInToday: old?.checkedInToday ?? false,
+          isCurrentUser: membership.user.id === session.currentUser?.id,
+          isOnline: old?.isOnline ?? false,
+        }
+      }),
+      messages: previous?.messages ?? [],
+    }
+  }
+
+  async function refreshRemoteGroups(): Promise<void> {
+    const userId = session.currentUser?.id
+    if (!userId || (isLoading.value && loadingForUserId === userId)) return
+    const sequence = ++loadSequence
+    loadingForUserId = userId
+    isLoading.value = true
+    try {
+      const remote = await groupService.list()
+      if (session.currentUser?.id !== userId || sequence !== loadSequence) return
+      const previousById = new Map(allGroups.value.map((group) => [group.id, group]))
+      const remoteGroups = remote.map((group) => fromRemote(group, previousById.get(group.id)))
+      allGroups.value = remoteGroups
+      loadedForUserId = userId
+      persistAll()
+      error.value = null
+    } catch {
+      if (sequence === loadSequence) error.value = 'No pudimos actualizar los miembros del grupo.'
+    } finally {
+      if (sequence === loadSequence) {
+        isLoading.value = false
+        loadingForUserId = null
+      }
+    }
+  }
+
+  watch(() => session.currentUser?.id, (userId) => {
+    if (!userId) {
+      loadSequence++
+      loadingForUserId = null
+      isLoading.value = false
+      loadedForUserId = null
+      return
+    }
+    if (loadedForUserId !== userId) void refreshRemoteGroups()
+  }, { immediate: true })
 
   /** Identificador único de la cuenta activa */
   const accountKey = computed(
@@ -93,28 +166,7 @@ export const useGroupsStore = defineStore('groups', () => {
   const currentUserName = computed(() => session.currentUser?.name ?? 'vayeya')
 
   function matchesCurrentUser(member: GroupMember): boolean {
-    if (member.id === accountKey.value) return true
-    const emailLower = (session.currentUser?.email ?? '').toLowerCase()
-    const emailPrefix = emailLower.split('@')[0] ?? ''
-    const memberIdLower = member.id.toLowerCase()
-    const memberNameLower = member.name.toLowerCase()
-    const myNameLower = currentUserName.value.toLowerCase()
-
-    // Si es el miembro semilla 'valeria' y la cuenta actual es de Valeria/Vayeya, vincularlo a su cuenta real
-    if (
-      (memberIdLower === 'valeria' || memberNameLower === 'valeria' || memberNameLower === 'vayeya') &&
-      (myNameLower.includes('valeria') ||
-        myNameLower.includes('vayeya') ||
-        emailLower.includes('valeria'))
-    ) {
-      return true
-    }
-
-    return (
-      memberIdLower === myNameLower ||
-      memberNameLower === myNameLower ||
-      (Boolean(emailPrefix) && memberIdLower === emailPrefix)
-    )
+    return member.id === accountKey.value
   }
 
   function persistAll(): void {
@@ -147,9 +199,6 @@ export const useGroupsStore = defineStore('groups', () => {
               m.name = u.name
               changed = true
             }
-          } else if (m.id.toLowerCase() === 'valeria' && m.name === 'Valeria') {
-            m.name = characters.userDirectory['valeria']?.name ?? 'vayeya'
-            changed = true
           }
           updatedMembers.push(m)
         }
@@ -172,16 +221,7 @@ export const useGroupsStore = defineStore('groups', () => {
   }
 
   function resolveMemberDisplayName(m: GroupMember): string {
-    const idLower = m.id.toLowerCase()
-    const nameLower = m.name.toLowerCase()
-    if (idLower === 'valeria' || nameLower === 'valeria') {
-      return characters.userDirectory['valeria']?.name ?? 'vayeya'
-    }
-    return (
-      characters.userDirectory[m.id]?.name ??
-      characters.userDirectory[nameLower]?.name ??
-      m.name
-    )
+    return characters.userDirectory[m.id]?.name ?? m.name
   }
 
   function normalizeGroupMembers(g: Group): Group {
@@ -373,14 +413,15 @@ export const useGroupsStore = defineStore('groups', () => {
     persistAll()
   }
 
-  function createGroup(payload: CreateGroupPayload, ownerName: string): Group {
-    const id = `grp-${Date.now()}`
+  function createGroup(payload: CreateGroupPayload, ownerName: string, persisted?: { id: string; inviteCode: string }): Group {
+    const id = persisted?.id ?? `grp-${Date.now()}`
     const name = payload.name.trim()
     const requestedCode = payload.inviteCode?.trim().toUpperCase()
     const inviteCode =
-      requestedCode && !isInviteCodeTaken(requestedCode)
+      persisted?.inviteCode ?? (requestedCode && !isInviteCodeTaken(requestedCode)
         ? requestedCode
         : generateUniqueInviteCode(name)
+      )
 
     const habit = payload.habit?.trim() || 'Cumplir mi meta diaria'
     const color =
@@ -435,56 +476,13 @@ export const useGroupsStore = defineStore('groups', () => {
     return groupById(id) ?? newGroup
   }
 
-  function joinGroupByCode(
-    rawCode: string,
-    memberName: string,
-    habit = 'Cumplir mi hábito diario',
-  ): { ok: true; group: Group } | { ok: false; message: string } {
-    const code = rawCode.trim().toUpperCase()
-    if (code.length < 4) {
-      return { ok: false, message: 'Ingresa un código de invitación válido (ej. POW-2026).' }
-    }
-
-    const existing = allGroups.value.find((g) => g.inviteCode.toUpperCase() === code)
-    if (existing) {
-      const alreadyIn = existing.members.some((m) => matchesCurrentUser(m))
-      if (!alreadyIn) {
-        existing.members.push({
-          id: accountKey.value,
-          name: memberName,
-          avatarUrl: null,
-          role: 'MIEMBRO',
-          habit: habit.trim() || 'Cumplir mi hábito diario',
-          daysCompleted: 0,
-          daysTotal: 1,
-          streak: 0,
-          checkedInToday: false,
-          isCurrentUser: true,
-          isOnline: true,
-        })
-        existing.messages.push({
-          id: `msg-${Date.now()}`,
-          kind: 'system',
-          authorId: null,
-          text: `${memberName} se unió al grupo con el código de invitación.`,
-          sentAt: new Date().toISOString(),
-        })
-      }
-      const myData = ensureMyData()
-      myData.activity.unshift({
-        id: `act-${Date.now()}`,
-        kind: 'join',
-        groupId: existing.id,
-        text: `Te uniste al grupo «${existing.name}» (${existing.inviteCode})`,
-        at: new Date().toISOString(),
-      })
-      persistAll()
-      return { ok: true, group: groupById(existing.id) ?? existing }
-    }
-
-    return {
-      ok: false,
-      message: `No existe ningún grupo con el código «${code}». Revisa que esté bien escrito.`,
+  async function requestGroupJoin(rawCode: string): Promise<{ ok: true; groupName: string } | { ok: false; message: string }> {
+    try {
+      const result = await groupService.requestJoin(rawCode.trim().toUpperCase())
+      return { ok: true, groupName: result.group.name }
+    } catch (cause) {
+      const message = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+      return { ok: false, message: message ?? 'No se pudo enviar la solicitud. Revisa el código e inténtalo de nuevo.' }
     }
   }
 
@@ -511,9 +509,10 @@ export const useGroupsStore = defineStore('groups', () => {
   return {
     groups,
     catalogGroups,
+    isLoading,
+    refreshRemoteGroups,
     activity,
     checkInHistory,
-    isLoading,
     error,
     groupById,
     groupByInviteCode,
@@ -529,7 +528,7 @@ export const useGroupsStore = defineStore('groups', () => {
     updateMyHabit,
     sendMessage,
     createGroup,
-    joinGroupByCode,
+    requestGroupJoin,
     leaveGroup,
     persist: persistAll,
   }

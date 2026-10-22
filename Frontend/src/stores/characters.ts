@@ -1,12 +1,13 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useSessionStore } from './session'
+import { api } from '@/services/api'
 
 export const CHARACTERS = [
   { id: 'sprout', name: 'Brote', color: '#a88ad9', dark: '#49365e', body: '#d9b36a', x: 0, y: 0 },
-  { id: 'fox', name: 'Zorro', color: '#eaa057', dark: '#68402d', body: '#f1a15c', x: 50, y: 0 },
+  { id: 'fox', name: 'Chispa', color: '#eaa057', dark: '#68402d', body: '#f1a15c', x: 50, y: 0 },
   { id: 'music', name: 'Lima', color: '#a9bf66', dark: '#3d5236', body: '#c4d77c', x: 100, y: 0 },
-  { id: 'pilot', name: 'Pingüino', color: '#e28e9d', dark: '#603849', body: '#a6a1d5', x: 0, y: 100 },
+  { id: 'pilot', name: 'Aviador', color: '#e28e9d', dark: '#603849', body: '#a6a1d5', x: 0, y: 100 },
   { id: 'royal', name: 'Violeta', color: '#b28ce8', dark: '#493163', body: '#bd9bea', x: 50, y: 100 },
   { id: 'cap', name: 'Explorador', color: '#7ec6ae', dark: '#2c544a', body: '#efb66a', x: 100, y: 100 },
 ] as const
@@ -33,6 +34,7 @@ export interface KnownUserProfile {
   name: string
   email: string
   characterId: string
+  themeId?: string
 }
 
 function readMap(key: string, validValues?: readonly string[]): Record<string, string> {
@@ -60,154 +62,184 @@ function readUserDirectory(): Record<string, KnownUserProfile> {
   }
 }
 
+interface Preferences {
+  characterId: string
+  themeId: string
+}
+
+interface PreferenceSync {
+  userId: string
+  controller: AbortController
+  revision: number
+  pending: Partial<Preferences>
+  running: Promise<void> | null
+}
+
 export const useCharacterStore = defineStore('characters', () => {
   const session = useSessionStore()
-
-  const choices = ref<Record<string, string>>(
-    readMap(
-      STORAGE_KEY,
-      CHARACTERS.map((c) => c.id),
-    ),
-  )
-  const themeChoices = ref<Record<string, string>>(
-    readMap(THEMES_KEY, CHARACTER_THEMES.map((t) => t.id)),
-  )
+  const choices = ref(readMap(STORAGE_KEY, CHARACTERS.map(c => c.id)))
+  const themeChoices = ref(readMap(THEMES_KEY, CHARACTER_THEMES.map(t => t.id)))
   const userDirectory = ref<Record<string, KnownUserProfile>>(readUserDirectory())
-
-  const accountKey = computed(
-    () => session.currentUser?.id ?? session.currentUser?.email ?? 'demo',
-  )
-
-  /** Personaje actual del usuario */
-  const current = computed(() => {
-    const byId = choices.value[accountKey.value]
-    const byName = session.currentUser?.name
-      ? choices.value[session.currentUser.name.toLowerCase()]
-      : undefined
-    const chosenId = byId ?? byName
-    return CHARACTERS.find((c) => c.id === chosenId) ?? CHARACTERS[0]
-  })
-
   const error = ref('')
+  const isLoading = ref(false)
+  const isSaving = ref(false)
+  const isSaved = ref(false)
+  let activeSync: PreferenceSync | null = null
 
-  const theme = computed(
-    () =>
-      CHARACTER_THEMES.find((t) => t.id === themeChoices.value[accountKey.value]) ??
-      CHARACTER_THEMES.find((t) => t.id === current.value.id) ??
-      CHARACTER_THEMES[0],
-  )
+  const accountKey = computed(() => session.currentUser?.id ?? 'demo')
+  const current = computed(() => CHARACTERS.find(c =>
+    c.id === (choices.value[accountKey.value] ?? session.currentUser?.characterId),
+  ) ?? CHARACTERS[0])
+  const theme = computed(() => CHARACTER_THEMES.find(t =>
+    t.id === (themeChoices.value[accountKey.value] ?? session.currentUser?.themeId),
+  ) ?? CHARACTER_THEMES[0])
 
-  function syncCurrentUserToDirectory(charId?: string) {
-    const u = session.currentUser
-    if (!u) return
-    const activeCharId = charId ?? current.value.id
-    const nameKey = u.name.trim().toLowerCase()
-    const emailKey = u.email.trim().toLowerCase()
-
-    const nextChoices: Record<string, string> = {
-      ...choices.value,
-      [u.id]: activeCharId,
-      [nameKey]: activeCharId,
-      [emailKey]: activeCharId,
-    }
-    // Si esta cuenta es la de Valeria/vayeya, vinculamos también la llave semilla 'valeria'
-    if (nameKey.includes('vayeya') || nameKey.includes('valeria') || emailKey.includes('valeria')) {
-      nextChoices['valeria'] = activeCharId
-    }
-    choices.value = nextChoices
-
-    const profileEntry: KnownUserProfile = {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      characterId: activeCharId,
-    }
-    userDirectory.value = {
-      ...userDirectory.value,
-      [u.id]: profileEntry,
-      [nameKey]: profileEntry,
-    }
-    if (nameKey.includes('vayeya') || nameKey.includes('valeria') || emailKey.includes('valeria')) {
-      userDirectory.value['valeria'] = profileEntry
-    }
-
+  function persistCache() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(choices.value))
+      localStorage.setItem(THEMES_KEY, JSON.stringify(themeChoices.value))
       localStorage.setItem(USER_PROFILES_KEY, JSON.stringify(userDirectory.value))
     } catch {
-      /* ignore */
+      // La confirmación de guardado depende del servidor, no de esta caché.
     }
   }
 
-  watch(
-    () => session.currentUser,
-    (u) => {
-      if (u) syncCurrentUserToDirectory()
-    },
-    { immediate: true },
-  )
+  function rememberProfiles(profiles: KnownUserProfile[]) {
+    const next = { ...userDirectory.value }
+    for (const profile of profiles) {
+      if (CHARACTERS.some(c => c.id === profile.characterId)) next[profile.id] = { ...profile }
+    }
+    userDirectory.value = next
+    persistCache()
+  }
+
+  function applyPreferences(userId: string, preferences: Partial<Preferences>) {
+    if (preferences.characterId) choices.value = { ...choices.value, [userId]: preferences.characterId }
+    if (preferences.themeId) themeChoices.value = { ...themeChoices.value, [userId]: preferences.themeId }
+    const user = session.currentUser
+    if (user?.id === userId) {
+      rememberProfiles([{ ...user, characterId: current.value.id, themeId: theme.value.id }])
+    } else {
+      persistCache()
+    }
+  }
+
+  function isActive(context: PreferenceSync) {
+    return activeSync === context && session.currentUser?.id === context.userId
+  }
+
+  async function loadPreferences(context: PreferenceSync) {
+    if (!isActive(context)) return
+    const revision = context.revision
+    isLoading.value = true
+    error.value = ''
+    try {
+      const { data } = await api.get<Preferences>('/profile/preferences', { signal: context.controller.signal })
+      if (!isActive(context) || context.revision !== revision) return
+      if (!CHARACTERS.some(c => c.id === data.characterId) || !CHARACTER_THEMES.some(t => t.id === data.themeId)) {
+        throw new Error('Preferencias inválidas')
+      }
+      applyPreferences(context.userId, data)
+      isSaved.value = true
+    } catch {
+      if (isActive(context) && context.revision === revision) {
+        isSaved.value = false
+        error.value = 'No pudimos cargar tu personalización guardada. Vuelve a intentarlo.'
+      }
+    } finally {
+      if (isActive(context)) isLoading.value = false
+    }
+  }
+
+  function savePending(context: PreferenceSync): Promise<void> {
+    if (context.running) return context.running
+    isSaving.value = true
+    isSaved.value = false
+    error.value = ''
+    context.running = (async () => {
+      while (isActive(context) && Object.keys(context.pending).length) {
+        const patch = { ...context.pending }
+        const revision = context.revision
+        context.pending = {}
+        try {
+          const { data } = await api.patch<Preferences>('/profile/preferences', patch, { signal: context.controller.signal })
+          if (!isActive(context)) return
+          if (context.revision === revision) applyPreferences(context.userId, data)
+          isSaved.value = Object.keys(context.pending).length === 0
+          error.value = ''
+        } catch {
+          if (isActive(context)) {
+            context.pending = { ...patch, ...context.pending }
+            error.value = 'El cambio se ve aquí, pero no se guardó en tu cuenta. Reintenta para verlo en otros dispositivos.'
+            isSaved.value = false
+          }
+          return
+        }
+      }
+    })().finally(() => {
+      context.running = null
+      if (isActive(context)) isSaving.value = false
+    })
+    return context.running
+  }
+
+  function updatePreferences(patch: Partial<Preferences>) {
+    applyPreferences(accountKey.value, patch)
+    const context = activeSync
+    if (!context || !session.isAuthenticated) return
+    context.revision++
+    context.pending = { ...context.pending, ...patch }
+    void savePending(context)
+  }
 
   function selectTheme(id: string) {
-    if (!CHARACTER_THEMES.some((t) => t.id === id)) return
-    themeChoices.value = { ...themeChoices.value, [accountKey.value]: id }
-    try {
-      localStorage.setItem(THEMES_KEY, JSON.stringify(themeChoices.value))
-      error.value = ''
-    } catch {
-      error.value = 'El tema se aplicó, pero no pudo guardarse en este navegador.'
-    }
+    if (CHARACTER_THEMES.some(t => t.id === id)) updatePreferences({ themeId: id })
   }
 
   function select(id: string) {
-    if (!CHARACTERS.some((c) => c.id === id)) return
-    choices.value = { ...choices.value, [accountKey.value]: id }
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(choices.value)) } catch {
-      error.value = 'El personaje se aplicó, pero no pudo guardarse.'
-    }
-    syncCurrentUserToDirectory(id)
-    selectTheme(id)
-    error.value = ''
+    if (CHARACTERS.some(c => c.id === id)) updatePreferences({ characterId: id, themeId: id })
   }
 
-  /**
-   * Obtiene el personaje real que escogió cualquier miembro del grupo
-   * buscando por su ID, su apodo o en el directorio de usuarios registrados.
-   */
-  function forMember(id: string, isMe = false, memberName?: string): Character {
-    if (isMe) return current.value
+  async function retrySync() {
+    const context = activeSync
+    if (!context) return
+    if (Object.keys(context.pending).length) await savePending(context)
+    else await loadPreferences(context)
+  }
 
-    const idLower = id.trim().toLowerCase()
-    const nameLower = memberName?.trim().toLowerCase() ?? ''
+  async function refreshPreferences() {
+    const context = activeSync
+    if (!context || isLoading.value || isSaving.value || Object.keys(context.pending).length) return
+    await loadPreferences(context)
+  }
 
-    // 1. Buscar por ID exacto, ID en minúsculas o por apodo en el mapa de elecciones
-    const directCharId =
-      choices.value[id] ??
-      choices.value[idLower] ??
-      (nameLower ? choices.value[nameLower] : undefined) ??
-      userDirectory.value[id]?.characterId ??
-      userDirectory.value[idLower]?.characterId ??
-      (nameLower ? userDirectory.value[nameLower]?.characterId : undefined)
+  watch(() => session.currentUser?.id, userId => {
+    activeSync?.controller.abort()
+    activeSync = null
+    isLoading.value = false
+    isSaving.value = false
+    isSaved.value = false
+    error.value = ''
+    if (!userId) return
+    const context: PreferenceSync = { userId, controller: new AbortController(), revision: 0, pending: {}, running: null }
+    activeSync = context
+    const user = session.currentUser!
+    if (user.characterId && user.themeId) applyPreferences(userId, { characterId: user.characterId, themeId: user.themeId })
+    void loadPreferences(context)
+  }, { immediate: true, flush: 'sync' })
 
-    if (directCharId) {
-      const found = CHARACTERS.find((c) => c.id === directCharId)
-      if (found) return found
-    }
-
-    if (idLower.includes('carlos') || nameLower.includes('carlos')) return CHARACTERS[1]
-
-    let hash = 0
-    for (const char of id) hash += char.charCodeAt(0)
-    return CHARACTERS[hash % CHARACTERS.length] ?? CHARACTERS[1]
+  function forMember(id: string, isMe = false, _memberName?: string): Character {
+    if (isMe || id === session.currentUser?.id) return current.value
+    // Los datos recibidos del servidor tienen prioridad sobre selecciones antiguas de este navegador.
+    const characterId = userDirectory.value[id]?.characterId ?? choices.value[id]
+    const character = CHARACTERS.find(c => c.id === characterId)
+    if (character) return character
+    if (id === 'carlos') return CHARACTERS[1]
+    return CHARACTERS[0]
   }
 
   return {
-    selected: current,
-    current,
-    userDirectory,
-    select,
-    forMember,
-    error,
-    theme,
-    selectTheme,
+    selected: current, current, theme, userDirectory, select, selectTheme, forMember,
+    rememberProfiles, refreshPreferences, retrySync, error, isLoading, isSaving, isSaved,
   }
 })

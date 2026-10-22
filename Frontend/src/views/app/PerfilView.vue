@@ -82,6 +82,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
       <section
         id="personalizar"
         class="game-panel personalization"
+        :aria-busy="characters.isLoading || characters.isSaving"
         :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color }"
       >
         <div class="game-title">
@@ -98,6 +99,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
               :style="{ '--option-color': c.color }"
               :aria-label="`Elegir ${c.name}`"
               :aria-pressed="characters.current.id === c.id"
+              :disabled="characters.isLoading"
               @click="characters.select(c.id)"
             >
               <div class="option-icon-wrap">
@@ -129,6 +131,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
               :class="{ chosen: characters.theme.id === t.id }"
               :aria-label="`Tema ${t.name}`"
               :aria-pressed="characters.theme.id === t.id"
+              :disabled="characters.isLoading"
               @click="characters.selectTheme(t.id)"
             >
               <span class="theme-swatch">
@@ -139,9 +142,14 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
           </div>
         </div>
 
-        <p v-if="characters.error" role="status" class="game-muted">{{ characters.error }}</p>
-        <p v-else-if="characters.selected" class="character-saved" role="status">
-          <AppIcon name="check" :size="13" />{{ characters.current.name }} seleccionado
+        <p v-if="characters.isLoading" class="game-muted" role="status">Cargando personalización…</p>
+        <p v-else-if="characters.isSaving" class="game-muted" role="status">Guardando en tu cuenta…</p>
+        <p v-else-if="characters.error" role="status" class="game-muted">
+          {{ characters.error }}
+          <button type="button" class="retry-save" @click="characters.retrySync()">Reintentar</button>
+        </p>
+        <p v-else-if="characters.isSaved" class="character-saved" role="status">
+          <AppIcon name="check" :size="13" />Guardado en tu cuenta
         </p>
       </section>
 
@@ -224,6 +232,23 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 </template>
 
 <style scoped>
+.retry-save {
+  margin-left: 8px;
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--theme-accent, #c5a9ef);
+  cursor: pointer;
+  font: inherit;
+}
+
+.character-option:disabled,
+.theme-options button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
 .identity {
   display: flex;
   align-items: center;

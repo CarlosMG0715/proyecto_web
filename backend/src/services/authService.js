@@ -41,6 +41,8 @@ function publicUser(user) {
     id: user.id,
     name: user.name,
     email: user.email,
+    characterId: user.characterId,
+    themeId: user.themeId,
   }
 }
 
@@ -74,6 +76,8 @@ class AuthService {
         id: true,
         name: true,
         email: true,
+        characterId: true,
+        themeId: true,
         createdAt: true,
       },
     })

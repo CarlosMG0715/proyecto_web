@@ -37,36 +37,43 @@ enum RiskLevel {
 }
 
 model User {
-  id            String            @id @default(cuid())
-  name          String
-  email         String            @unique
-  passwordHash  String
-  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
-  memberships   GroupMembership[]
-  createdGroups Group[]           @relation("GroupCreator")
-  createdHabits Habit[]           @relation("HabitCreator")
-  checkIns      CheckIn[]
-  penalties     Penalty[]
-  messages      Message[]
-  sessions      Session[]
-  dropoutRisks  DropoutRisk[]
+  id                  String             @id @default(cuid())
+  name                String
+  email               String             @unique
+  passwordHash        String
+  characterId         String             @default("sprout")
+  themeId             String             @default("sprout")
+  joinRequests        GroupJoinRequest[] @relation("JoinRequester")
+  handledJoinRequests GroupJoinRequest[] @relation("JoinDecisionMaker")
+  createdAt           DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(3)
+  memberships         GroupMembership[]
+  createdGroups       Group[]            @relation("GroupCreator")
+  createdHabits       Habit[]            @relation("HabitCreator")
+  checkIns            CheckIn[]
+  penalties           Penalty[]
+  messages            Message[]
+  sessions            Session[]
+  dropoutRisks        DropoutRisk[]
 
   @@map("users")
 }
 
 model Group {
-  id               String            @id @default(cuid())
+  id               String             @id @default(cuid())
   name             String
-  inviteCode       String            @unique
-  timeZone         String            @default("America/Bogota")
-  penaltyThreshold Float             @default(0.6)
-  version          Int               @default(0)
+  inviteCode       String             @unique
+  timeZone         String             @default("America/Bogota")
+  penaltyThreshold Float              @default(0.6)
+  version          Int                @default(0)
   createdById      String
-  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
-  createdBy        User              @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
+  createdBy        User               @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
   memberships      GroupMembership[]
+  joinRequests     GroupJoinRequest[]
+  category         String             @default("General")
+  color            String             @default("#8b5cf6")
   habits           Habit[]
   penalties        Penalty[]
   messages         Message[]
@@ -164,18 +171,18 @@ model Penalty {
 }
 
 model DropoutRisk {
-  id                  String    @id @default(cuid())
-  groupId             String
-  userId              String
-  score               Float
-  level               RiskLevel @default(LOW)
-  consecutiveMisses   Int       @default(0)
-  recentRate          Float     @default(0)
-  previousRate        Float     @default(0)
-  lastNotifiedLevel   RiskLevel?
-  computedAt          DateTime  @default(now()) @db.Timestamptz(3)
-  group               Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String     @id @default(cuid())
+  groupId           String
+  userId            String
+  score             Float
+  level             RiskLevel  @default(LOW)
+  consecutiveMisses Int        @default(0)
+  recentRate        Float      @default(0)
+  previousRate      Float      @default(0)
+  lastNotifiedLevel RiskLevel?
+  computedAt        DateTime   @default(now()) @db.Timestamptz(3)
+  group             Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, userId])
   @@index([groupId, level])
@@ -217,4 +224,27 @@ model Session {
   @@index([userId, isRevoked])
   @@index([familyId])
   @@map("sessions")
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model GroupJoinRequest {
+  id          String            @id @default(cuid())
+  groupId     String
+  requesterId String
+  status      JoinRequestStatus @default(PENDING)
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  decidedAt   DateTime?         @db.Timestamptz(3)
+  decidedById String?
+  group       Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  requester   User              @relation("JoinRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  decidedBy   User?             @relation("JoinDecisionMaker", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([groupId, status, createdAt])
+  @@index([requesterId, status])
+  @@map("group_join_requests")
 }

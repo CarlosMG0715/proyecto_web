@@ -55,6 +55,15 @@ async function copyGroupCode() {
 }
 
 const pending = computed(() => group.value?.members.filter((m) => !m.checkedInToday) ?? [])
+const healthHearts = computed(() => {
+  const health = group.value?.health ?? 0
+  const alive = Math.ceil(health / 20)
+  return Array.from({ length: 5 }, (_, index) => ({
+    index,
+    alive: health >= (index + 1) * 20,
+    threatened: pending.value.length > 0 && index < alive && index >= Math.max(0, alive - pending.value.length),
+  }))
+})
 const alert = computed(() =>
   pending.value.length
     ? `Pendientes: ${pending.value.map(nameOf).join(', ')}. Cierre a medianoche.`
@@ -240,7 +249,22 @@ async function handleLeaveGroup() {
                   }"
                 ></span>
               </div>
-              <span>{{ group.health }} salud</span>
+              <div class="team-lives" :class="{ 'lives-at-risk': pending.length }" :aria-label="`${Math.ceil(group.health / 20)} de 5 corazones del equipo`">
+                <span class="lives-label">SALUD DEL EQUIPO</span>
+                <span class="heart-row">
+                  <AppIcon
+                    v-for="heart in healthHearts"
+                    :key="heart.index"
+                    name="heart"
+                    :size="19"
+                    :class="{ alive: heart.alive, threatened: heart.threatened }"
+                  />
+                </span>
+                <span class="lives-caption">
+                  <template v-if="pending.length">{{ pending.length }} {{ pending.length === 1 ? 'misión pendiente' : 'misiones pendientes' }} · corazones en riesgo</template>
+                  <template v-else>El equipo está a salvo hoy</template>
+                </span>
+              </div>
             </div>
           </section>
 
@@ -983,6 +1007,34 @@ async function handleLeaveGroup() {
   white-space: nowrap;
 }
 
+.team-lives {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-content: end;
+  column-gap: 8px;
+  row-gap: 2px;
+  min-width: 128px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.lives-label {
+  grid-column: 1 / -1;
+  color: #d9e5c8;
+  font-size: 7px;
+  letter-spacing: .11em;
+}
+
+.heart-row { display: inline-flex; gap: 2px; align-items:center; justify-content:flex-end; }
+.heart-row :deep(svg) { color: #42594a; stroke-width: 2.7; transition: color .2s, transform .2s, filter .2s; }
+.heart-row :deep(svg.alive) { color: #ff6682; fill: #ff6682; filter: drop-shadow(0 2px 4px #f43f5e55); }
+.heart-row :deep(svg.threatened) { color: #ffc15c; fill: #ffc15c; animation: heart-warning .9s ease-in-out infinite alternate; }
+.lives-caption { grid-column:1 / -1; color:#e0d8b7; font-size:7px; white-space:nowrap; }
+.lives-at-risk .lives-caption { color:#ffd391; }
+
+@keyframes heart-warning { from { transform:scale(1); filter:drop-shadow(0 0 0 #ffbf5c00); } to { transform:scale(1.16); filter:drop-shadow(0 0 5px #ffbf5caa); } }
+
 .world-progress {
   flex: 1;
   max-width: 240px;
@@ -1386,6 +1438,9 @@ async function handleLeaveGroup() {
     padding: 14px 10px;
     font-size: 8px;
   }
+  .team-lives { min-width: 100px; column-gap:5px; }
+  .heart-row :deep(svg) { width:15px; height:15px; }
+  .lives-caption { max-width:112px; white-space:normal; line-height:1.25; }
   .world-progress {
     min-width: 25px;
   }

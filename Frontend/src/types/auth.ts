@@ -7,6 +7,8 @@ export interface User {
   id: string
   name: string
   email: string
+  characterId?: string
+  themeId?: string
   createdAt?: string
 }
 

@@ -97,10 +97,23 @@ Vite inicia normalmente en `http://localhost:5173`. `VITE_API_URL` apunta a `htt
 
 El access token no se guarda en `localStorage`; vive en el store de Pinia. El refresh token va en cookie `refreshToken` con `path=/api/auth`.
 
+## Personalización por cuenta
+
+El personaje (`User.characterId`) y el tema (`User.themeId`) se guardan en PostgreSQL para el usuario autenticado. El navegador conserva una caché, pero al iniciar sesión se carga la elección del servidor, también en incógnito. Las cuentas se identifican por su ID, sin mezclar preferencias de personas con el mismo nombre.
+
+- `GET /api/profile/preferences` carga la personalización de la cuenta.
+- `PATCH /api/profile/preferences` guarda `characterId`, `themeId` o ambos. El usuario se obtiene del token, no del cuerpo de la petición.
+- Login y renovación de sesión incluyen el personaje y el tema guardados.
+- La lista de grupos incluye los avatares actuales de sus miembros. La interfaz los actualiza cada 15 segundos mientras está visible y al volver a la ventana.
+
+En Perfil, el estado **Guardado en tu cuenta** aparece después de la confirmación del servidor. Si el guardado falla, se muestra un aviso con **Reintentar**. Tras aplicar por primera vez la migración `20261021120000_profile_preferences_and_group_join_requests`, vuelve a elegir el personaje y el tema que antes estaban guardados solo en el navegador.
+
+Esto cubre la personalización y su visibilidad entre miembros. Los check-ins, el chat y las penalizaciones todavía conservan su implementación local.
+
 ## Base técnica
 
 - Express 5 con CORS configurable, JSON limitado a 1 MB, `x-correlation-id` y errores centralizados.
 - PostgreSQL 16 en Docker Compose y Prisma 6.19.0 (usuarios, grupos, membresías, hábitos, check-ins, penalizaciones, mensajes y sesiones).
 - Seed idempotente: usuario administrador y grupo `HABITOS-DEMO`. Requiere `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` (mínimo 12 caracteres) en `backend/.env`.
 - Vue 3, TypeScript, Vue Router, Pinia y Axios con `withCredentials`.
-- Login, renovación automática de token y rutas protegidas (`/groups`) están implementados; grupos, hábitos, chat y cron de penalizaciones aún no tienen API ni UI real.
+- Autenticación, personalización, creación de grupos y solicitudes de ingreso tienen API. El progreso diario, el chat y las penalizaciones todavía requieren persistencia en el servidor.

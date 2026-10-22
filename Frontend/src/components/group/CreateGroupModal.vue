@@ -7,6 +7,7 @@ import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
 import { useCharacterStore } from '@/stores/characters'
 import { GROUP_COLORS, useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
+import { groupService } from '@/services/groupService'
 import type { Group } from '@/types/group'
 
 interface CategoryOption {
@@ -38,6 +39,8 @@ const codeSuffix = ref('')
 const copied = ref(false)
 const error = ref<string | null>(null)
 const createdGroup = ref<Group | null>(null)
+const joinSuccess = ref('')
+const isSubmitting = ref(false)
 
 // Estado para "Unirse a un grupo"
 const joinCode = ref('')
@@ -99,12 +102,6 @@ async function copyInviteCode(textToCopy?: string): Promise<void> {
 
 const canSubmitCreate = computed(() => name.value.trim().length >= 3)
 
-const matchedJoinGroup = computed(() =>
-  joinCode.value.trim().length >= 4
-    ? groupsStore.groupByInviteCode(joinCode.value)
-    : undefined,
-)
-
 watch(isOpen, (open) => {
   if (open) {
     mode.value = activeTab.value
@@ -115,6 +112,8 @@ watch(isOpen, (open) => {
     codeSuffix.value = generateUniqueSuffix('KORD')
     copied.value = false
     error.value = null
+    joinSuccess.value = ''
+    isSubmitting.value = false
     createdGroup.value = null
     joinCode.value = ''
   }
@@ -127,23 +126,27 @@ watch(activeTab, (tab) => {
   }
 })
 
-function handleCreate(): void {
+async function handleCreate(): Promise<void> {
   if (!canSubmitCreate.value) {
     error.value = 'El nombre del grupo debe tener al menos 3 caracteres.'
     return
   }
   error.value = null
-  const group = groupsStore.createGroup(
-    {
-      name: name.value,
-      category: category.value,
-      habit: currentCategory.value.defaultHabit,
-      color: selectedColor.value,
-      inviteCode: previewInviteCode.value,
-    },
-    session.currentUser?.name ?? 'Valeria',
-  )
-  createdGroup.value = group
+  isSubmitting.value = true
+  try {
+    const persisted = await groupService.create({ name: name.value.trim(), category: category.value, color: selectedColor.value })
+    const group = groupsStore.createGroup(
+      { name: name.value, category: category.value, habit: currentCategory.value.defaultHabit, color: selectedColor.value },
+      session.currentUser?.name ?? 'Usuario',
+      { id: persisted.id, inviteCode: persisted.inviteCode },
+    )
+    createdGroup.value = group
+  } catch (cause) {
+    error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+      ?? 'No pudimos crear el grupo. Verifica que la base de datos esté conectada.'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 
 async function goToCreatedGroup(): Promise<void> {
@@ -155,16 +158,15 @@ async function goToCreatedGroup(): Promise<void> {
 
 async function handleJoin(): Promise<void> {
   error.value = null
-  const res = groupsStore.joinGroupByCode(
-    joinCode.value,
-    session.currentUser?.name ?? 'Valeria',
-  )
+  joinSuccess.value = ''
+  isSubmitting.value = true
+  const res = await groupsStore.requestGroupJoin(joinCode.value)
+  isSubmitting.value = false
   if (!res.ok) {
     error.value = res.message
     return
   }
-  close()
-  await router.push({ name: 'grupo', params: { groupId: res.group.id } })
+  joinSuccess.value = `Solicitud enviada a “${res.groupName}”. Cuando el admin la acepte, aparecerá en tus grupos.`
 }
 </script>
 
@@ -363,9 +365,9 @@ async function handleJoin(): Promise<void> {
 
           <footer class="modal-foot">
             <button type="button" class="game-btn ghost" @click="close">Cancelar</button>
-            <button type="submit" class="game-btn primary" :disabled="!canSubmitCreate">
+            <button type="submit" class="game-btn primary" :disabled="!canSubmitCreate || isSubmitting">
               <AppIcon name="plus" :size="16" />
-              Crear grupo
+              {{ isSubmitting ? 'Creando…' : 'Crear grupo' }}
             </button>
           </footer>
         </form>
@@ -390,45 +392,17 @@ async function handleJoin(): Promise<void> {
               />
             </div>
 
-            <!-- Si el código coincide con un grupo existente -->
-            <div
-              v-if="matchedJoinGroup"
-              class="matched-group"
-              :style="{ '--team-color': matchedJoinGroup.color }"
-            >
-              <span class="matched-badge"><AppIcon name="check" :size="18" /></span>
-              <div>
-                <small>GRUPO ENCONTRADO · {{ matchedJoinGroup.category.toUpperCase() }}</small>
-                <strong>{{ matchedJoinGroup.name }}</strong>
-                <span>{{ matchedJoinGroup.members.length }} miembros activos</span>
-              </div>
-            </div>
           </div>
 
-          <!-- Códigos disponibles para probar con un clic -->
-          <div v-if="groupsStore.catalogGroups.length" class="quick-codes">
-            <small>Códigos de grupos disponibles (clic para rellenar):</small>
-            <div class="quick-code-list">
-              <button
-                v-for="g in groupsStore.catalogGroups"
-                :key="g.id"
-                type="button"
-                class="code-chip"
-                @click="joinCode = g.inviteCode"
-              >
-                <strong>{{ g.inviteCode }}</strong>
-                <span>{{ g.name }}</span>
-              </button>
-            </div>
-          </div>
+          <p v-if="joinSuccess" class="join-success" role="status">{{ joinSuccess }}</p>
 
           <p v-if="error" class="error" role="alert">{{ error }}</p>
 
           <footer class="modal-foot">
             <button type="button" class="game-btn ghost" @click="close">Cancelar</button>
-            <button type="submit" class="game-btn primary join-submit" :disabled="joinCode.trim().length < 4">
-              <AppIcon name="users" :size="17" />
-              Unirme al grupo
+            <button type="submit" class="game-btn primary join-submit" :disabled="joinCode.trim().length < 4 || isSubmitting">
+              <AppIcon :name="joinSuccess ? 'check' : 'users'" :size="17" />
+              {{ isSubmitting ? 'Enviando…' : joinSuccess ? 'Enviar otra solicitud' : 'Pedir acceso' }}
             </button>
           </footer>
         </form>
@@ -1017,6 +991,17 @@ async function handleJoin(): Promise<void> {
   border: 1px solid rgba(244, 63, 94, 0.4);
   font-size: 12px;
   color: #fda4af;
+}
+
+.join-success {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(134, 197, 125, 0.14);
+  border: 1px solid rgba(134, 197, 125, 0.45);
+  color: #c6edb8;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .modal-foot {
