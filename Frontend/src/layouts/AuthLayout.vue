@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// estructura visual para las pantallas de acceso y registro.
 // Layout para vistas de autenticación (Login, Registro)
 </script>
 

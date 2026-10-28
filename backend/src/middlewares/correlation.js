@@ -1,3 +1,4 @@
+// agrega un id unico por peticion para relacionar una respuesta con sus logs.
 const { randomUUID } = require('node:crypto')
 
 function correlationId(req, res, next) {

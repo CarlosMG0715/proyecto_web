@@ -1,3 +1,4 @@
+// prisma lee este esquema para crear tablas y generar el cliente de javascript.
 generator client {
   provider = "prisma-client-js"
 }
@@ -37,6 +38,7 @@ enum RiskLevel {
 }
 
 model User {
+  // cuenta de la persona y sus relaciones con actividad del sistema.
   id            String            @id @default(cuid())
   name          String
   email         String            @unique
@@ -56,6 +58,7 @@ model User {
 }
 
 model Group {
+  // espacio compartido; la zona horaria define el dia de check-in.
   id               String            @id @default(cuid())
   name             String
   inviteCode       String            @unique
@@ -72,12 +75,17 @@ model Group {
   messages         Message[]
   closures         DailyClosure[]
   dropoutRisks     DropoutRisk[]
+  description      String            @default("")
+  category         String            @default("General")
+  color            String            @default("#8b5cf6")
+
 
   @@index([createdById])
   @@map("groups")
 }
 
 model GroupMembership {
+  // union entre cuenta y grupo, con rol y fecha de ingreso.
   id       String    @id @default(cuid())
   groupId  String
   userId   String
@@ -92,10 +100,12 @@ model GroupMembership {
 }
 
 model Habit {
+  // meta compartida que los miembros pueden completar cada dia.
   id          String    @id @default(cuid())
   groupId     String
   createdById String
   name        String
+  icon        String    @default("🎯")
   description String?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now()) @db.Timestamptz(3)
@@ -111,11 +121,13 @@ model Habit {
 }
 
 model CheckIn {
+  // cumplimiento diario unico por persona y habito, con una nota opcional.
   id          String   @id @default(cuid())
   habitId     String
   userId      String
   checkInDate DateTime @db.Date
   checkedAt   DateTime @default(now()) @db.Timestamptz(3)
+  note        String   @default("")
   habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -183,6 +195,7 @@ model DropoutRisk {
 }
 
 model Message {
+  // texto que pertenece a un grupo y puede tener autor o ser del sistema.
   id          String       @id @default(cuid())
   groupId     String
   userId      String?
@@ -200,6 +213,7 @@ model Message {
 }
 
 model Session {
+  // refresh token representado como hash y vinculado a su rotacion.
   id           String    @id @default(cuid())
   userId       String
   familyId     String    @default(cuid())

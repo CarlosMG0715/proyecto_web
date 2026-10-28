@@ -1,47 +1,56 @@
 <script setup lang="ts">
+// modal para crear grupos; valida lo minimo en el navegador y deja la regla final a la api.
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
 import { useGroupsStore } from '@/stores/groups'
-import { useSessionStore } from '@/stores/session'
 
 const CATEGORIES = ['Programación', 'Ejercicio', 'Lectura', 'Estudio', 'Salud', 'Otro']
 
 const router = useRouter()
-const session = useSessionStore()
 const groupsStore = useGroupsStore()
 const { isOpen, close } = useCreateGroupModal()
 
 const name = ref('')
 const category = ref('Programación')
+const initialHabit = ref('')
 const error = ref<string | null>(null)
+const isSubmitting = ref(false)
 
-const canSubmit = computed(() => name.value.trim().length >= 3)
+const canSubmit = computed(() => name.value.trim().length >= 3 && initialHabit.value.trim().length > 0)
 
 watch(isOpen, (open) => {
   if (open) {
     name.value = ''
     category.value = 'Programación'
+    initialHabit.value = ''
     error.value = null
   }
 })
 
 async function submit(): Promise<void> {
+  // evita peticiones invalidas, espera al servidor y navega con el id que realmente se creo.
   if (!canSubmit.value) {
-    error.value = 'El nombre debe tener al menos 3 caracteres.'
+    error.value = name.value.trim().length < 3 ? 'El nombre debe tener al menos 3 caracteres.' : 'Agrega al menos un hábito para el grupo.'
     return
   }
-  const id = groupsStore.createGroup(
-    { name: name.value, category: category.value },
-    session.currentUser?.name ?? 'Tú',
-  )
-  close()
-  await router.push({ name: 'grupo', params: { groupId: id } })
+  isSubmitting.value = true
+  error.value = null
+  try {
+    const id = await groupsStore.createGroup({ name: name.value.trim(), category: category.value, initialHabit: { name: initialHabit.value.trim(), icon: '🎯' } })
+    close()
+    await router.push({ name: 'grupo', params: { groupId: id } })
+  } catch {
+    error.value = groupsStore.error ?? 'No se pudo crear el grupo.'
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
 <template>
+  <!-- la transicion y el overlay controlan la aparicion del formulario sobre la pagina. -->
   <Transition name="fade">
     <div v-if="isOpen" class="overlay" @click.self="close">
       <form class="modal" @submit.prevent="submit">
@@ -57,7 +66,12 @@ async function submit(): Promise<void> {
 
         <label class="field">
           <span>Nombre del grupo</span>
-          <input v-model="name" type="text" maxlength="40" placeholder="Ej: Madrugadores" autofocus />
+          <input v-model="name" type="text" maxlength="60" placeholder="Ej: Madrugadores" autofocus />
+        </label>
+
+        <label class="field">
+          <span>Primer hábito del grupo</span>
+          <input v-model="initialHabit" type="text" maxlength="80" placeholder="Ej: Leer 20 minutos" required />
         </label>
 
         <div class="field">
@@ -80,7 +94,7 @@ async function submit(): Promise<void> {
 
         <footer class="modal-foot">
           <button type="button" class="btn ghost" @click="close">Cancelar</button>
-          <button type="submit" class="btn primary" :disabled="!canSubmit">Crear grupo</button>
+          <button type="submit" class="btn primary" :disabled="!canSubmit || isSubmitting">{{ isSubmitting ? 'Creando...' : 'Crear grupo' }}</button>
         </footer>
       </form>
     </div>

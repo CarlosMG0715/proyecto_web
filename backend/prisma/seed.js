@@ -1,9 +1,11 @@
+// seed para desarrollo: agrega una cuenta inicial sin duplicarla si ya existe.
 require('dotenv').config()
 
 const bcrypt = require('bcrypt')
 const { prisma } = require('../src/prisma')
 
 async function main() {
+  // datos de acceso vienen del entorno y no se escriben dentro del codigo.
   const email = process.env.SEED_ADMIN_EMAIL
   const password = process.env.SEED_ADMIN_PASSWORD
 

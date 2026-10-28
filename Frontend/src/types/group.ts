@@ -1,12 +1,9 @@
-/**
- * Contratos de datos del módulo de Grupos, Hábitos, Check-in y Chat.
- * Hoy los llena el store con datos de ejemplo; cuando exista el backend
- * (/api/groups) las respuestas deben cumplir exactamente estas interfaces.
- */
+// contratos de grupo, miembro, habito y chat. el dto de express debe respetar estas formas.
 
 export type MemberRole = 'ADMIN' | 'MIEMBRO'
 
 export interface GroupMember {
+  // un miembro representa a una cuenta que pertenece al grupo.
   id: string
   name: string
   avatarUrl: string | null
@@ -26,6 +23,7 @@ export interface GroupMember {
 export type ChatMessageKind = 'user' | 'system'
 
 export interface ChatMessage {
+  // mensaje que el servidor devuelve al cargar o enviar texto al chat.
   id: string
   kind: ChatMessageKind
   authorId: string | null
@@ -46,6 +44,7 @@ export interface ActivityItem {
 }
 
 export interface Group {
+  // objeto principal que consume la vista de detalle y el menu lateral.
   id: string
   name: string
   description: string
@@ -60,9 +59,25 @@ export interface Group {
   completionHistory: number[]
   members: GroupMember[]
   messages: ChatMessage[]
+  habits: GroupHabit[]
+  timeZone: string
+}
+
+export interface GroupHabit {
+  // checks usa el id del usuario como clave para consultar si cumplio y su nota.
+  id: string
+  name: string
+  icon?: string
+  description: string | null
+  checks: Record<string, { done: boolean; note: string }>
 }
 
 export interface CreateGroupPayload {
+  // campos que el formulario puede enviar al endpoint de creacion.
   name: string
   category: string
+  description?: string
+  color?: string
+  timeZone?: string
+  initialHabit: { name: string; icon: string }
 }

@@ -1,3 +1,4 @@
+// configuracion principal de express: middleware, rutas y respuestas de error.
 const cors = require('cors')
 const express = require('express')
 const { allowedOrigins } = require('./config')
@@ -8,10 +9,12 @@ const apiRoutes = require('./routes')
 const app = express()
 
 app.use(correlationId)
+// permite cookies del frontend en los origenes que se configuraron.
 app.use(cors({ origin: allowedOrigins, credentials: true, exposedHeaders: ['x-correlation-id'] }))
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/api/health', (_req, res) => {
+  // endpoint simple para saber si el proceso responde.
   res.status(200).json({
     status: 'ok',
     service: 'habitos-api',

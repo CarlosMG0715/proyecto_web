@@ -7,6 +7,9 @@ import { onMounted } from 'vue'
 import '@/assets/styles/game-views.css'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import CreateGroupModal from '@/components/group/CreateGroupModal.vue'
+import { useGroupsStore } from '@/stores/groups'
+const groups = useGroupsStore()
+onMounted(() => { void groups.fetchGroups() })
 onMounted(() => {
   try {
     const preferences = JSON.parse(localStorage.getItem('kordia:preferences') ?? '{}')

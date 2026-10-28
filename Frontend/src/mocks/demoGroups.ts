@@ -137,3 +137,4 @@ export const DEMO_ACTIVITY: ActivityItem[] = [
 
 /** Días (YYYY-MM-DD) en los que el usuario actual hizo check-in */
 export const DEMO_CHECKIN_HISTORY: string[] = [1, 2, 3, 4, 5, 6, 8].map(dayKeyAgo)
+// datos de demostracion y funciones de fecha que algunas vistas reutilizan.
