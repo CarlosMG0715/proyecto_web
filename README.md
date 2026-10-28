@@ -33,22 +33,6 @@ proyecto_web/
 
 El directorio del cliente se llama `Frontend` (mayúscula) porque así está versionado. En Windows no conviene renombrarlo a `frontend` sin un `git mv` coordinado.
 
-## Qué se reorganizó y por qué
-
-En `fix/reorganize-workspace` se limpió lo que no formaba parte de la aplicación:
-
-| Cambio | Motivo |
-| --- | --- |
-| Se eliminó `backend/src/models/` | Prisma ya es el modelo. El archivo solo reexportaba el cliente y duplicaba la ruta de importación. |
-| Se eliminaron `node-cron` y `socket.io` del backend, y `socket.io-client` del frontend | Estaban en `package.json` y no se importaban en ningún archivo. |
-| Se eliminó `Frontend/src/assets/s/hola.img` | Archivo vacío, sin referencias. Era un placeholder. |
-| `server.js` se partió en `src/app.js` y middlewares | El arranque HTTP no debe mezclarse con CORS, 404 y el manejador de errores. |
-| JWT, CORS y cookies viven en `src/config.js` | Evita secretos y opciones duplicadas entre middleware y servicio. |
-| `styles.css` pasa a reset global e `index.html` usa título e idioma reales | El CSS vacío no se cargaba; la plantilla de Vite no describe el producto. |
-| README del frontend deja de ser el de la plantilla Vue | La documentación del proyecto vive aquí; el frontend solo resume sus scripts. |
-
-Las carpetas de agentes (`.agents`, `.claude`, `.cursor`, `.devin`) no pertenecen al runtime y no se versionan.
-
 ## Desarrollo local
 
 Requisitos: Node.js 22.18 o superior, npm y Docker para PostgreSQL.
