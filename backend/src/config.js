@@ -1,3 +1,4 @@
+// valores de seguridad y conexion usados por varios modulos del backend.
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())
@@ -8,6 +9,7 @@ const jwtSecret = process.env.JWT_SECRET || 'jwt_secret_dev_cambiar_en_produccio
 const cookieName = 'refreshToken'
 
 const cookieOptions = {
+  // el refresh no queda disponible para javascript y solo viaja en rutas de auth.
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'strict',

@@ -134,7 +134,12 @@ async function handleCreate(): Promise<void> {
   error.value = null
   isSubmitting.value = true
   try {
-    const persisted = await groupService.create({ name: name.value.trim(), category: category.value, color: selectedColor.value })
+    const persisted = await groupService.create({
+      name: name.value.trim(),
+      category: category.value,
+      color: selectedColor.value,
+      initialHabit: { name: currentCategory.value.defaultHabit, icon: '🎯' },
+    })
     const group = groupsStore.createGroup(
       { name: name.value, category: category.value, habit: currentCategory.value.defaultHabit, color: selectedColor.value },
       session.currentUser?.name ?? 'Usuario',

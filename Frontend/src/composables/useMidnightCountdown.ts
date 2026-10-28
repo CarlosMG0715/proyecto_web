@@ -1,3 +1,4 @@
+// composable de cuenta regresiva; crea el intervalo al montar y lo limpia al desmontar.
 import { onMounted, onUnmounted, ref } from 'vue'
 
 /**
@@ -10,6 +11,7 @@ export function useMidnightCountdown() {
   let timer: number | undefined
 
   function tick(): void {
+    // calcula cuanto falta para la proxima medianoche local del navegador.
     const now = new Date()
     const midnight = new Date(now)
     midnight.setHours(24, 0, 0, 0)

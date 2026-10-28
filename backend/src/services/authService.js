@@ -1,3 +1,4 @@
+// reglas de autenticacion: contraseñas, tokens cortos y refresh tokens revocables.
 const crypto = require('crypto')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
@@ -18,6 +19,7 @@ function httpError(message, status) {
 const unauthorized = (message = 'Sesión inválida o expirada') => httpError(message, 401)
 
 function hashToken(token) {
+  // guarda una huella del refresh en la base, no el secreto del navegador.
   return crypto.createHmac('sha256', refreshPepper).update(token).digest('hex')
 }
 
@@ -55,6 +57,7 @@ async function revokeFamily(familyId) {
 
 class AuthService {
   async register({ name, email, password }) {
+    // normaliza el correo y crea una contraseña cifrada con bcrypt.
     const normalizedEmail = email.toLowerCase().trim()
 
     const existing = await prisma.user.findUnique({
@@ -84,6 +87,7 @@ class AuthService {
   }
 
   async login({ email, password, userAgent, ipAddress }) {
+    // revisa credenciales y abre una sesion con refresh token rotativo.
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
     })
@@ -114,6 +118,7 @@ class AuthService {
   }
 
   async refresh({ refreshToken, userAgent, ipAddress }) {
+    // valida el refresh anterior, lo revoca y entrega una nueva pareja de tokens.
     if (!refreshToken) throw unauthorized('Refresh token requerido')
 
     const session = await prisma.session.findUnique({
@@ -174,6 +179,7 @@ class AuthService {
   }
 
   async logout({ refreshToken }) {
+    // invalida la sesion asociada al refresh recibido.
     if (!refreshToken) return
 
     await prisma.session.updateMany({
@@ -183,6 +189,7 @@ class AuthService {
   }
 
   async revokeAllUserSessions(userId) {
+    // invalida todas las sesiones activas de la cuenta.
     await prisma.session.updateMany({
       where: { userId, isRevoked: false },
       data: { isRevoked: true, revokedAt: new Date() },

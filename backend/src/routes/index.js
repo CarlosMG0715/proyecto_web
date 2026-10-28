@@ -1,9 +1,9 @@
+// router raiz: agrupa rutas por tema bajo el prefijo /api.
 const { Router } = require('express')
 const authRoutes = require('./authRoutes')
 const groupRoutes = require('./groupRoutes')
 
 const router = Router()
-
 router.use('/auth', authRoutes)
 router.use('/', groupRoutes)
 

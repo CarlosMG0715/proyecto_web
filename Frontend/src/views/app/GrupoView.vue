@@ -84,10 +84,14 @@ watch(
   },
 )
 
-function toggle() {
+async function toggle() {
   if (!group.value || !me.value) return
-  store.toggleMyCheckIn(group.value.id)
-  notice.value = me.value.checkedInToday ? 'Check-in completado' : 'Check-in pendiente'
+  try {
+    await store.toggleMyCheckIn(group.value.id)
+    notice.value = me.value.checkedInToday ? 'Check-in completado' : 'Check-in pendiente'
+  } catch {
+    notice.value = store.error ?? 'No se pudo guardar el check-in.'
+  }
 }
 
 function openEditor() {
@@ -101,8 +105,13 @@ function saveHabit() {
   editing.value = false
 }
 
-function send(text: string) {
-  if (group.value) store.sendMessage(group.value.id, text)
+async function send(text: string) {
+  if (!group.value) return
+  try {
+    await store.sendMessage(group.value.id, text)
+  } catch {
+    notice.value = store.error ?? 'No se pudo enviar el mensaje.'
+  }
 }
 
 async function handleLeaveGroup() {

@@ -1,3 +1,4 @@
+// funciones de autenticacion que convierten los formularios en peticiones a la api.
 import axios from 'axios'
 import { api, refreshSession } from '@/services/api'
 import { useSessionStore } from '@/stores/session'
@@ -9,6 +10,7 @@ import type {
 } from '@/types/auth'
 
 function extractError(err: unknown, fallback: string): string {
+  // usa el mensaje del servidor si existe; si no, muestra el texto alternativo.
   if (axios.isAxiosError<ApiErrorResponse>(err)) {
     return err.response?.data?.error ?? fallback
   }
@@ -16,6 +18,7 @@ function extractError(err: unknown, fallback: string): string {
 }
 
 export async function login(credentials: LoginCredentials): Promise<void> {
+  // inicia sesion y guarda en pinia el token y los datos basicos de la cuenta.
   const session = useSessionStore()
   session.setLoading(true)
   session.setError(null)
@@ -31,6 +34,7 @@ export async function login(credentials: LoginCredentials): Promise<void> {
 }
 
 export async function register(payload: RegisterPayload): Promise<void> {
+  // registra la cuenta; esta funcion no inicia sesion automaticamente.
   const session = useSessionStore()
   session.setLoading(true)
   session.setError(null)
@@ -46,6 +50,7 @@ export async function register(payload: RegisterPayload): Promise<void> {
 
 // Una vez al cargar la app: recupera la sesión desde la cookie HttpOnly
 export async function bootstrap(): Promise<void> {
+  // recupera una sesion anterior usando la cookie http only.
   const session = useSessionStore()
   if (session.initialized) return
   try {
@@ -58,6 +63,7 @@ export async function bootstrap(): Promise<void> {
 }
 
 export async function logout(): Promise<void> {
+  // revoca la sesion en el servidor y limpia el estado local aunque falle la peticion.
   const session = useSessionStore()
   try {
     await api.post('/auth/logout')

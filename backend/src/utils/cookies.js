@@ -1,6 +1,8 @@
+// funciones para leer cookies aunque express no tenga parser de cookies instalado.
 const { cookieName } = require('../config')
 
 function readCookie(req, name) {
+  // primero intenta la cookie ya analizada; luego revisa el header crudo.
   if (req.cookies && req.cookies[name]) {
     return req.cookies[name]
   }

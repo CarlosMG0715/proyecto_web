@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// pagina publica que presenta el proposito del producto y dirige al acceso.
 /**
  * KORDIA - LANDING HERO PAGE
  * Ajustes solicitados por Valeria:

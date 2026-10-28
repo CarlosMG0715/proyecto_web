@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// tarjeta reutilizable para representar a un miembro y su estado de cumplimiento.
 /**
  * Tarjeta de hábito por miembro (Diseño exacto Kordia Dark).
  * Coincidencia 100% con la estética:

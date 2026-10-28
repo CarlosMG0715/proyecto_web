@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// layout sencillo para envolver paginas de la aplicacion que no usan el dashboard.
 import Navbar from '@/components/Navbar.vue'
 </script>
 

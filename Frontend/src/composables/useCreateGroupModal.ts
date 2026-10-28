@@ -1,3 +1,4 @@
+// estado compartido para que distintos componentes abran y cierren el mismo modal.
 import { ref } from 'vue'
 
 export type GroupModalTab = 'create' | 'join'

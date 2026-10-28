@@ -1,32 +1,17 @@
-const { randomBytes } = require('node:crypto')
 const { prisma } = require('../prisma')
+const groupService = require('../services/groupService')
 
-function httpError(message, status) { const error = new Error(message); error.status = status; return error }
-function inviteCode() { return randomBytes(4).toString('hex').toUpperCase() }
+const httpError = (message, status) => Object.assign(new Error(message), { status })
+const selectUser = { id: true, name: true, email: true, characterId: true, themeId: true }
 
-async function list(req, res, next) {
-  try {
-    const groups = await prisma.group.findMany({
-      where: { memberships: { some: { userId: req.user.userId } } },
-      include: { memberships: { include: { user: { select: { id: true, name: true, email: true, characterId: true, themeId: true } } } } },
-      orderBy: { createdAt: 'asc' },
-    })
-    return res.json({ groups })
-  } catch (error) { return next(error) }
+async function listMine(req, res, next) {
+  try { return res.json({ groups: await groupService.listMine(req.user.userId) }) }
+  catch (error) { return next(error) }
 }
 
 async function create(req, res, next) {
   try {
-    const name = typeof req.body.name === 'string' ? req.body.name.trim() : ''
-    const category = typeof req.body.category === 'string' ? req.body.category.trim() : 'General'
-    const color = typeof req.body.color === 'string' && /^#[0-9a-f]{6}$/i.test(req.body.color) ? req.body.color : '#8b5cf6'
-    if (name.length < 3 || name.length > 50) return res.status(400).json({ error: 'El nombre debe tener entre 3 y 50 caracteres' })
-    let code = inviteCode()
-    for (let attempt = 0; attempt < 5 && await prisma.group.findUnique({ where: { inviteCode: code } }); attempt++) code = inviteCode()
-    const group = await prisma.group.create({
-      data: { name, category: category.slice(0, 40) || 'General', color, inviteCode: code, createdById: req.user.userId, memberships: { create: { userId: req.user.userId, role: 'ADMIN' } } },
-      include: { memberships: { include: { user: { select: { id: true, name: true, email: true, characterId: true, themeId: true } } } } },
-    })
+    const group = await groupService.create({ userId: req.user.userId, ...req.body })
     return res.status(201).json({ group })
   } catch (error) { return next(error) }
 }
@@ -42,7 +27,7 @@ async function requestJoin(req, res, next) {
       return res.status(409).json({ error: 'Ya perteneces a este grupo' })
     }
     const pending = await prisma.groupJoinRequest.findFirst({ where: { groupId: group.id, requesterId: userId, status: 'PENDING' } })
-    if (pending) return res.status(200).json({ request: pending, group: { id: group.id, name: group.name }, alreadyPending: true })
+    if (pending) return res.status(200).json({ request: pending, group, alreadyPending: true })
     const request = await prisma.groupJoinRequest.create({ data: { groupId: group.id, requesterId: userId }, include: { group: { select: { id: true, name: true } } } })
     return res.status(201).json({ request, group: request.group })
   } catch (error) { return next(error) }
@@ -52,7 +37,7 @@ async function inbox(req, res, next) {
   try {
     const requests = await prisma.groupJoinRequest.findMany({
       where: { status: 'PENDING', group: { memberships: { some: { userId: req.user.userId, role: 'ADMIN' } } } },
-      include: { group: { select: { id: true, name: true, inviteCode: true } }, requester: { select: { id: true, name: true, email: true, characterId: true, themeId: true } } },
+      include: { group: { select: { id: true, name: true, inviteCode: true } }, requester: { select: selectUser } },
       orderBy: { createdAt: 'asc' },
     })
     return res.json({ requests })
@@ -86,4 +71,41 @@ async function decide(req, res, next) {
   } catch (error) { return next(error) }
 }
 
-module.exports = { list, create, requestJoin, inbox, myRequests, decide }
+async function checkInHistory(req, res, next) {
+  try { return res.json({ dates: await groupService.checkInHistory(req.user.userId) }) }
+  catch (error) { return next(error) }
+}
+
+async function getOne(req, res, next) {
+  try { return res.json({ group: await groupService.getForMember({ userId: req.user.userId, groupId: req.params.groupId }) }) }
+  catch (error) { return next(error) }
+}
+
+async function createHabit(req, res, next) {
+  try { return res.status(201).json({ habit: await groupService.createHabit({ userId: req.user.userId, groupId: req.params.groupId, ...req.body }) }) }
+  catch (error) { return next(error) }
+}
+
+async function updateHabit(req, res, next) {
+  try { return res.json({ habit: await groupService.updateHabit({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId, ...req.body }) }) }
+  catch (error) { return next(error) }
+}
+
+async function checkIn(req, res, next) {
+  try { return res.json(await groupService.checkIn({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId, ...req.body })) }
+  catch (error) { return next(error) }
+}
+
+async function updateCheckInNote(req, res, next) {
+  try {
+    await groupService.updateCheckInNote({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId, ...req.body })
+    return res.json({ ok: true })
+  } catch (error) { return next(error) }
+}
+
+async function sendMessage(req, res, next) {
+  try { return res.status(201).json({ message: await groupService.sendMessage({ userId: req.user.userId, groupId: req.params.groupId, ...req.body }) }) }
+  catch (error) { return next(error) }
+}
+
+module.exports = { list: listMine, listMine, create, requestJoin, inbox, myRequests, decide, checkInHistory, getOne, createHabit, updateHabit, checkIn, updateCheckInNote, sendMessage }

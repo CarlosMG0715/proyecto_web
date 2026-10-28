@@ -5,6 +5,7 @@ import { useCharacterStore } from './characters'
 import { useSessionStore } from './session'
 import type { ActivityItem, CreateGroupPayload, Group, GroupMember } from '@/types/group'
 import { groupService, type RemoteGroup } from '@/services/groupService'
+import { fetchCheckInHistory, sendGroupMessageRequest, toggleCheckInRequest } from '@/services/groupsService'
 
 export interface DayProgress {
   key: string
@@ -92,33 +93,39 @@ export const useGroupsStore = defineStore('groups', () => {
   function fromRemote(remote: RemoteGroup, previous?: Group): Group {
     characters.rememberProfiles(remote.memberships.map(membership => membership.user))
     const priorMembers = new Map(previous?.members.map(member => [member.id, member]) ?? [])
+    const remoteMembers = new Map((remote.members ?? []).map(member => [member.id, member]))
     return {
       id: remote.id,
       name: remote.name,
-      description: '',
+      description: remote.description ?? '',
       category: remote.category,
       inviteCode: remote.inviteCode,
       color: remote.color,
-      streak: previous?.streak ?? 0,
-      health: previous?.health ?? 100,
-      completionHistory: previous?.completionHistory ?? [0, 0, 0, 0, 0, 0, 0],
+      streak: remote.streak ?? previous?.streak ?? 0,
+      health: remote.health ?? previous?.health ?? 100,
+      completionHistory: remote.completionHistory ?? previous?.completionHistory ?? [0, 0, 0, 0, 0, 0, 0],
+      habits: remote.habits ?? previous?.habits ?? [],
+      timeZone: remote.timeZone ?? previous?.timeZone ?? 'America/Bogota',
       members: remote.memberships.map((membership) => {
         const old = priorMembers.get(membership.user.id)
+        const current = remoteMembers.get(membership.user.id)
         return {
           id: membership.user.id,
           name: membership.user.name,
           avatarUrl: null,
           role: membership.role,
-          habit: old?.habit ?? 'Definir hábito diario',
-          daysCompleted: old?.daysCompleted ?? 0,
-          daysTotal: old?.daysTotal ?? 0,
-          streak: old?.streak ?? 0,
-          checkedInToday: old?.checkedInToday ?? false,
+          habit: current?.habit ?? old?.habit ?? 'Definir hábito diario',
+          daysCompleted: current?.daysCompleted ?? old?.daysCompleted ?? 0,
+          daysTotal: current?.daysTotal ?? old?.daysTotal ?? 0,
+          streak: current?.streak ?? old?.streak ?? 0,
+          checkedInToday: current?.checkedInToday ?? old?.checkedInToday ?? false,
           isCurrentUser: membership.user.id === session.currentUser?.id,
-          isOnline: old?.isOnline ?? false,
+          isOnline: current?.isOnline ?? old?.isOnline ?? false,
+          characterId: membership.user.characterId,
+          themeId: membership.user.themeId,
         }
       }),
-      messages: previous?.messages ?? [],
+      messages: remote.messages ?? previous?.messages ?? [],
     }
   }
 
@@ -131,6 +138,13 @@ export const useGroupsStore = defineStore('groups', () => {
     try {
       const remote = await groupService.list()
       if (session.currentUser?.id !== userId || sequence !== loadSequence) return
+      const remoteHistory = await fetchCheckInHistory()
+      if (session.currentUser?.id !== userId || sequence !== loadSequence) return
+      userProgressMap.value[userId] = {
+        ...userProgressMap.value[userId],
+        checkInHistory: remoteHistory,
+        activity: userProgressMap.value[userId]?.activity ?? [],
+      }
       const previousById = new Map(allGroups.value.map((group) => [group.id, group]))
       const remoteGroups = remote.map((group) => fromRemote(group, previousById.get(group.id)))
       allGroups.value = remoteGroups
@@ -349,14 +363,27 @@ export const useGroupsStore = defineStore('groups', () => {
     return candidate
   }
 
-  function toggleMyCheckIn(groupId: string): void {
+  async function toggleMyCheckIn(groupId: string): Promise<void> {
     const rawGroup = allGroups.value.find((g) => g.id === groupId)
     const me = rawGroup?.members.find((m) => matchesCurrentUser(m))
     if (!rawGroup || !me) return
 
+    const firstHabit = rawGroup.habits?.[0]
+    if (firstHabit) {
+      try {
+        const result = await toggleCheckInRequest(groupId, firstHabit.id, firstHabit.checks[me.id]?.note ?? '')
+        firstHabit.checks[me.id] = { done: result.done, note: result.note }
+        me.checkedInToday = result.done
+      } catch (cause) {
+        error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+          ?? 'No pudimos guardar el check-in en el servidor.'
+        throw cause
+      }
+    }
+
     const myData = ensureMyData()
     const todayKey = toDateKey(new Date())
-    me.checkedInToday = !me.checkedInToday
+    if (!firstHabit) me.checkedInToday = !me.checkedInToday
 
     if (me.checkedInToday) {
       me.streak += 1
@@ -398,18 +425,19 @@ export const useGroupsStore = defineStore('groups', () => {
     persistAll()
   }
 
-  function sendMessage(groupId: string, text: string): void {
+  async function sendMessage(groupId: string, text: string): Promise<void> {
     const rawGroup = allGroups.value.find((g) => g.id === groupId)
     const me = rawGroup?.members.find((m) => matchesCurrentUser(m))
     const clean = text.trim()
     if (!rawGroup || !me || !clean) return
-    rawGroup.messages.push({
-      id: `msg-${Date.now()}`,
-      kind: 'user',
-      authorId: me.id,
-      text: clean,
-      sentAt: new Date().toISOString(),
-    })
+    try {
+      const message = await sendGroupMessageRequest(groupId, clean)
+      rawGroup.messages.push(message)
+    } catch (cause) {
+      error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'No pudimos enviar el mensaje.'
+      throw cause
+    }
     persistAll()
   }
 
