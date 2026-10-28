@@ -145,7 +145,8 @@ async function handleCreate(): Promise<void> {
       session.currentUser?.name ?? 'Usuario',
       { id: persisted.id, inviteCode: persisted.inviteCode },
     )
-    createdGroup.value = group
+    await groupsStore.refreshRemoteGroups()
+    createdGroup.value = groupsStore.groupById(persisted.id) ?? group
   } catch (cause) {
     error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
       ?? 'No pudimos crear el grupo. Verifica que la base de datos esté conectada.'

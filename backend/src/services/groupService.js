@@ -10,7 +10,8 @@ const newInviteCode = () => crypto.randomBytes(4).toString('hex').toUpperCase()
 function toGroupDto(group, currentUserId) {
   // combina miembros, checks de hoy, habitos y mensajes en un solo objeto de respuesta.
   const today = localDateKey(group.timeZone || 'America/Bogota')
-  const habits = (group.habits || []).filter((habit) => habit.isActive).map((habit) => ({
+  const activeHabits = (group.habits || []).filter((habit) => habit.isActive)
+  const habits = activeHabits.map((habit) => ({
     id: habit.id,
     name: habit.name,
     icon: habit.icon,
@@ -19,8 +20,16 @@ function toGroupDto(group, currentUserId) {
       done: true, note: check.note || '',
     }])),
   }))
+  const dateKeys = recentDateKeys(group.timeZone || 'America/Bogota', 30)
+  const doneDatesForMember = (userId) => dateKeys.filter((date) => activeHabits.length > 0 && activeHabits.every((habit) =>
+    (habit.checkIns || []).some((check) => check.userId === userId && check.checkInDate.toISOString().slice(0, 10) === date),
+  ))
   const members = group.memberships.map((m) => {
-    const completed = habits.reduce((count, habit) => count + (habit.checks[m.user.id]?.done ? 1 : 0), 0)
+    const eligibleDates = dateKeys.filter((date) => date >= localDateKey(group.timeZone || 'America/Bogota', m.joinedAt))
+    const doneDates = new Set(doneDatesForMember(m.user.id))
+    const daysTotal = eligibleDates.length
+    const daysCompleted = eligibleDates.filter((date) => doneDates.has(date)).length
+    const memberStreak = consecutiveDays(doneDates, dateKeys)
     return {
       id: m.user.id,
       name: m.user.name,
@@ -29,13 +38,23 @@ function toGroupDto(group, currentUserId) {
       themeId: m.user.themeId,
       role: m.role,
       habit: habits.map((h) => h.name).join(', '),
-      daysCompleted: completed,
-      daysTotal: habits.length,
-      streak: 0,
-      checkedInToday: habits.length > 0 && completed === habits.length,
+      daysCompleted,
+      daysTotal,
+      streak: memberStreak,
+      checkedInToday: habits.length > 0 && habits.every((habit) => habit.checks[m.user.id]?.done),
       isCurrentUser: m.user.id === currentUserId,
       isOnline: false,
     }
+  })
+  const groupDoneDates = new Set(dateKeys.filter((date) =>
+    group.memberships.length > 0 && group.memberships.every((membership) => doneDatesForMember(membership.user.id).includes(date)),
+  ))
+  const closedDates = dateKeys.slice(1, 7).reverse()
+  const completionHistory = closedDates.map((date) => {
+    const expected = group.memberships.length * habits.length
+    if (!expected) return 0
+    const done = activeHabits.reduce((sum, habit) => sum + (habit.checkIns || []).filter((check) => check.checkInDate.toISOString().slice(0, 10) === date).length, 0)
+    return Math.round((done / expected) * 100)
   })
   return {
     id: group.id,
@@ -44,9 +63,9 @@ function toGroupDto(group, currentUserId) {
     category: group.category,
     inviteCode: group.inviteCode,
     color: group.color,
-    streak: 0,
+    streak: consecutiveDays(groupDoneDates, dateKeys),
     health: 100,
-    completionHistory: [],
+    completionHistory,
     timeZone: group.timeZone,
     habits,
     members,
@@ -57,11 +76,28 @@ function toGroupDto(group, currentUserId) {
   }
 }
 
-function localDateKey(timeZone) {
+function localDateKey(timeZone, referenceDate = new Date()) {
   // usa el calendario del grupo porque su dia puede diferir del dia utc del servidor.
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(referenceDate)
   const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
   return `${values.year}-${values.month}-${values.day}`
+}
+
+function recentDateKeys(timeZone, count) {
+  const today = localDateKey(timeZone)
+  const [year, month, day] = today.split('-').map(Number)
+  return Array.from({ length: count }, (_, offset) => {
+    const date = new Date(Date.UTC(year, month - 1, day - offset, 12))
+    return date.toISOString().slice(0, 10)
+  })
+}
+
+function consecutiveDays(doneDates, newestFirst) {
+  let index = 0
+  if (!doneDates.has(newestFirst[0]) && doneDates.has(newestFirst[1])) index = 1
+  let streak = 0
+  for (; index < newestFirst.length && doneDates.has(newestFirst[index]); index++) streak++
+  return streak
 }
 
 const groupInclude = () => ({
@@ -123,6 +159,39 @@ class GroupService {
     return toGroupDto(group, userId)
   }
 
+  async updateGroup({ userId, groupId, ...changes }) {
+    const membership = await groupRepository.findMembership(groupId, userId)
+    if (!membership) throw httpError('No tienes acceso a este grupo', 403)
+    if (membership.role !== 'ADMIN') throw httpError('Solo quien administra el grupo puede editarlo', 403)
+    const group = await prisma.group.update({ where: { id: groupId }, data: changes })
+    return this.getForMember({ userId, groupId: group.id })
+  }
+
+  async leaveGroup({ userId, groupId }) {
+    return prisma.$transaction(async (tx) => {
+      const membership = await tx.groupMembership.findUnique({ where: { groupId_userId: { groupId, userId } } })
+      if (!membership) throw httpError('Ya no perteneces a este grupo', 404)
+      const otherMembers = await tx.groupMembership.findMany({
+        where: { groupId, userId: { not: userId } },
+        orderBy: { joinedAt: 'asc' },
+      })
+      let promotedMemberId = null
+      if (membership.role === 'ADMIN' && otherMembers.length) {
+        const nextAdmin = otherMembers.find((member) => member.role === 'ADMIN') ?? otherMembers[0]
+        if (nextAdmin.role !== 'ADMIN') {
+          await tx.groupMembership.update({ where: { id: nextAdmin.id }, data: { role: 'ADMIN' } })
+          promotedMemberId = nextAdmin.userId
+        }
+      }
+      if (!otherMembers.length) {
+        await tx.groupMembership.delete({ where: { id: membership.id } })
+        return { groupId, groupDeleted: false, groupArchived: true, promotedMemberId: null }
+      }
+      await tx.groupMembership.delete({ where: { id: membership.id } })
+      return { groupId, groupDeleted: false, groupArchived: false, promotedMemberId }
+    })
+  }
+
   async createHabit({ userId, groupId, name, description, icon }) {
     // comprueba el rol en el servidor; ocultar el boton en vue no es seguridad.
     const membership = await groupRepository.findMembership(groupId, userId)
@@ -141,6 +210,17 @@ class GroupService {
     if (!existing) throw httpError('Hábito no encontrado', 404)
     const habit = await prisma.habit.update({ where: { id: habitId }, data })
     return { id: habit.id, name: habit.name, icon: habit.icon, description: habit.description, checks: {} }
+  }
+
+  async deleteHabit({ userId, groupId, habitId }) {
+    const membership = await groupRepository.findMembership(groupId, userId)
+    if (!membership) throw httpError('No tienes acceso a este grupo', 403)
+    if (membership.role !== 'ADMIN') throw httpError('Solo un administrador puede eliminar hábitos', 403)
+    const activeCount = await prisma.habit.count({ where: { groupId, isActive: true } })
+    if (activeCount <= 1) throw httpError('El grupo debe conservar al menos un hábito activo', 409)
+    const result = await prisma.habit.updateMany({ where: { id: habitId, groupId, isActive: true }, data: { isActive: false } })
+    if (!result.count) throw httpError('Hábito no encontrado', 404)
+    return { id: habitId, deleted: true }
   }
 
   async checkIn({ userId, groupId, habitId, note }) {

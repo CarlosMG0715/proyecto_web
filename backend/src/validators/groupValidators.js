@@ -18,6 +18,12 @@ const createGroupSchema = z.object({
     icon: z.string().trim().min(1).max(12).default('🎯'),
   }),
 })
+const updateGroupSchema = z.object({
+  name: z.string().trim().min(3).max(60).optional(),
+  category: z.string().trim().max(40).optional(),
+  description: z.string().trim().max(200).optional(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+}).refine((data) => Object.values(data).some((value) => value !== undefined), 'Envía al menos un dato para actualizar')
 const joinGroupSchema = z.object({
   inviteCode: z.string().trim().min(4).max(20).transform((s) => s.toUpperCase()),
 })
@@ -34,4 +40,4 @@ const updateHabitSchema = z.object({
 const checkInSchema = z.object({ note: z.string().trim().max(500).optional().default('') })
 const messageSchema = z.object({ content: z.string().trim().min(1).max(2000) })
 
-module.exports = { createGroupSchema, joinGroupSchema, createHabitSchema, updateHabitSchema, checkInSchema, messageSchema }
+module.exports = { createGroupSchema, updateGroupSchema, joinGroupSchema, createHabitSchema, updateHabitSchema, checkInSchema, messageSchema }

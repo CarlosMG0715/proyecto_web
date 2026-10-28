@@ -7,9 +7,10 @@ import AdventureCharacter from '@/components/ui/AdventureCharacter.vue'
 import StreakFlame from '@/components/ui/StreakFlame.vue'
 import GroupChat from '@/components/group/GroupChat.vue'
 import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
-import { useGroupsStore } from '@/stores/groups'
+import { GROUP_COLORS, useGroupsStore } from '@/stores/groups'
 import { useCharacterStore } from '@/stores/characters'
 import { useSessionStore } from '@/stores/session'
+import type { GroupHabit } from '@/types/group'
 import '@/assets/styles/game-views.css'
 
 const route = useRoute()
@@ -28,6 +29,7 @@ const selectedMember = computed(
     group.value?.members[0],
 )
 const me = computed(() => group.value?.members.find((m) => m.isCurrentUser))
+const isAdmin = computed(() => me.value?.role === 'ADMIN')
 const nameOf = (m: { name: string; isCurrentUser: boolean }) =>
   m.isCurrentUser ? session.currentUser?.name ?? m.name : m.name
 const done = computed(() => group.value?.members.filter((m) => m.checkedInToday).length ?? 0)
@@ -36,8 +38,15 @@ const isChatOpen = ref(true)
 /** true = Chat grande slideado al lado derecho; false = Chat minimizado como estaba abajo */
 const isChatExpanded = ref(true)
 const editing = ref(false)
+const editingGroup = ref(false)
 const confirmingLeave = ref(false)
 const draft = ref('')
+const editingHabitId = ref<string | null>(null)
+const groupNameDraft = ref('')
+const groupCategoryDraft = ref('')
+const groupDescriptionDraft = ref('')
+const groupColorDraft = ref('#8b5cf6')
+const saving = ref(false)
 const notice = ref('')
 const codeCopied = ref(false)
 
@@ -94,15 +103,61 @@ async function toggle() {
   }
 }
 
-function openEditor() {
-  draft.value = me.value?.habit ?? ''
+function openEditor(habit?: GroupHabit) {
+  draft.value = habit?.name ?? ''
+  editingHabitId.value = habit?.id ?? null
   editing.value = true
 }
 
-function saveHabit() {
-  if (!group.value || !draft.value.trim()) return
-  store.updateMyHabit(group.value.id, draft.value)
-  editing.value = false
+async function saveHabit() {
+  if (!group.value || !draft.value.trim() || !isAdmin.value) return
+  saving.value = true
+  try {
+    if (editingHabitId.value) await store.editGroupHabit(group.value.id, editingHabitId.value, draft.value.trim())
+    else await store.createGroupHabit(group.value.id, draft.value.trim())
+    editing.value = false
+    editingHabitId.value = null
+  } catch {
+    notice.value = store.error ?? 'No se pudo guardar el hábito.'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function removeHabit(habitId: string, habitName: string) {
+  if (!group.value || !isAdmin.value || !window.confirm(`¿Quitar “${habitName}” del grupo?`)) return
+  try {
+    await store.removeGroupHabit(group.value.id, habitId)
+  } catch {
+    notice.value = store.error ?? 'No se pudo quitar el hábito.'
+  }
+}
+
+function openGroupEditor() {
+  if (!group.value) return
+  groupNameDraft.value = group.value.name
+  groupCategoryDraft.value = group.value.category
+  groupDescriptionDraft.value = group.value.description
+  groupColorDraft.value = group.value.color
+  editingGroup.value = true
+}
+
+async function saveGroup() {
+  if (!group.value || !isAdmin.value || groupNameDraft.value.trim().length < 3) return
+  saving.value = true
+  try {
+    await store.updateGroup(group.value.id, {
+      name: groupNameDraft.value.trim(),
+      category: groupCategoryDraft.value.trim() || 'General',
+      description: groupDescriptionDraft.value.trim(),
+      color: groupColorDraft.value,
+    })
+    editingGroup.value = false
+  } catch {
+    notice.value = store.error ?? 'No se pudieron guardar los datos del grupo.'
+  } finally {
+    saving.value = false
+  }
 }
 
 async function send(text: string) {
@@ -117,9 +172,13 @@ async function send(text: string) {
 async function handleLeaveGroup() {
   if (!group.value) return
   const id = group.value.id
-  confirmingLeave.value = false
-  store.leaveGroup(id)
-  await router.push({ name: 'inicio' })
+  try {
+    await store.leaveGroup(id)
+    confirmingLeave.value = false
+    await router.push({ name: 'inicio' })
+  } catch {
+    notice.value = store.error ?? 'No se pudo salir del grupo.'
+  }
 }
 </script>
 
@@ -154,6 +213,10 @@ async function handleLeaveGroup() {
           >
             <AppIcon name="message" :size="16" />
             {{ isChatOpen ? 'Ocultar chat' : 'Abrir chat' }}
+          </button>
+
+          <button v-if="isAdmin" type="button" class="game-button secondary" @click="openGroupEditor">
+            <AppIcon name="settings" :size="15" />Editar grupo
           </button>
 
           <button
@@ -342,12 +405,34 @@ async function handleLeaveGroup() {
                     <AppIcon :name="selectedMember.checkedInToday ? 'check' : 'target'" :size="16" />
                     {{ selectedMember.checkedInToday ? 'Deshacer check-in' : 'Completar hábito' }}
                   </button>
-                  <button class="edit-habit" @click="openEditor">Editar hábito</button>
+                  <button v-if="isAdmin" class="edit-habit" @click="openEditor()">Administrar hábitos</button>
                 </div>
 
                 <p v-if="notice && selectedMember.isCurrentUser" class="check-notice" role="status">
                   {{ notice }}
                 </p>
+              </section>
+
+              <section class="game-panel team-habits">
+                <div class="game-title">
+                  <h2>Hábitos del grupo</h2>
+                  <button v-if="isAdmin" class="game-button secondary" @click="openEditor()">
+                    <AppIcon name="plus" :size="15" />Agregar hábito
+                  </button>
+                </div>
+                <p v-if="!group.habits?.length" class="habit-empty">Aún no hay hábitos activos en esta aventura.</p>
+                <article v-for="habit in group.habits ?? []" :key="habit.id" class="team-habit-row">
+                  <span class="team-habit-icon">{{ habit.icon || '🎯' }}</span>
+                  <div class="team-habit-copy">
+                    <strong>{{ habit.name }}</strong>
+                    <small>{{ habit.description || 'Misión diaria del equipo' }}</small>
+                  </div>
+                  <span class="habit-check-state" :class="{ complete: habit.checks[me?.id ?? '']?.done }">
+                    {{ habit.checks[me?.id ?? '']?.done ? 'Hecho' : 'Pendiente' }}
+                  </span>
+                  <button v-if="isAdmin" class="edit-habit" @click="openEditor(habit)">Editar</button>
+                  <button v-if="isAdmin" class="edit-habit remove-habit" @click="removeHabit(habit.id, habit.name)">Quitar</button>
+                </article>
               </section>
 
               <section class="game-panel team-roster">
@@ -420,14 +505,39 @@ async function handleLeaveGroup() {
           aria-labelledby="edit-title"
           @submit.prevent="saveHabit"
         >
-          <h2 id="edit-title">Editar mi hábito</h2>
-          <label for="habit-name">Hábito diario</label>
+          <h2 id="edit-title">{{ editingHabitId ? 'Editar hábito del grupo' : 'Agregar hábito al grupo' }}</h2>
+          <label for="habit-name">Nombre del hábito</label>
           <input id="habit-name" v-model="draft" autofocus maxlength="120" required />
           <div>
             <button type="button" class="game-button secondary" @click="editing = false">
               Cancelar
             </button>
-            <button class="game-button" type="submit">Guardar</button>
+            <button class="game-button" type="submit" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
+          </div>
+        </form>
+      </div>
+
+      <div
+        v-if="editingGroup"
+        class="adventure-modal-backdrop"
+        @click.self="editingGroup = false"
+        @keydown.esc="editingGroup = false"
+      >
+        <form class="adventure-modal group-edit-modal" role="dialog" aria-modal="true" aria-labelledby="group-edit-title" @submit.prevent="saveGroup">
+          <h2 id="group-edit-title">Editar aventura</h2>
+          <label for="group-name">Nombre del grupo</label>
+          <input id="group-name" v-model="groupNameDraft" maxlength="60" minlength="3" required />
+          <label for="group-category">Categoría</label>
+          <input id="group-category" v-model="groupCategoryDraft" maxlength="40" />
+          <label for="group-description">Descripción</label>
+          <textarea id="group-description" v-model="groupDescriptionDraft" maxlength="200" rows="3" />
+          <span class="color-label">Color del grupo</span>
+          <div class="group-color-options">
+            <button v-for="color in GROUP_COLORS" :key="color" type="button" :aria-label="`Elegir color ${color}`" :aria-pressed="groupColorDraft === color" :class="{ selected: groupColorDraft === color }" :style="{ '--group-color': color }" @click="groupColorDraft = color" />
+          </div>
+          <div>
+            <button type="button" class="game-button secondary" @click="editingGroup = false">Cancelar</button>
+            <button class="game-button" type="submit" :disabled="saving || groupNameDraft.trim().length < 3">{{ saving ? 'Guardando…' : 'Guardar cambios' }}</button>
           </div>
         </form>
       </div>
@@ -442,8 +552,13 @@ async function handleLeaveGroup() {
         <div class="adventure-modal" role="dialog" aria-modal="true" aria-labelledby="leave-title">
           <h2 id="leave-title">¿Salir de «{{ group.name }}»?</h2>
           <p class="leave-copy">
-            Dejarás de ver este grupo en tu inicio, pero podrás volver a unirte cuando quieras con el código
-            <strong>{{ group.inviteCode }}</strong>.
+            <template v-if="group.members.length === 1">
+              Como eres la única persona, el grupo quedará archivado y dejará de aparecer en tu inicio. Tu progreso guardado se conserva.
+            </template>
+            <template v-else>
+              Dejarás de ver el grupo. Si eres quien administra, otra persona recibirá el rol de admin.
+              Podrás pedir acceso de nuevo con el código <strong>{{ group.inviteCode }}</strong>.
+            </template>
           </p>
           <div>
             <button type="button" class="game-button secondary" @click="confirmingLeave = false">
@@ -1472,4 +1587,21 @@ async function handleLeaveGroup() {
     font-size: 12px;
   }
 }
+.team-habits { display: grid; gap: 12px; }
+.team-habit-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-top: 1px solid #43304e; }
+.team-habit-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 10px; background: #382b45; font-size: 18px; }
+.team-habit-copy { min-width: 0; flex: 1; }
+.team-habit-copy strong, .team-habit-copy small { display: block; overflow-wrap: anywhere; }
+.team-habit-copy strong { font-size: 12px; }
+.team-habit-copy small, .habit-empty { color: #b5a3c4; font-size: 10px; margin: 4px 0 0; }
+.habit-check-state { color: #eac08a; background: #4a352c; border-radius: 5px; padding: 5px 7px; font-size: 9px; white-space: nowrap; }
+.habit-check-state.complete { background: #32402d; color: #c4dfa2; }
+.remove-habit { color: #f1a3ad; }
+.group-edit-modal { display: grid; gap: 10px; }
+.group-edit-modal textarea { width: 100%; resize: vertical; color: #fff; background: #18101f; border: 1px solid #6c4a81; border-radius: 8px; padding: 12px; font: inherit; }
+.group-edit-modal .color-label { font-size: 11px; margin-top: 5px; }
+.group-color-options { display: flex; gap: 10px; }
+.group-color-options button { width: 28px; height: 28px; border-radius: 50%; background: var(--group-color); border: 2px solid #ffffff55; padding: 0; }
+.group-color-options button.selected { outline: 2px solid #fff; outline-offset: 2px; }
+@media(max-width:700px) { .team-habit-row { flex-wrap: wrap; } .team-habit-copy { min-width: calc(100% - 55px); } .group-edit-modal > div:last-child { flex-wrap: wrap; } }
 </style>

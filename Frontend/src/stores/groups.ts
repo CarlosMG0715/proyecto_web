@@ -5,7 +5,16 @@ import { useCharacterStore } from './characters'
 import { useSessionStore } from './session'
 import type { ActivityItem, CreateGroupPayload, Group, GroupMember } from '@/types/group'
 import { groupService, type RemoteGroup } from '@/services/groupService'
-import { fetchCheckInHistory, sendGroupMessageRequest, toggleCheckInRequest } from '@/services/groupsService'
+import {
+  createHabitRequest,
+  deleteHabitRequest,
+  fetchCheckInHistory,
+  leaveGroupRequest,
+  sendGroupMessageRequest,
+  toggleCheckInRequest,
+  updateGroupRequest,
+  updateHabitRequest,
+} from '@/services/groupsService'
 
 export interface DayProgress {
   key: string
@@ -368,22 +377,32 @@ export const useGroupsStore = defineStore('groups', () => {
     const me = rawGroup?.members.find((m) => matchesCurrentUser(m))
     if (!rawGroup || !me) return
 
-    const firstHabit = rawGroup.habits?.[0]
-    if (firstHabit) {
+    const habits = rawGroup.habits ?? []
+    if (Array.isArray(rawGroup.habits) && habits.length === 0) {
+      error.value = 'Este grupo todavía no tiene hábitos. Pídele al admin que agregue uno antes del check-in.'
+      throw new Error(error.value)
+    }
+    const shouldComplete = !me.checkedInToday
+    if (habits.length) {
       try {
-        const result = await toggleCheckInRequest(groupId, firstHabit.id, firstHabit.checks[me.id]?.note ?? '')
-        firstHabit.checks[me.id] = { done: result.done, note: result.note }
-        me.checkedInToday = result.done
+        for (const habit of habits) {
+          const current = Boolean(habit.checks[me.id]?.done)
+          if (current === shouldComplete) continue
+          const result = await toggleCheckInRequest(groupId, habit.id, habit.checks[me.id]?.note ?? '')
+          habit.checks[me.id] = { done: result.done, note: result.note }
+        }
+        me.checkedInToday = shouldComplete
       } catch (cause) {
         error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
           ?? 'No pudimos guardar el check-in en el servidor.'
+        await refreshRemoteGroups()
         throw cause
       }
     }
 
     const myData = ensureMyData()
     const todayKey = toDateKey(new Date())
-    if (!firstHabit) me.checkedInToday = !me.checkedInToday
+    if (!habits.length) me.checkedInToday = !me.checkedInToday
 
     if (me.checkedInToday) {
       me.streak += 1
@@ -439,6 +458,55 @@ export const useGroupsStore = defineStore('groups', () => {
       throw cause
     }
     persistAll()
+  }
+
+  async function updateGroup(groupId: string, changes: { name?: string; category?: string; description?: string; color?: string }): Promise<void> {
+    error.value = null
+    try {
+      await updateGroupRequest(groupId, changes)
+      await refreshRemoteGroups()
+    } catch (cause) {
+      error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'No pudimos guardar los datos del grupo.'
+      throw cause
+    }
+  }
+
+  async function createGroupHabit(groupId: string, name: string, icon = '🎯'): Promise<void> {
+    error.value = null
+    try {
+      await createHabitRequest(groupId, name, icon)
+      await refreshRemoteGroups()
+    } catch (cause) {
+      error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'No pudimos agregar el hábito.'
+      throw cause
+    }
+  }
+
+  async function editGroupHabit(groupId: string, habitId: string, name: string, icon = '🎯'): Promise<void> {
+    error.value = null
+    try {
+      const currentIcon = allGroups.value.find((group) => group.id === groupId)?.habits?.find((habit) => habit.id === habitId)?.icon
+      await updateHabitRequest(groupId, habitId, { name, icon: currentIcon ?? icon })
+      await refreshRemoteGroups()
+    } catch (cause) {
+      error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'No pudimos actualizar el hábito.'
+      throw cause
+    }
+  }
+
+  async function removeGroupHabit(groupId: string, habitId: string): Promise<void> {
+    error.value = null
+    try {
+      await deleteHabitRequest(groupId, habitId)
+      await refreshRemoteGroups()
+    } catch (cause) {
+      error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'No pudimos quitar el hábito.'
+      throw cause
+    }
   }
 
   function createGroup(payload: CreateGroupPayload, ownerName: string, persisted?: { id: string; inviteCode: string }): Group {
@@ -514,24 +582,17 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  function leaveGroup(groupId: string): void {
-    const rawGroup = allGroups.value.find((g) => g.id === groupId)
-    if (!rawGroup) return
-    const leavingMember = rawGroup.members.find((m) => matchesCurrentUser(m))
-    rawGroup.members = rawGroup.members.filter((m) => !matchesCurrentUser(m))
-    if (leavingMember?.role === 'ADMIN' && !rawGroup.members.some(m => m.role === 'ADMIN') && rawGroup.members[0]) {
-      rawGroup.members[0].role = 'ADMIN'
+  async function leaveGroup(groupId: string): Promise<void> {
+    error.value = null
+    try {
+      await leaveGroupRequest(groupId)
+      allGroups.value = allGroups.value.filter((group) => group.id !== groupId)
+      persistAll()
+    } catch (cause) {
+      error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'No pudimos salir del grupo.'
+      throw cause
     }
-    if (leavingMember) {
-      rawGroup.messages.push({
-        id: `msg-${Date.now()}`,
-        kind: 'system',
-        authorId: null,
-        text: `${leavingMember.name} salió del grupo.`,
-        sentAt: new Date().toISOString(),
-      })
-    }
-    persistAll()
   }
 
   return {
@@ -554,6 +615,10 @@ export const useGroupsStore = defineStore('groups', () => {
     generateUniqueInviteCode,
     toggleMyCheckIn,
     updateMyHabit,
+    updateGroup,
+    createGroupHabit,
+    editGroupHabit,
+    removeGroupHabit,
     sendMessage,
     createGroup,
     requestGroupJoin,
