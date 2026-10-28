@@ -76,7 +76,7 @@ class GroupService {
         const group = await groupRepository.createWithAdmin({
           ...data, userId, inviteCode: newInviteCode(),
         })
-        return toGroupDto(group, userId)
+        return this.getForMember({ userId, groupId: group.id })
       } catch (err) {
         if (err.code !== 'P2002') throw err
       }
@@ -127,6 +127,17 @@ class GroupService {
     if (!membership) throw httpError('No tienes acceso a este grupo', 403)
     if (membership.role !== 'ADMIN') throw httpError('Solo un administrador puede crear hábitos', 403)
     const habit = await prisma.habit.create({ data: { groupId, createdById: userId, name, icon, description: description || null } })
+    return { id: habit.id, name: habit.name, icon: habit.icon, description: habit.description, checks: {} }
+  }
+
+  async updateHabit({ userId, groupId, habitId, ...data }) {
+    // solo administradores pueden editar habitos activos de su grupo.
+    const membership = await groupRepository.findMembership(groupId, userId)
+    if (!membership) throw httpError('No tienes acceso a este grupo', 403)
+    if (membership.role !== 'ADMIN') throw httpError('Solo un administrador puede editar hábitos', 403)
+    const existing = await prisma.habit.findFirst({ where: { id: habitId, groupId, isActive: true } })
+    if (!existing) throw httpError('Hábito no encontrado', 404)
+    const habit = await prisma.habit.update({ where: { id: habitId }, data })
     return { id: habit.id, name: habit.name, icon: habit.icon, description: habit.description, checks: {} }
   }
 

@@ -38,6 +38,12 @@ export async function createHabitRequest(groupId: string, name: string, icon: st
   return data.habit
 }
 
+export async function updateHabitRequest(groupId: string, habitId: string, updates: { name: string; icon: string }): Promise<GroupHabit> {
+  // envia los cambios del habito; el servidor limita esta operacion a administradores.
+  const { data } = await api.patch<{ habit: GroupHabit }>(`/groups/${groupId}/habits/${habitId}`, updates)
+  return data.habit
+}
+
 export async function toggleCheckInRequest(groupId: string, habitId: string, note: string): Promise<{ done: boolean; note: string }> {
   // alterna el check-in de hoy y devuelve el estado que quedo guardado.
   const { data } = await api.put<{ done: boolean; note: string }>(`/groups/${groupId}/habits/${habitId}/check-in`, { note })

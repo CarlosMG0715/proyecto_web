@@ -44,6 +44,11 @@ class GroupController {
     catch (e) { next(e) }
   }
 
+  async updateHabit(req, res, next) {
+    try { res.json({ habit: await groupService.updateHabit({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId, ...req.body }) }) }
+    catch (e) { next(e) }
+  }
+
   async checkIn(req, res, next) {
     // entrega el resultado de marcar o quitar el check de hoy.
     try { res.json(await groupService.checkIn({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId, ...req.body })) }

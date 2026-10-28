@@ -79,4 +79,5 @@ export interface CreateGroupPayload {
   description?: string
   color?: string
   timeZone?: string
+  initialHabit: { name: string; icon: string }
 }

@@ -10,13 +10,14 @@ const withMembers = {
 }
 
 const groupRepository = {
-  createWithAdmin({ name, category, description, color, timeZone, inviteCode, userId }) {
+  createWithAdmin({ name, category, description, color, timeZone, inviteCode, userId, initialHabit }) {
     // crea el grupo y su primera membresia en una sola operacion prisma.
     return prisma.group.create({
       data: {
         name, category, description, color, timeZone, inviteCode,
         createdById: userId,
         memberships: { create: { userId, role: 'ADMIN' } },
+        habits: { create: { name: initialHabit.name, icon: initialHabit.icon, createdById: userId } },
       },
       include: withMembers,
     })

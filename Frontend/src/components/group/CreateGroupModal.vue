@@ -14,15 +14,17 @@ const { isOpen, close } = useCreateGroupModal()
 
 const name = ref('')
 const category = ref('Programación')
+const initialHabit = ref('')
 const error = ref<string | null>(null)
 const isSubmitting = ref(false)
 
-const canSubmit = computed(() => name.value.trim().length >= 3)
+const canSubmit = computed(() => name.value.trim().length >= 3 && initialHabit.value.trim().length > 0)
 
 watch(isOpen, (open) => {
   if (open) {
     name.value = ''
     category.value = 'Programación'
+    initialHabit.value = ''
     error.value = null
   }
 })
@@ -30,13 +32,13 @@ watch(isOpen, (open) => {
 async function submit(): Promise<void> {
   // evita peticiones invalidas, espera al servidor y navega con el id que realmente se creo.
   if (!canSubmit.value) {
-    error.value = 'El nombre debe tener al menos 3 caracteres.'
+    error.value = name.value.trim().length < 3 ? 'El nombre debe tener al menos 3 caracteres.' : 'Agrega al menos un hábito para el grupo.'
     return
   }
   isSubmitting.value = true
   error.value = null
   try {
-    const id = await groupsStore.createGroup({ name: name.value.trim(), category: category.value })
+    const id = await groupsStore.createGroup({ name: name.value.trim(), category: category.value, initialHabit: { name: initialHabit.value.trim(), icon: '🎯' } })
     close()
     await router.push({ name: 'grupo', params: { groupId: id } })
   } catch {
@@ -65,6 +67,11 @@ async function submit(): Promise<void> {
         <label class="field">
           <span>Nombre del grupo</span>
           <input v-model="name" type="text" maxlength="60" placeholder="Ej: Madrugadores" autofocus />
+        </label>
+
+        <label class="field">
+          <span>Primer hábito del grupo</span>
+          <input v-model="initialHabit" type="text" maxlength="80" placeholder="Ej: Leer 20 minutos" required />
         </label>
 
         <div class="field">

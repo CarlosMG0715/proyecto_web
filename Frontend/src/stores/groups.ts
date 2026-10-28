@@ -2,7 +2,7 @@
 import axios from 'axios'
 import { defineStore } from 'pinia'
 import { toDateKey } from '@/mocks/demoGroups'
-import { createGroupRequest, createHabitRequest, fetchCheckInHistory, fetchGroup as fetchGroupRequest, fetchMyGroups, joinGroupRequest, saveCheckInNoteRequest, sendGroupMessageRequest, toggleCheckInRequest } from '@/services/groupsService'
+import { createGroupRequest, createHabitRequest, fetchCheckInHistory, fetchGroup as fetchGroupRequest, fetchMyGroups, joinGroupRequest, saveCheckInNoteRequest, sendGroupMessageRequest, toggleCheckInRequest, updateHabitRequest } from '@/services/groupsService'
 import type { ActivityItem, CreateGroupPayload, Group, GroupHabit, GroupMember } from '@/types/group'
 
 export interface DayProgress {
@@ -169,6 +169,12 @@ export const useGroupsStore = defineStore('groups', {
     async createHabit(groupId: string, name: string, icon: string): Promise<GroupHabit> {
       // crea el habito y vuelve a cargar el grupo para ver los miembros y checks actualizados.
       const habit = await createHabitRequest(groupId, name, icon)
+      await this.fetchGroup(groupId)
+      return habit
+    },
+
+    async updateHabit(groupId: string, habitId: string, name: string, icon: string): Promise<GroupHabit> {
+      const habit = await updateHabitRequest(groupId, habitId, { name, icon })
       await this.fetchGroup(groupId)
       return habit
     },
