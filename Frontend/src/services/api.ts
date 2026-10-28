@@ -8,9 +8,11 @@ export const setSessionExpiredHandler = (fn: () => void): void => {
   onSessionExpired = fn
 }
 
-export const api = axios.create({ baseURL: '/api', withCredentials: true })
+const apiBaseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '')
+
+export const api = axios.create({ baseURL: apiBaseUrl, withCredentials: true })
 // cliente sin interceptores: evita que el refresh se llame a si mismo en bucle.
-const bare = axios.create({ baseURL: '/api', withCredentials: true })
+const bare = axios.create({ baseURL: apiBaseUrl, withCredentials: true })
 
 let refreshPromise: Promise<AuthResponse> | null = null
 

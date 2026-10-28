@@ -32,6 +32,16 @@ export async function fetchGroup(groupId: string): Promise<Group> {
   return data.group
 }
 
+export async function updateGroupRequest(groupId: string, updates: { name?: string; category?: string; description?: string; color?: string }): Promise<Group> {
+  const { data } = await api.patch<{ group: Group }>(`/groups/${groupId}`, updates)
+  return data.group
+}
+
+export async function leaveGroupRequest(groupId: string): Promise<{ groupId: string; groupDeleted: boolean; groupArchived?: boolean; promotedMemberId: string | null }> {
+  const { data } = await api.delete<{ groupId: string; groupDeleted: boolean; groupArchived?: boolean; promotedMemberId: string | null }>(`/groups/${groupId}/membership`)
+  return data
+}
+
 export async function createHabitRequest(groupId: string, name: string, icon: string): Promise<GroupHabit> {
   // solicita crear un habito; el backend verifica que quien lo pide sea admin.
   const { data } = await api.post<{ habit: GroupHabit }>(`/groups/${groupId}/habits`, { name, icon })
@@ -42,6 +52,10 @@ export async function updateHabitRequest(groupId: string, habitId: string, updat
   // envia los cambios del habito; el servidor limita esta operacion a administradores.
   const { data } = await api.patch<{ habit: GroupHabit }>(`/groups/${groupId}/habits/${habitId}`, updates)
   return data.habit
+}
+
+export async function deleteHabitRequest(groupId: string, habitId: string): Promise<void> {
+  await api.delete(`/groups/${groupId}/habits/${habitId}`)
 }
 
 export async function toggleCheckInRequest(groupId: string, habitId: string, note: string): Promise<{ done: boolean; note: string }> {

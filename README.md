@@ -65,7 +65,17 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm run dev
 ```
 
-Vite inicia normalmente en `http://localhost:5173`. `VITE_API_URL` apunta a `http://localhost:3000/api`.
+Vite inicia normalmente en `http://localhost:5173` y reenvía `/api` a Express en `http://localhost:3000`. En despliegues, `VITE_API_URL` puede apuntar a la URL HTTPS de la API.
+
+## Usar grupos desde otros computadores
+
+En desarrollo local, las cuentas y los grupos se guardan en el PostgreSQL de este computador. Para que Carlos y otras personas vean los mismos grupos, todos deben entrar a la misma app publicada y esa app debe conectarse a una sola base de datos PostgreSQL en la nube.
+
+La configuración `render.yaml` publica el frontend y Express bajo el mismo dominio, conecta una base PostgreSQL y aplica las migraciones al iniciar. En Render, crea un Blueprint desde la rama que quieras publicar. Está configurado con los planes gratuitos para probarlo sin cobro: Render indica que la base expira después de 30 días y el servidor web se duerme tras 15 minutos sin tráfico; al volver a abrir la app puede tardar alrededor de un minuto en despertar. Antes del vencimiento, exporta la base o cámbiala a un plan pago si necesitas conservar los datos.
+
+Después del despliegue, cada integrante se registra en la URL compartida. Quien cree el grupo comparte su código de invitación; el resto lo ingresa desde sus propias cuentas. Las cuentas y grupos que existen solo en el PostgreSQL local no aparecen automáticamente en la base publicada.
+
+El cliente usa `/api` en desarrollo y producción. Si más adelante frontend y API se publican en dominios separados, configura `VITE_API_URL` con la URL HTTPS de la API, agrega el dominio del cliente a `CORS_ORIGINS` y ajusta `COOKIE_SAME_SITE=none` para las cookies entre dominios.
 
 ## API de autenticación (fase actual)
 
@@ -92,7 +102,7 @@ El personaje (`User.characterId`) y el tema (`User.themeId`) se guardan en Postg
 
 En Perfil, el estado **Guardado en tu cuenta** aparece después de la confirmación del servidor. Si el guardado falla, se muestra un aviso con **Reintentar**. Tras aplicar por primera vez la migración `20261021120000_profile_preferences_and_group_join_requests`, vuelve a elegir el personaje y el tema que antes estaban guardados solo en el navegador.
 
-Esto cubre la personalización y su visibilidad entre miembros. Los check-ins, el chat y las penalizaciones todavía conservan su implementación local.
+La personalización, los check-ins y el chat se guardan en el servidor. Las rachas y los días cumplidos se calculan desde los check-ins guardados, por cuenta y por grupo. Los corazones siguen como indicador visual; todavía falta implementar el cierre diario y las penalizaciones automáticas.
 
 ## Base técnica
 
@@ -100,4 +110,4 @@ Esto cubre la personalización y su visibilidad entre miembros. Los check-ins, e
 - PostgreSQL 16 en Docker Compose y Prisma 6.19.0 (usuarios, grupos, membresías, hábitos, check-ins, penalizaciones, mensajes y sesiones).
 - Seed idempotente: usuario administrador y grupo `HABITOS-DEMO`. Requiere `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` (mínimo 12 caracteres) en `backend/.env`.
 - Vue 3, TypeScript, Vue Router, Pinia y Axios con `withCredentials`.
-- Autenticación, personalización, creación de grupos y solicitudes de ingreso tienen API. El progreso diario, el chat y las penalizaciones todavía requieren persistencia en el servidor.
+- Autenticación, personalización, grupos, solicitudes de ingreso, hábitos, check-ins e historial del chat tienen API. Falta definir y programar el cierre diario que actualiza la salud del grupo y aplica penalizaciones.

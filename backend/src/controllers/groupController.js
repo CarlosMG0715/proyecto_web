@@ -22,6 +22,8 @@ async function requestJoin(req, res, next) {
     if (!code) return res.status(400).json({ error: 'Escribe el código de invitación' })
     const group = await prisma.group.findUnique({ where: { inviteCode: code }, select: { id: true, name: true } })
     if (!group) return res.status(404).json({ error: 'No encontramos una aventura con ese código' })
+    const memberCount = await prisma.groupMembership.count({ where: { groupId: group.id } })
+    if (memberCount === 0) return res.status(410).json({ error: 'Esta aventura quedó archivada y ya no recibe solicitudes' })
     const userId = req.user.userId
     if (await prisma.groupMembership.findUnique({ where: { groupId_userId: { groupId: group.id, userId } } })) {
       return res.status(409).json({ error: 'Ya perteneces a este grupo' })
@@ -81,6 +83,16 @@ async function getOne(req, res, next) {
   catch (error) { return next(error) }
 }
 
+async function updateGroup(req, res, next) {
+  try { return res.json({ group: await groupService.updateGroup({ userId: req.user.userId, groupId: req.params.groupId, ...req.body }) }) }
+  catch (error) { return next(error) }
+}
+
+async function leaveGroup(req, res, next) {
+  try { return res.json(await groupService.leaveGroup({ userId: req.user.userId, groupId: req.params.groupId })) }
+  catch (error) { return next(error) }
+}
+
 async function createHabit(req, res, next) {
   try { return res.status(201).json({ habit: await groupService.createHabit({ userId: req.user.userId, groupId: req.params.groupId, ...req.body }) }) }
   catch (error) { return next(error) }
@@ -88,6 +100,11 @@ async function createHabit(req, res, next) {
 
 async function updateHabit(req, res, next) {
   try { return res.json({ habit: await groupService.updateHabit({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId, ...req.body }) }) }
+  catch (error) { return next(error) }
+}
+
+async function deleteHabit(req, res, next) {
+  try { return res.json(await groupService.deleteHabit({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId })) }
   catch (error) { return next(error) }
 }
 
@@ -108,4 +125,4 @@ async function sendMessage(req, res, next) {
   catch (error) { return next(error) }
 }
 
-module.exports = { list: listMine, listMine, create, requestJoin, inbox, myRequests, decide, checkInHistory, getOne, createHabit, updateHabit, checkIn, updateCheckInNote, sendMessage }
+module.exports = { list: listMine, listMine, create, requestJoin, inbox, myRequests, decide, checkInHistory, getOne, updateGroup, leaveGroup, createHabit, updateHabit, deleteHabit, checkIn, updateCheckInNote, sendMessage }

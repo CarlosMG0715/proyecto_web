@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: kordia-app
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kordia-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_PEPPER
+        generateValue: true
+      - key: COOKIE_SAME_SITE
+        value: strict
+
+databases:
+  - name: kordia-db
+    databaseName: kordia
+    user: kordia
+    plan: free
+    diskSizeGB: 1
+    region: ohio
