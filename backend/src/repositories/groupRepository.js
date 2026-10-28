@@ -1,26 +1,33 @@
+// consultas de grupos y membresias; las reglas de acceso pertenecen al servicio.
 const { prisma } = require('../prisma')
 
+const withMembers = {
+  // incluye los nombres de usuario necesarios para formar la respuesta del grupo.
+  memberships: {
+    include: { user: { select: { id: true, name: true } } },
+    orderBy: { joinedAt: 'asc' },
+  },
+}
+
 const groupRepository = {
-  createWithAdmin({ name, timeZone, inviteCode, userId }) {
+  createWithAdmin({ name, category, description, color, timeZone, inviteCode, userId }) {
+    // crea el grupo y su primera membresia en una sola operacion prisma.
     return prisma.group.create({
       data: {
-        name,
-        timeZone,
-        inviteCode,
+        name, category, description, color, timeZone, inviteCode,
         createdById: userId,
         memberships: { create: { userId, role: 'ADMIN' } },
       },
+      include: withMembers,
     })
   },
 
   findByInviteCode(inviteCode) {
-    return prisma.group.findUnique({ where: { inviteCode } })
+    return prisma.group.findUnique({ where: { inviteCode }, include: withMembers })
   },
 
   findMembership(groupId, userId) {
-    return prisma.groupMembership.findUnique({
-      where: { groupId_userId: { groupId, userId } },
-    })
+    return prisma.groupMembership.findUnique({ where: { groupId_userId: { groupId, userId } } })
   },
 
   addMember(groupId, userId) {
@@ -28,20 +35,16 @@ const groupRepository = {
   },
 
   listByUser(userId) {
+    // busca solo grupos que tengan una membresia para este usuario.
     return prisma.group.findMany({
       where: { memberships: { some: { userId } } },
-      include: { _count: { select: { memberships: true, habits: true } } },
-      orderBy: { createdAt: 'desc' },
+      include: withMembers,
+      orderBy: { createdAt: 'asc' },
     })
   },
 
-  findByIdWithMembers(groupId) {
-    return prisma.group.findUnique({
-      where: { id: groupId },
-      include: {
-        memberships: { include: { user: { select: { id: true, name: true } } } },
-      },
-    })
+  findById(groupId) {
+    return prisma.group.findUnique({ where: { id: groupId }, include: withMembers })
   },
 }
 

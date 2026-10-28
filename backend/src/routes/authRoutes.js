@@ -1,3 +1,4 @@
+// urls de autenticacion; cada una delega el trabajo al controlador.
 const { Router } = require('express')
 const authController = require('../controllers/authController')
 const { authenticateToken } = require('../middlewares/authMiddleware')

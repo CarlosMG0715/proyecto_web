@@ -1,6 +1,9 @@
+// store que comparte los grupos entre el menu, el inicio, el calendario y el detalle.
+import axios from 'axios'
 import { defineStore } from 'pinia'
-import { DEMO_ACTIVITY, DEMO_CHECKIN_HISTORY, DEMO_GROUPS, toDateKey } from '@/mocks/demoGroups'
-import type { ActivityItem, CreateGroupPayload, Group, GroupMember } from '@/types/group'
+import { toDateKey } from '@/mocks/demoGroups'
+import { createGroupRequest, createHabitRequest, fetchCheckInHistory, fetchGroup as fetchGroupRequest, fetchMyGroups, joinGroupRequest, saveCheckInNoteRequest, sendGroupMessageRequest, toggleCheckInRequest } from '@/services/groupsService'
+import type { ActivityItem, CreateGroupPayload, Group, GroupHabit, GroupMember } from '@/types/group'
 
 export interface DayProgress {
   key: string
@@ -19,29 +22,33 @@ export interface GroupsState {
 }
 
 const WEEKDAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
-const GROUP_COLORS = ['#8b5cf6', '#22c55e', '#f5a524', '#38bdf8', '#f43f5e']
 
 function todayCompletion(group: Group): number {
+  // calcula el porcentaje de miembros que tienen todos sus habitos de hoy completos.
   if (group.members.length === 0) return 0
   const done = group.members.filter((m) => m.checkedInToday).length
   return Math.round((done / group.members.length) * 100)
 }
 
-function generateInviteCode(name: string): string {
-  const prefix = name.replace(/[^a-zA-Z]/g, '').slice(0, 4).toUpperCase() || 'GRP'
-  return `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`
+function extractError(err: unknown, fallback: string): string {
+  // convierte errores de axios en un mensaje corto que la interfaz puede mostrar.
+  if (axios.isAxiosError<{ error?: string; message?: string }>(err)) {
+    return err.response?.data?.error ?? err.response?.data?.message ?? fallback
+  }
+  return fallback
 }
 
 export const useGroupsStore = defineStore('groups', {
   state: (): GroupsState => ({
-    groups: structuredClone(DEMO_GROUPS),
-    activity: structuredClone(DEMO_ACTIVITY),
-    checkInHistory: [...DEMO_CHECKIN_HISTORY],
+    groups: [],
+    activity: [],
+    checkInHistory: [],
     isLoading: false,
     error: null,
   }),
 
   getters: {
+    // getters son valores derivados; pinia los recalcula cuando cambia el store.
     groupById:
       (state) =>
       (id: string): Group | undefined =>
@@ -104,104 +111,86 @@ export const useGroupsStore = defineStore('groups', {
   },
 
   actions: {
-    /**
-     * Marca / desmarca el check-in del usuario actual en un grupo.
-     * (Con backend: POST /api/habits/:id/check-in dentro de una transacción ACID)
-     */
-    toggleMyCheckIn(groupId: string): void {
-      const group = this.groups.find((g) => g.id === groupId)
-      const me = group?.members.find((m) => m.isCurrentUser)
-      if (!group || !me) return
-
-      const todayKey = toDateKey(new Date())
-      me.checkedInToday = !me.checkedInToday
-
-      if (me.checkedInToday) {
-        me.streak += 1
-        me.daysCompleted += 1
-        group.health = Math.min(100, group.health + 4)
-        if (!this.checkInHistory.includes(todayKey)) this.checkInHistory.push(todayKey)
-        this.activity.unshift({
-          id: `act-${Date.now()}`,
-          kind: 'check-in',
-          groupId,
-          text: `Tú completaste «${me.habit}»`,
-          at: new Date().toISOString(),
-        })
-      } else {
-        me.streak = Math.max(0, me.streak - 1)
-        me.daysCompleted = Math.max(0, me.daysCompleted - 1)
-        group.health = Math.max(0, group.health - 4)
-        const stillDoneSomewhere = this.groups.some((g) =>
-          g.members.some((m) => m.isCurrentUser && m.checkedInToday),
-        )
-        if (!stillDoneSomewhere) {
-          this.checkInHistory = this.checkInHistory.filter((k) => k !== todayKey)
-        }
+    // acciones async consultan la api y despues reemplazan el estado con datos persistidos.
+    async fetchGroups(): Promise<void> {
+      this.isLoading = true
+      this.error = null
+      try {
+        this.groups = await fetchMyGroups()
+        this.checkInHistory = await fetchCheckInHistory()
+      } catch (err) {
+        this.error = extractError(err, 'No se pudieron cargar los grupos')
+      } finally {
+        this.isLoading = false
       }
     },
 
-    sendMessage(groupId: string, text: string): void {
-      const group = this.groups.find((g) => g.id === groupId)
-      const me = group?.members.find((m) => m.isCurrentUser)
-      const clean = text.trim()
-      if (!group || !me || !clean) return
-      group.messages.push({
-        id: `msg-${Date.now()}`,
-        kind: 'user',
-        authorId: me.id,
-        text: clean,
-        sentAt: new Date().toISOString(),
-      })
+    async fetchGroup(groupId: string): Promise<void> {
+      // refresca un solo grupo y lo agrega o reemplaza en la lista actual.
+      this.isLoading = true
+      this.error = null
+      try {
+        const group = await fetchGroupRequest(groupId)
+        const index = this.groups.findIndex((item) => item.id === groupId)
+        if (index < 0) this.groups.push(group)
+        else this.groups[index] = group
+      } catch (err) {
+        this.error = extractError(err, 'No se pudo cargar el grupo')
+        throw err
+      } finally { this.isLoading = false }
     },
 
-    /** Crea un grupo local (con backend: POST /api/groups) y devuelve su id */
-    createGroup(payload: CreateGroupPayload, ownerName: string): string {
-      const id = `grp-${Date.now()}`
-      const name = payload.name.trim()
-      this.groups.push({
-        id,
-        name,
-        description: '',
-        category: payload.category.trim() || 'General',
-        inviteCode: generateInviteCode(name),
-        color: GROUP_COLORS[this.groups.length % GROUP_COLORS.length] ?? '#8b5cf6',
-        streak: 0,
-        health: 100,
-        completionHistory: [],
-        members: [
-          {
-            id: 'me',
-            name: ownerName,
-            avatarUrl: null,
-            role: 'ADMIN',
-            habit: 'Define tu hábito',
-            daysCompleted: 0,
-            daysTotal: 0,
-            streak: 0,
-            checkedInToday: false,
-            isCurrentUser: true,
-            isOnline: true,
-          },
-        ],
-        messages: [
-          {
-            id: `msg-${Date.now()}`,
-            kind: 'system',
-            authorId: null,
-            text: `Creaste el grupo «${name}». Comparte el código de invitación para sumar gente.`,
-            sentAt: new Date().toISOString(),
-          },
-        ],
-      })
-      this.activity.unshift({
-        id: `act-${Date.now()}`,
-        kind: 'join',
-        groupId: id,
-        text: `Creaste el grupo ${name}`,
-        at: new Date().toISOString(),
-      })
-      return id
+    async createGroup(payload: CreateGroupPayload): Promise<string> {
+      // devuelve el id real creado por el servidor, no uno inventado en el navegador.
+      this.error = null
+      try {
+        const group = await createGroupRequest(payload)
+        this.groups.push(group)
+        return group.id
+      } catch (err) {
+        this.error = extractError(err, 'No se pudo crear el grupo')
+        throw err
+      }
+    },
+
+    async joinGroup(inviteCode: string): Promise<string> {
+      // une al usuario y agrega a la lista el grupo devuelto por la api.
+      this.error = null
+      try {
+        const group = await joinGroupRequest(inviteCode)
+        this.groups.push(group)
+        return group.id
+      } catch (err) {
+        this.error = extractError(err, 'No se pudo unir al grupo')
+        throw err
+      }
+    },
+
+    async createHabit(groupId: string, name: string, icon: string): Promise<GroupHabit> {
+      // crea el habito y vuelve a cargar el grupo para ver los miembros y checks actualizados.
+      const habit = await createHabitRequest(groupId, name, icon)
+      await this.fetchGroup(groupId)
+      return habit
+    },
+
+    async toggleCheckIn(groupId: string, habitId: string, note: string): Promise<void> {
+      // actualiza el check-in y tambien el historial usado por el calendario.
+      await toggleCheckInRequest(groupId, habitId, note)
+      await this.fetchGroup(groupId)
+      this.checkInHistory = await fetchCheckInHistory()
+    },
+
+    async saveCheckInNote(groupId: string, habitId: string, note: string): Promise<void> {
+      // guarda la nota y refresca el detalle para mostrar el valor confirmado por la api.
+      await saveCheckInNoteRequest(groupId, habitId, note)
+      await this.fetchGroup(groupId)
+    },
+
+    async sendMessage(groupId: string, text: string): Promise<void> {
+      // agrega al chat solo el mensaje que el servidor confirmo como guardado.
+      const message = await sendGroupMessageRequest(groupId, text.trim())
+      const group = this.groups.find((g) => g.id === groupId)
+      if (group) group.messages.push(message)
     },
   },
 })

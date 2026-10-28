@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// catalogo local de iconos svg para mantener un estilo uniforme sin imagenes externas.
 /**
  * Íconos SVG de línea (estilo Lucide). Usar SIEMPRE este componente en vez de emojis
  * para que toda la interfaz tenga el mismo trazo y tamaño.

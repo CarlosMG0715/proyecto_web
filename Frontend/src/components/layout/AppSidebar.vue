@@ -3,10 +3,11 @@
  * Menú lateral: marca, navegación principal, lista de grupos, botón "Crear grupo"
  * y la tarjeta de tu cuenta con el botón de cerrar sesión.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon, { type IconName } from '@/components/ui/AppIcon.vue'
 import UserAvatar from '@/components/ui/UserAvatar.vue'
+import JoinGroupModal from '@/components/group/JoinGroupModal.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import { useCharacterStore } from '@/stores/characters'
 import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
@@ -34,6 +35,9 @@ const session = useSessionStore()
 const characters = useCharacterStore()
 const groupsStore = useGroupsStore()
 const createModal = useCreateGroupModal()
+const inviteFromLink = typeof route.query.codigo === 'string' ? route.query.codigo : ''
+const showJoin = ref(inviteFromLink !== '')
+const joinCode = inviteFromLink
 
 const userName = computed(() => session.currentUser?.name ?? 'Usuario')
 const userEmail = computed(() => session.currentUser?.email ?? '')
@@ -118,6 +122,11 @@ async function handleLogout(): Promise<void> {
         <AppIcon name="plus" :size="16" :stroke-width="2.5" />
         Crear grupo
       </button>
+      <button type="button" class="join-btn" @click="showJoin = true">
+        <AppIcon name="user" :size="16" />
+        Unirme con codigo
+      </button>
+      <JoinGroupModal :open="showJoin" :initial-code="joinCode" @close="showJoin = false" />
     </div>
 
     <!-- Tu cuenta -->
@@ -396,5 +405,7 @@ async function handleLogout(): Promise<void> {
   background: rgba(244, 63, 94, 0.12);
   color: var(--danger);
 }
+.join-btn { margin-top: .4rem; display: flex; align-items: center; justify-content: center; gap: .45rem; padding: .6rem; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--text-soft); font-size: .85rem; font-weight: 600; }
+.join-btn:hover { background: var(--surface); color: var(--text); }
 @media(max-width:700px){.sidebar{position:fixed;top:auto;bottom:0;left:0;right:0;height:68px;width:100%;z-index:100;padding:5px 10px;background:#1d1628;border-right:0;border-top:1px solid #604674;overflow:visible;display:block}.brand,.groups,.account,.nav>.section-label{display:none}.nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.nav-link{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:8px 3px;font-size:9px;min-height:55px}.nav-link.active{background:#3b2850;color:#e0c0ff}}
 </style>

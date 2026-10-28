@@ -1,3 +1,4 @@
+// aqui se definen las urls y las reglas que controlan el acceso a cada pagina.
 import { createRouter, createWebHistory } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
 import { bootstrap } from '@/services/authService'
@@ -68,6 +69,7 @@ export const router = createRouter({
   ],
 })
 
+// el guard corre antes de navegar: recupera una sesion previa y bloquea paginas privadas sin login.
 router.beforeEach(async (to) => {
   const session = useSessionStore()
 
