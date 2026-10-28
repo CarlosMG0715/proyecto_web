@@ -1,166 +1,30 @@
 <script setup lang="ts">
-/**
- * VISTA CONFIGURACIÓN
- * Ajustes de notificaciones de medianoche, preferencias de cuenta
- * y opciones de equipo.
- */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
-
-const notifyMidnight = ref(true)
-const notifyChat = ref(true)
-const autoStreakProtection = ref(true)
-const saveSuccess = ref(false)
-
-function handleSave() {
-  saveSuccess.value = true
-  setTimeout(() => {
-    saveSuccess.value = false
-  }, 2500)
+import StreakFlame from '@/components/ui/StreakFlame.vue'
+import '@/assets/styles/game-views.css'
+const key = 'kordia:preferences'
+const defaults = { midnight: true, chat: true, inactivity: true, motion: true }
+function readPreferences() {
+  try { const saved = JSON.parse(localStorage.getItem(key) ?? '{}'); return Object.fromEntries(Object.entries(defaults).map(([k, v]) => [k, typeof saved?.[k] === 'boolean' ? saved[k] : v])) as typeof defaults } catch { return { ...defaults } }
 }
+const saved = ref(readPreferences())
+const preferences = ref({ ...saved.value })
+const message = ref('')
+const dirty = computed(() => JSON.stringify(saved.value) !== JSON.stringify(preferences.value))
+const active = computed(() => [preferences.value.midnight, preferences.value.chat, preferences.value.inactivity].filter(Boolean).length)
+function save() {
+  try { localStorage.setItem(key, JSON.stringify(preferences.value)); saved.value = { ...preferences.value }; document.documentElement.classList.toggle('kordia-reduce-motion', !preferences.value.motion); message.value = 'Preferencias guardadas en este navegador.' } catch { message.value = 'No se pudieron guardar las preferencias. Inténtalo de nuevo.' }
+}
+function reset() { preferences.value = { ...defaults }; message.value = 'Valores predeterminados listos. Guarda para aplicarlos.' }
 </script>
-
-<template>
-  <div class="page">
-    <div class="page-inner">
-      <header class="page-head">
-        <div>
-          <h1>Configuración</h1>
-          <p>Gestiona tus alertas, notificaciones y preferencias de hábitos.</p>
-        </div>
-      </header>
-
-      <section class="panel">
-        <div class="panel-title">
-          <h2>Notificaciones y Cierre de Medianoche</h2>
-          <span>Alertas del cron job</span>
-        </div>
-
-        <div class="settings-list">
-          <label class="setting-row">
-            <div class="setting-info">
-              <strong>Recordatorio antes de medianoche</strong>
-              <p>Te avisamos a las 22:00 si tienes hábitos pendientes para evitar penalizaciones al grupo.</p>
-            </div>
-            <input v-model="notifyMidnight" type="checkbox" class="toggle" />
-          </label>
-
-          <label class="setting-row">
-            <div class="setting-info">
-              <strong>Mensajes del chat del equipo</strong>
-              <p>Notificaciones cuando los miembros de tu grupo envíen mensajes.</p>
-            </div>
-            <input v-model="notifyChat" type="checkbox" class="toggle" />
-          </label>
-
-          <label class="setting-row">
-            <div class="setting-info">
-              <strong>Modo de alerta por inactividad</strong>
-              <p>Avisar al equipo cuando la salud del grupo baje de 80 puntos.</p>
-            </div>
-            <input v-model="autoStreakProtection" type="checkbox" class="toggle" />
-          </label>
-        </div>
-
-        <div class="actions-row">
-          <button type="button" class="btn btn-primary" @click="handleSave">
-            <AppIcon name="check" :size="15" />
-            Guardar preferencias
-          </button>
-          <span v-if="saveSuccess" class="success-note">¡Preferencias guardadas!</span>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-title">
-          <h2>Seguridad y Sesión</h2>
-          <span>Protección de cuenta</span>
-        </div>
-
-        <div class="security-meta">
-          <p>Tu sesión está protegida con doble token (Access Token en memoria y Refresh Token HttpOnly).</p>
-          <div class="sec-tags">
-            <span class="pill-sec">Bcrypt Cost 12</span>
-            <span class="pill-sec">HttpOnly Cookies</span>
-            <span class="pill-sec">Anti-Race Conditions</span>
-          </div>
-        </div>
-      </section>
-    </div>
-  </div>
-</template>
-
+<template><div class="game-page"><div class="game-wrap">
+<header class="game-header"><div><h1>Configuración</h1></div><span class="game-chip"><AppIcon name="settings" :size="16" />Centro de controles</span></header>
+<div class="game-grid"><div class="game-stack"><section class="game-panel"><div class="game-title"><h2><AppIcon name="bell" :size="19" />Recordatorios y equipo</h2><small>{{ active }} / 3 activados</small></div><label class="setting"><span class="setting-icon amber"><AppIcon name="moon" :size="22" /></span><span class="setting-copy"><strong>Antes de que termine el día</strong><small>Recordatorio a las 22:00 cuando tengas hábitos pendientes.</small></span><input v-model="preferences.midnight" type="checkbox" role="switch" aria-label="Recordatorio antes de medianoche" /></label><label class="setting"><span class="setting-icon"><AppIcon name="message" :size="22" /></span><span class="setting-copy"><strong>Conversaciones del equipo</strong><small>Mensajes nuevos de los grupos de los que formas parte.</small></span><input v-model="preferences.chat" type="checkbox" role="switch" aria-label="Notificaciones del chat" /></label><label class="setting"><span class="setting-icon green"><AppIcon name="shield" :size="22" /></span><span class="setting-copy"><strong>Cuidar la racha del equipo</strong><small>Alerta cuando la salud del grupo baje de 80 puntos.</small></span><input v-model="preferences.inactivity" type="checkbox" role="switch" aria-label="Alertas por inactividad" /></label><p class="local-note"><AppIcon name="monitor" :size="14" />Estas preferencias se guardan en este navegador. El envío de alertas requiere conectar el servicio de notificaciones.</p></section>
+<section class="game-panel"><div class="game-title"><h2><AppIcon name="activity" :size="19" />Movimiento y efectos</h2></div><label class="setting"><span class="setting-icon"><AppIcon name="flame" :size="22" /></span><span class="setting-copy"><strong>Animaciones de la interfaz</strong><small>Dale movimiento a las llamas y a los estados de progreso.</small></span><input v-model="preferences.motion" type="checkbox" role="switch" aria-label="Animaciones de la interfaz" /></label><div class="motion-preview"><StreakFlame :size="65" :class="{ paused: !preferences.motion }" /><div><strong>{{ preferences.motion ? 'Animaciones activas' : 'Animaciones desactivadas' }}</strong><p>Vista previa de los efectos de racha.</p></div><span class="preview-label">VISTA PREVIA</span></div></section>
+<div class="save-bar"><div><span class="save-dot" :class="{ dirty }"></span><span>{{ dirty ? 'Tienes cambios por guardar' : 'Tus preferencias están al día' }}</span></div><button class="game-button" @click="save"><AppIcon name="check" :size="16" />Guardar preferencias</button></div><p v-if="message" class="save-message" role="status">{{ message }}</p></div>
+<aside class="game-stack"><section class="game-panel control-card"><span class="control-shield"><AppIcon name="settings" :size="43" /></span><h2>Preferencias de alertas</h2><div class="control-stat"><strong>{{ active }}</strong><span>preferencias de alertas<br />activadas</span></div></section><section class="game-panel account-card"><span class="account-icon"><AppIcon name="shield" :size="24" /></span><h2>Tu cuenta en Kordia</h2><p class="game-muted">Consulta tu perfil y revisa tus compromisos y avances.</p><RouterLink :to="{ name: 'perfil' }" class="game-button secondary">Ir a mi perfil<AppIcon name="arrow-right" :size="15" /></RouterLink></section><button class="restore" @click="reset"><AppIcon name="settings" :size="14" />Restablecer valores predeterminados</button></aside></div>
+</div></div></template>
 <style scoped>
-.settings-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.1rem 0;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-}
-
-.setting-row:last-child {
-  border-bottom: none;
-}
-
-.setting-info strong {
-  display: block;
-  font-size: 0.92rem;
-  margin-bottom: 0.25rem;
-}
-
-.setting-info p {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
-.toggle {
-  width: 44px;
-  height: 24px;
-  accent-color: var(--primary-strong);
-  cursor: pointer;
-}
-
-.actions-row {
-  margin-top: 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.success-note {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--success);
-}
-
-.security-meta p {
-  margin: 0 0 0.8rem;
-  font-size: 0.85rem;
-  color: var(--text-soft);
-}
-
-.sec-tags {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.pill-sec {
-  font-size: 0.72rem;
-  font-weight: 700;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: #c4b5fd;
-  padding: 0.25rem 0.6rem;
-  border-radius: 99px;
-}
+.game-title h2{display:flex;gap:10px;align-items:center}.game-title h2 svg{color:#c8a4f3}.intro{font-size:12px;color:#b4a4c4;margin:-7px 0 20px}.setting{display:flex;align-items:center;gap:15px;padding:22px 0;border-top:1px solid #3b2f48;cursor:pointer}.setting-icon{width:46px;height:48px;border:1px solid #5d4172;border-bottom:3px solid #21142e;background:#392849;border-radius:12px;display:grid;place-items:center;color:#d0b0f5;flex-shrink:0}.amber{background:#443026;border-color:#72503a;color:#f2c18c}.green{background:#2d3e34;border-color:#4d6a50;color:#bed6a3}.setting-copy{flex:1;min-width:0}.setting-copy strong{display:block;font-size:13px;margin-bottom:7px}.setting-copy small{display:block;font-size:11px;line-height:1.7;color:#b9a9c8}.setting input{appearance:none;-webkit-appearance:none;width:46px;height:27px;border:1px solid #665072;border-bottom:3px solid #130d1c;background:#312739;border-radius:9px;flex-shrink:0;position:relative;cursor:pointer;transition:background .2s}.setting input:before{content:'';width:17px;height:17px;position:absolute;left:3px;top:3px;border-radius:5px;background:#9b87ab;transition:transform .2s,background .2s}.setting input:checked{background:#8462a8;border-color:#ba92e2}.setting input:checked:before{transform:translateX(20px);background:#f0dfff}.local-note{display:flex;gap:8px;align-items:flex-start;font-size:10px;line-height:1.8;color:#a797b7;margin:12px 0 0}.local-note svg{flex-shrink:0;margin-top:3px}.motion-preview{display:flex;gap:15px;align-items:center;background:#2c2235;border:1px dashed #594065;padding:15px;border-radius:12px}.motion-preview strong{font-size:12px}.motion-preview p{font-size:10px;color:#bda7cc;line-height:1.7}.preview-label{font-size:7px;letter-spacing:.1em;color:#c6a9d8;margin-left:auto}.paused :deep(svg){animation:none!important}.save-bar{display:flex;justify-content:space-between;align-items:center;gap:15px}.save-bar>div{display:flex;gap:8px;align-items:center;font-size:10px;color:#b9a5ca}.save-dot{width:6px;height:6px;background:#b2ce94;border-radius:50%}.save-dot.dirty{background:#eabd80}.save-message{margin:-9px 0 0;font-size:12px;line-height:1.6;color:#d2b2f2}.control-card{text-align:center;background:#30233d;border-color:#614573}.control-shield{display:grid;place-items:center;width:96px;height:104px;margin:5px auto 25px;background:#9973bd;color:#efdaff;clip-path:polygon(50% 0,95% 23%,95% 73%,50% 100%,5% 73%,5% 23%)}.control-card h2{font-size:23px;margin:14px 0}.control-card .game-kicker{font-size:8px}.control-stat{display:flex;gap:12px;justify-content:center;align-items:center;border-top:1px solid #594069;margin-top:24px;padding-top:20px;text-align:left}.control-stat strong{font-size:35px;color:#e1c3fa}.control-stat span{font-size:10px;line-height:1.7;color:#cbb2dd}.account-icon{color:#bbd29f}.account-card h2{font-size:15px;margin:13px 0}.account-card .game-button{margin-top:20px;width:100%;font-size:11px}.restore{display:flex;align-items:center;justify-content:center;gap:7px;font-size:9px;background:none;border:0;color:#b19ac3;padding:7px}.restore:hover{color:#ead1ff}@media(max-width:650px){.setting{gap:10px}.setting-icon{width:36px;height:40px}.setting-copy strong{font-size:12px}.setting-copy small{font-size:10px}.save-bar{flex-wrap:wrap}.save-bar .game-button{width:100%}.preview-label{display:none}}
 </style>
