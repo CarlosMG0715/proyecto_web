@@ -50,7 +50,7 @@ export const groupService = {
       }
     })
   },
-  async create(payload: { name: string; category: string; color: string; initialHabit: { name: string; icon: string } }) {
+  async create(payload: { name: string; category: string; color: string; inviteCode?: string; initialHabit: { name: string; icon: string } }) {
     const { data } = await api.post<{ group: RemoteGroup }>('/groups', payload)
     return data.group
   },

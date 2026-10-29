@@ -13,6 +13,8 @@ const createGroupSchema = z.object({
   description: z.string().trim().max(200).default(''),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#8b5cf6'),
   timeZone: z.string().trim().refine(validTimeZone, 'La zona horaria no es válida').default('America/Bogota'),
+  inviteCode: z.string().trim().transform((s) => s.toUpperCase())
+    .refine((s) => /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(s), 'El código de invitación no tiene el formato válido').optional(),
   initialHabit: z.object({
     name: z.string().trim().min(1, 'El grupo debe tener al menos un hábito').max(80),
     icon: z.string().trim().min(1).max(12).default('🎯'),

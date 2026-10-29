@@ -39,15 +39,6 @@ function todayCompletion(group: Group): number {
   return Math.round((done / group.members.length) * 100)
 }
 
-function normalizePrefix(name: string): string {
-  const clean = name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]/g, '')
-    .toUpperCase()
-  return (clean.slice(0, 4) || 'KORD').padEnd(4, 'X')
-}
-
 function randomSuffix(): string {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
   let out = ''
@@ -55,6 +46,15 @@ function randomSuffix(): string {
     out += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return out
+}
+
+function inviteCodePrefix(groupName: string): string {
+  const clean = groupName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+  return (clean.slice(0, 4) || 'KORD').padEnd(4, 'X')
 }
 
 function loadCatalog(): Group[] {
@@ -362,7 +362,7 @@ export const useGroupsStore = defineStore('groups', () => {
   })
 
   function generateUniqueInviteCode(groupName = 'KORD'): string {
-    const prefix = normalizePrefix(groupName)
+    const prefix = inviteCodePrefix(groupName)
     let candidate = `${prefix}-${randomSuffix()}`
     let attempts = 0
     while (isInviteCodeTaken(candidate) && attempts < 50) {

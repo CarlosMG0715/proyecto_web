@@ -45,50 +45,59 @@ const isSubmitting = ref(false)
 // Estado para "Unirse a un grupo"
 const joinCode = ref('')
 
+watch(joinCode, (value) => {
+  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  // Conserva los códigos numéricos antiguos; los códigos nuevos llevan guion tras el prefijo.
+  const formatted = /^\d{5,8}$/.test(compact)
+    ? compact
+    : compact.length > 4
+      ? `${compact.slice(0, 4)}-${compact.slice(4, 8)}`
+      : compact
+  if (formatted !== value) joinCode.value = formatted
+})
+
 const currentCategory = computed(
   () => CATEGORIES.find((c) => c.label === category.value) ?? CATEGORIES[0]!,
 )
 
-function generateUniqueSuffix(prefix: string): string {
-  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
-  for (let attempt = 0; attempt < 40; attempt++) {
-    let suffix = ''
-    for (let i = 0; i < 4; i++) {
-      suffix += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    const candidate = `${prefix}-${suffix}`
-    if (!groupsStore.isInviteCodeTaken(candidate)) {
-      return suffix
-    }
-  }
-  return String(Math.floor(1000 + Math.random() * 9000))
-}
-
-const codePrefix = computed(() => {
-  const clean = name.value
+function normalizeInvitePrefix(groupName: string): string {
+  const clean = groupName
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9]/g, '')
     .toUpperCase()
   return (clean.slice(0, 4) || 'KORD').padEnd(4, 'X')
-})
+}
 
-const previewInviteCode = computed(() => {
-  const suffix = codeSuffix.value || '7492'
-  const candidate = `${codePrefix.value}-${suffix}`
-  if (groupsStore.isInviteCodeTaken(candidate)) {
-    return groupsStore.generateUniqueInviteCode(name.value || 'KORD')
+function generateUniqueSuffix(prefix: string): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const randomSuffix = (): string => {
+    const bytes = new Uint8Array(4)
+    window.crypto.getRandomValues(bytes)
+    return Array.from(bytes, (byte) => chars[byte % chars.length]).join('')
   }
-  return candidate
-})
+  let suffix = randomSuffix()
+  for (let attempt = 0; attempt < 40; attempt++) {
+    if (!groupsStore.isInviteCodeTaken(`${prefix}-${suffix}`)) return suffix
+    suffix = randomSuffix()
+  }
+  return suffix
+}
+
+const codePrefix = computed(() => normalizeInvitePrefix(name.value))
+const previewInviteCode = computed(() => `${codePrefix.value}-${codeSuffix.value || 'QELE'}`)
 
 function regenerateCode(): void {
   codeSuffix.value = generateUniqueSuffix(codePrefix.value)
   copied.value = false
 }
 
-async function copyInviteCode(textToCopy?: string): Promise<void> {
-  const target = textToCopy ?? previewInviteCode.value
+watch(name, () => {
+  if (groupsStore.isInviteCodeTaken(previewInviteCode.value)) regenerateCode()
+})
+
+async function copyInviteCode(textToCopy: string): Promise<void> {
+  const target = textToCopy
   try {
     await navigator.clipboard.writeText(target)
   } catch {
@@ -106,10 +115,10 @@ watch(isOpen, (open) => {
   if (open) {
     mode.value = activeTab.value
     name.value = ''
+    codeSuffix.value = generateUniqueSuffix('KORD')
     category.value = 'Programación'
     selectedColor.value =
       GROUP_COLORS[groupsStore.groups.length % GROUP_COLORS.length] ?? '#8b5cf6'
-    codeSuffix.value = generateUniqueSuffix('KORD')
     copied.value = false
     error.value = null
     joinSuccess.value = ''
@@ -138,6 +147,7 @@ async function handleCreate(): Promise<void> {
       name: name.value.trim(),
       category: category.value,
       color: selectedColor.value,
+      inviteCode: previewInviteCode.value,
       initialHabit: { name: currentCategory.value.defaultHabit, icon: '🎯' },
     })
     const group = groupsStore.createGroup(
@@ -332,7 +342,7 @@ async function handleJoin(): Promise<void> {
             </div>
           </div>
 
-          <!-- CÓDIGO DE INVITACIÓN ÚNICO (GRANDE Y DESTACADO) -->
+          <!-- Vista previa del mismo código que se envía al servidor al crear el grupo. -->
           <div class="code-showcase">
             <div class="code-showcase-top">
               <span class="ticket-tag">
@@ -343,27 +353,13 @@ async function handleJoin(): Promise<void> {
             <div class="code-showcase-main">
               <strong class="showcase-number">{{ previewInviteCode }}</strong>
               <div class="ticket-actions">
-                <button
-                  type="button"
-                  class="ticket-action"
-                  title="Generar otro código único"
-                  @click="regenerateCode"
-                >
+                <button type="button" class="ticket-action" title="Generar otro código" @click="regenerateCode">
                   Otro código
-                </button>
-                <button
-                  type="button"
-                  class="ticket-action copy"
-                  title="Copiar código"
-                  @click="copyInviteCode()"
-                >
-                  <AppIcon :name="copied ? 'check' : 'copy'" :size="15" />
-                  {{ copied ? '¡Copiado!' : 'Copiar' }}
                 </button>
               </div>
             </div>
             <small class="code-hint">
-              Este código es irrepetible y se guardará automáticamente al crear el grupo.
+              Si ya existe, te daremos otro al crear el grupo. Guárdalo para invitar a tu equipo.
             </small>
           </div>
 
@@ -391,9 +387,9 @@ async function handleJoin(): Promise<void> {
               <input
                 v-model="joinCode"
                 type="text"
-                maxlength="16"
+                maxlength="9"
                 class="big-code-input"
-                placeholder="XXXX-0000"
+                placeholder="KORD-FHJ4"
                 autofocus
               />
             </div>
