@@ -1,15 +1,18 @@
+// arranque del proceso: lee variables locales y crea express y prisma.
 require('dotenv').config()
 
 const app = require('./src/app')
 const { prisma } = require('./src/prisma')
 
 if (require.main === module) {
+  // solo abre el puerto cuando este archivo se ejecuta directamente.
   const port = Number(process.env.PORT || 3000)
-  const server = app.listen(port, () => {
+  const server = app.listen(port, '0.0.0.0', () => {
     console.log(`API escuchando en http://localhost:${port}`)
   })
 
   const shutdown = (signal) => {
+    // cierra conexiones de forma ordenada para no dejar trabajo de base pendiente.
     console.log(`Recibida señal ${signal}; cerrando servidor`)
     server.close(async (error) => {
       if (error) {

@@ -3,10 +3,13 @@
  * Cumple con el estándar de tipado estricto de punta a punta (cero any).
  */
 
+// tipos compartidos para que formularios, stores y api usen la misma forma de autenticacion.
 export interface User {
   id: string
   name: string
   email: string
+  characterId?: string
+  themeId?: string
   createdAt?: string
 }
 

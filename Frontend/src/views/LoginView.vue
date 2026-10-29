@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// pantalla de acceso y alta; valida campos y delega registro/login al servicio de autenticacion.
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'

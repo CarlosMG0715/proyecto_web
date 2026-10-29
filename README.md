@@ -33,22 +33,6 @@ proyecto_web/
 
 El directorio del cliente se llama `Frontend` (mayúscula) porque así está versionado. En Windows no conviene renombrarlo a `frontend` sin un `git mv` coordinado.
 
-## Qué se reorganizó y por qué
-
-En `fix/reorganize-workspace` se limpió lo que no formaba parte de la aplicación:
-
-| Cambio | Motivo |
-| --- | --- |
-| Se eliminó `backend/src/models/` | Prisma ya es el modelo. El archivo solo reexportaba el cliente y duplicaba la ruta de importación. |
-| Se eliminaron `node-cron` y `socket.io` del backend, y `socket.io-client` del frontend | Estaban en `package.json` y no se importaban en ningún archivo. |
-| Se eliminó `Frontend/src/assets/s/hola.img` | Archivo vacío, sin referencias. Era un placeholder. |
-| `server.js` se partió en `src/app.js` y middlewares | El arranque HTTP no debe mezclarse con CORS, 404 y el manejador de errores. |
-| JWT, CORS y cookies viven en `src/config.js` | Evita secretos y opciones duplicadas entre middleware y servicio. |
-| `styles.css` pasa a reset global e `index.html` usa título e idioma reales | El CSS vacío no se cargaba; la plantilla de Vite no describe el producto. |
-| README del frontend deja de ser el de la plantilla Vue | La documentación del proyecto vive aquí; el frontend solo resume sus scripts. |
-
-Las carpetas de agentes (`.agents`, `.claude`, `.cursor`, `.devin`) no pertenecen al runtime y no se versionan.
-
 ## Desarrollo local
 
 Requisitos: Node.js 22.18 o superior, npm y Docker para PostgreSQL.
@@ -81,7 +65,17 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 npm run dev
 ```
 
-Vite inicia normalmente en `http://localhost:5173`. `VITE_API_URL` apunta a `http://localhost:3000/api`.
+Vite inicia normalmente en `http://localhost:5173` y reenvía `/api` a Express en `http://localhost:3000`. En despliegues, `VITE_API_URL` puede apuntar a la URL HTTPS de la API.
+
+## Usar grupos desde otros computadores
+
+En desarrollo local, las cuentas y los grupos se guardan en el PostgreSQL de este computador. Para que Carlos y otras personas vean los mismos grupos, todos deben entrar a la misma app publicada y esa app debe conectarse a una sola base de datos PostgreSQL en la nube.
+
+La configuración `render.yaml` publica el frontend y Express bajo el mismo dominio, conecta una base PostgreSQL y aplica las migraciones al iniciar. En Render, crea un Blueprint desde la rama que quieras publicar. Está configurado con los planes gratuitos para probarlo sin cobro: Render indica que la base expira después de 30 días y el servidor web se duerme tras 15 minutos sin tráfico; al volver a abrir la app puede tardar alrededor de un minuto en despertar. Antes del vencimiento, exporta la base o cámbiala a un plan pago si necesitas conservar los datos.
+
+Después del despliegue, cada integrante se registra en la URL compartida. Quien cree el grupo comparte su código de invitación; el resto lo ingresa desde sus propias cuentas. Las cuentas y grupos que existen solo en el PostgreSQL local no aparecen automáticamente en la base publicada.
+
+El cliente usa `/api` en desarrollo y producción. Si más adelante frontend y API se publican en dominios separados, configura `VITE_API_URL` con la URL HTTPS de la API, agrega el dominio del cliente a `CORS_ORIGINS` y ajusta `COOKIE_SAME_SITE=none` para las cookies entre dominios.
 
 ## API de autenticación (fase actual)
 
@@ -97,10 +91,23 @@ Vite inicia normalmente en `http://localhost:5173`. `VITE_API_URL` apunta a `htt
 
 El access token no se guarda en `localStorage`; vive en el store de Pinia. El refresh token va en cookie `refreshToken` con `path=/api/auth`.
 
+## Personalización por cuenta
+
+El personaje (`User.characterId`) y el tema (`User.themeId`) se guardan en PostgreSQL para el usuario autenticado. El navegador conserva una caché, pero al iniciar sesión se carga la elección del servidor, también en incógnito. Las cuentas se identifican por su ID, sin mezclar preferencias de personas con el mismo nombre.
+
+- `GET /api/profile/preferences` carga la personalización de la cuenta.
+- `PATCH /api/profile/preferences` guarda `characterId`, `themeId` o ambos. El usuario se obtiene del token, no del cuerpo de la petición.
+- Login y renovación de sesión incluyen el personaje y el tema guardados.
+- La lista de grupos incluye los avatares actuales de sus miembros. La interfaz los actualiza cada 15 segundos mientras está visible y al volver a la ventana.
+
+En Perfil, el estado **Guardado en tu cuenta** aparece después de la confirmación del servidor. Si el guardado falla, se muestra un aviso con **Reintentar**. Tras aplicar por primera vez la migración `20261021120000_profile_preferences_and_group_join_requests`, vuelve a elegir el personaje y el tema que antes estaban guardados solo en el navegador.
+
+La personalización, los check-ins y el chat se guardan en el servidor. Las rachas y los días cumplidos se calculan desde los check-ins guardados, por cuenta y por grupo. Los corazones siguen como indicador visual; todavía falta implementar el cierre diario y las penalizaciones automáticas.
+
 ## Base técnica
 
 - Express 5 con CORS configurable, JSON limitado a 1 MB, `x-correlation-id` y errores centralizados.
 - PostgreSQL 16 en Docker Compose y Prisma 6.19.0 (usuarios, grupos, membresías, hábitos, check-ins, penalizaciones, mensajes y sesiones).
 - Seed idempotente: usuario administrador y grupo `HABITOS-DEMO`. Requiere `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` (mínimo 12 caracteres) en `backend/.env`.
 - Vue 3, TypeScript, Vue Router, Pinia y Axios con `withCredentials`.
-- Login, renovación automática de token y rutas protegidas (`/groups`) están implementados; grupos, hábitos, chat y cron de penalizaciones aún no tienen API ni UI real.
+- Autenticación, personalización, grupos, solicitudes de ingreso, hábitos, check-ins e historial del chat tienen API. Falta definir y programar el cierre diario que actualiza la salud del grupo y aplica penalizaciones.

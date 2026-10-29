@@ -1,3 +1,4 @@
+// prisma lee este esquema para crear tablas y generar el cliente de javascript.
 generator client {
   provider = "prisma-client-js"
 }
@@ -37,13 +38,18 @@ enum RiskLevel {
 }
 
 model User {
+  // cuenta de la persona y sus relaciones con actividad del sistema.
   id            String            @id @default(cuid())
   name          String
   email         String            @unique
   passwordHash  String
+  characterId   String            @default("sprout")
+  themeId       String            @default("sprout")
   createdAt     DateTime          @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
   memberships   GroupMembership[]
+  joinRequests  GroupJoinRequest[] @relation("JoinRequester")
+  handledJoinRequests GroupJoinRequest[] @relation("JoinDecisionMaker")
   createdGroups Group[]           @relation("GroupCreator")
   createdHabits Habit[]           @relation("HabitCreator")
   checkIns      CheckIn[]
@@ -56,6 +62,7 @@ model User {
 }
 
 model Group {
+  // espacio compartido; la zona horaria define el dia de check-in.
   id               String            @id @default(cuid())
   name             String
   inviteCode       String            @unique
@@ -67,17 +74,23 @@ model Group {
   updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
   createdBy        User              @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
   memberships      GroupMembership[]
+  joinRequests     GroupJoinRequest[]
   habits           Habit[]
   penalties        Penalty[]
   messages         Message[]
   closures         DailyClosure[]
   dropoutRisks     DropoutRisk[]
+  description      String            @default("")
+  category         String            @default("General")
+  color            String            @default("#8b5cf6")
+
 
   @@index([createdById])
   @@map("groups")
 }
 
 model GroupMembership {
+  // union entre cuenta y grupo, con rol y fecha de ingreso.
   id       String    @id @default(cuid())
   groupId  String
   userId   String
@@ -92,10 +105,12 @@ model GroupMembership {
 }
 
 model Habit {
+  // meta compartida que los miembros pueden completar cada dia.
   id          String    @id @default(cuid())
   groupId     String
   createdById String
   name        String
+  icon        String    @default("🎯")
   description String?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now()) @db.Timestamptz(3)
@@ -111,11 +126,13 @@ model Habit {
 }
 
 model CheckIn {
+  // cumplimiento diario unico por persona y habito, con una nota opcional.
   id          String   @id @default(cuid())
   habitId     String
   userId      String
   checkInDate DateTime @db.Date
   checkedAt   DateTime @default(now()) @db.Timestamptz(3)
+  note        String   @default("")
   habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -183,6 +200,7 @@ model DropoutRisk {
 }
 
 model Message {
+  // texto que pertenece a un grupo y puede tener autor o ser del sistema.
   id          String       @id @default(cuid())
   groupId     String
   userId      String?
@@ -200,6 +218,7 @@ model Message {
 }
 
 model Session {
+  // refresh token representado como hash y vinculado a su rotacion.
   id           String    @id @default(cuid())
   userId       String
   familyId     String    @default(cuid())
@@ -217,4 +236,27 @@ model Session {
   @@index([userId, isRevoked])
   @@index([familyId])
   @@map("sessions")
+}
+
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model GroupJoinRequest {
+  id          String            @id @default(cuid())
+  groupId     String
+  requesterId String
+  status      JoinRequestStatus @default(PENDING)
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  decidedAt   DateTime?         @db.Timestamptz(3)
+  decidedById String?
+  group       Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  requester   User              @relation("JoinRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  decidedBy   User?             @relation("JoinDecisionMaker", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([groupId, status, createdAt])
+  @@index([requesterId, status])
+  @@map("group_join_requests")
 }

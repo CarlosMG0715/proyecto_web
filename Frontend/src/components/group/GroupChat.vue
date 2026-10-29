@@ -1,368 +1,42 @@
 <script setup lang="ts">
-/**
- * Chat del grupo (panel derecho desplegable).
- * Hoy trabaja con el store local; luego Carlos lo conectará a socket.io.
- */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
-import UserAvatar from '@/components/ui/UserAvatar.vue'
+import CharacterIcon from '@/components/ui/CharacterIcon.vue'
+import { useCharacterStore } from '@/stores/characters'
 import type { ChatMessage, Group, GroupMember } from '@/types/group'
 import { dayLabel, formatClock } from '@/utils/time'
-
-const props = defineProps<{
-  group: Group
-  alert: string | null
-}>()
-
-const emit = defineEmits<{
-  close: []
-  send: [text: string]
-}>()
-
-interface ChatRow {
-  message: ChatMessage
-  author: GroupMember | undefined
-  showDay: boolean
-  showHeader: boolean
-}
-
+const props = defineProps<{ group: Group; alert: string | null; expanded?: boolean }>()
+const emit = defineEmits<{ close: []; send: [text: string]; toggleExpand: [] }>()
+const characters = useCharacterStore()
 const draft = ref('')
 const scroller = ref<HTMLElement | null>(null)
-
-const onlineCount = computed(() => props.group.members.filter((m) => m.isOnline).length)
-
-const rows = computed<ChatRow[]>(() => {
-  const list: ChatRow[] = []
-  let prev: ChatMessage | undefined
-  for (const message of props.group.messages) {
-    const showDay = !prev || dayLabel(prev.sentAt) !== dayLabel(message.sentAt)
-    const sameAuthor =
-      prev !== undefined &&
-      prev.kind === 'user' &&
-      prev.authorId === message.authorId &&
-      new Date(message.sentAt).getTime() - new Date(prev.sentAt).getTime() < 5 * 60_000
-    list.push({
-      message,
-      author: props.group.members.find((m) => m.id === message.authorId),
-      showDay,
-      showHeader: showDay || !sameAuthor,
-    })
-    prev = message
-  }
-  return list
+const liked = ref<Record<string, boolean>>({})
+const online = computed(() => props.group.members.filter(m => m.isOnline).length)
+const completed = computed(() => props.group.members.filter(m => m.checkedInToday).length)
+const quickReplies = ['¡Listo por hoy!', '¿Cómo van?', '¡Buen avance!']
+interface Row { message: ChatMessage; author: GroupMember | undefined; showDay: boolean; showHeader: boolean }
+const rows = computed<Row[]>(() => {
+  let previous: ChatMessage | undefined
+  return props.group.messages.map(message => {
+    const showDay = !previous || dayLabel(previous.sentAt) !== dayLabel(message.sentAt)
+    const same = previous?.kind === 'user' && message.kind === 'user' && previous.authorId === message.authorId && new Date(message.sentAt).getTime() - new Date(previous.sentAt).getTime() < 300000
+    previous = message
+    return { message, author: props.group.members.find(m => m.id === message.authorId), showDay, showHeader: showDay || !same }
+  })
 })
-
-async function scrollToBottom(): Promise<void> {
-  await nextTick()
-  if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight
-}
-
-function submit(): void {
-  const text = draft.value.trim()
-  if (!text) return
-  emit('send', text)
-  draft.value = ''
-}
-
-watch(() => props.group.messages.length, scrollToBottom)
-watch(() => props.group.id, scrollToBottom)
-onMounted(scrollToBottom)
+async function scrollBottom() { await nextTick(); if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight }
+function submit() { const text = draft.value.trim(); if (!text) return; emit('send', text); draft.value = '' }
+watch(() => props.group.messages.length, scrollBottom)
+watch(() => props.group.id, () => { draft.value = ''; scrollBottom() })
+onMounted(scrollBottom)
 </script>
-
-<template>
-  <section class="chat">
-    <header class="chat-head">
-      <div class="title">
-        <h3>Chat del grupo</h3>
-        <div class="presence">
-          <div class="stack">
-            <UserAvatar
-              v-for="m in group.members"
-              :key="m.id"
-              :name="m.name"
-              :src="m.avatarUrl"
-              :size="20"
-            />
-          </div>
-          <span>{{ group.members.length }} miembros · {{ onlineCount }} en línea</span>
-        </div>
-      </div>
-      <button type="button" class="icon-btn" title="Cerrar chat" @click="emit('close')">
-        <AppIcon name="x" :size="18" />
-      </button>
-    </header>
-
-    <div v-if="alert" class="alert">
-      <AppIcon name="alert" :size="16" />
-      <p>{{ alert }}</p>
-    </div>
-
-    <div ref="scroller" class="messages">
-      <template v-for="row in rows" :key="row.message.id">
-        <div v-if="row.showDay" class="day-sep">
-          <span>{{ dayLabel(row.message.sentAt) }}</span>
-        </div>
-
-        <div v-if="row.message.kind === 'system'" class="system-msg">
-          <AppIcon name="shield" :size="13" />
-          {{ row.message.text }}
-        </div>
-
-        <div
-          v-else
-          class="msg"
-          :class="{ mine: row.author?.isCurrentUser, grouped: !row.showHeader }"
-        >
-          <div class="avatar-slot">
-            <UserAvatar
-              v-if="row.showHeader && !row.author?.isCurrentUser"
-              :name="row.author?.name ?? 'Usuario'"
-              :src="row.author?.avatarUrl ?? null"
-              :size="32"
-            />
-          </div>
-          <div class="body">
-            <div v-if="row.showHeader" class="meta">
-              <span class="author">{{ row.author?.isCurrentUser ? 'Tú' : row.author?.name }}</span>
-              <span class="time">{{ formatClock(row.message.sentAt) }}</span>
-            </div>
-            <p class="bubble">{{ row.message.text }}</p>
-          </div>
-        </div>
-      </template>
-    </div>
-
-    <form class="composer" @submit.prevent="submit">
-      <input v-model="draft" type="text" maxlength="500" placeholder="Escribe un mensaje…" />
-      <button type="submit" class="send" :disabled="!draft.trim()" title="Enviar">
-        <AppIcon name="send" :size="16" />
-      </button>
-    </form>
-  </section>
-</template>
-
+<template><section class="chat">
+<header class="chat-head"><span class="chat-emblem"><AppIcon name="message" :size="22" /></span><div class="chat-title"><h3>Campamento</h3><span><i></i>{{ online }} en línea · {{ group.members.length }} miembros</span></div><div class="chat-head-actions"><button type="button" class="size-toggle-btn" :title="expanded ? 'Minimizar chat' : 'Ampliar chat lateral'" @click="emit('toggleExpand')"><AppIcon :name="expanded ? 'chevron-right' : 'chevron-left'" :size="14" />{{ expanded ? 'Minimizar' : 'Ampliar' }}</button><button type="button" class="icon-button" aria-label="Cerrar chat" @click="emit('close')"><AppIcon name="x" :size="17" /></button></div></header>
+<div class="team-checks"><div class="camp-avatars"><template v-for="m in group.members.slice(0, 5)" :key="m.id"><CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="26" /></template></div><span><AppIcon name="check" :size="13" />{{ completed }}/{{ group.members.length }} hoy</span></div>
+<div v-if="alert" class="alert"><AppIcon name="bell" :size="15" /><p>{{ alert }}</p></div>
+<div ref="scroller" class="messages" role="log" aria-label="Mensajes del equipo" aria-live="polite" aria-relevant="additions text"><p v-if="!rows.length" class="empty-chat">Aún no hay mensajes.</p><template v-for="row in rows" :key="row.message.id"><div v-if="row.showDay" class="day-sep"><span>{{ dayLabel(row.message.sentAt) }}</span></div><div v-if="row.message.kind === 'system'" class="system-msg"><span><AppIcon name="shield" :size="18" /></span><p>{{ row.message.text }}</p></div><article v-else class="msg" :class="{ mine: row.author?.isCurrentUser, grouped: !row.showHeader }"><div class="avatar-slot"><CharacterIcon v-if="row.showHeader" :character="characters.forMember(row.author?.id ?? 'guest', row.author?.isCurrentUser, row.author?.name)" :size="28" /></div><div class="message-body"><div v-if="row.showHeader" class="meta"><strong>{{ row.author?.isCurrentUser ? 'Tú' : row.author?.name ?? 'Miembro' }}</strong><span v-if="row.author?.role === 'ADMIN'" class="leader">ADMIN</span></div><p class="bubble">{{ row.message.text }}</p><div class="message-foot"><time :datetime="row.message.sentAt">{{ formatClock(row.message.sentAt) }}</time><button class="reaction" :class="{ reacted: liked[row.message.id] }" :aria-label="liked[row.message.id] ? 'Quitar mi apoyo' : 'Apoyar mensaje'" :aria-pressed="!!liked[row.message.id]" @click="liked[row.message.id] = !liked[row.message.id]"><AppIcon name="heart" :size="12" /><span v-if="liked[row.message.id]">1</span></button></div></div></article></template></div>
+<div class="quick-replies"><button v-for="reply in quickReplies" :key="reply" @click="draft = reply">{{ reply }}</button></div><form class="composer" @submit.prevent="submit"><label class="sr-only" :for="`chat-input-${group.id}`">Mensaje al equipo</label><input :id="`chat-input-${group.id}`" v-model="draft" maxlength="500" autocomplete="off" placeholder="Mensaje al equipo…" /><button class="send" type="submit" :disabled="!draft.trim()" aria-label="Enviar mensaje"><AppIcon name="send" :size="19" /></button></form>
+</section></template>
 <style scoped>
-.chat {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-sidebar);
-  border-left: 1px solid var(--border);
-}
-
-.chat-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 1.1rem 1.1rem 0.9rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.title h3 {
-  margin: 0;
-  font-size: 0.98rem;
-}
-
-.presence {
-  margin-top: 0.4rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.74rem;
-  color: var(--muted);
-}
-
-.stack {
-  display: flex;
-}
-
-.stack > * + * {
-  margin-left: -6px;
-}
-
-.stack :deep(.avatar) {
-  box-shadow: 0 0 0 2px var(--bg-sidebar);
-}
-
-.icon-btn {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-}
-
-.icon-btn:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.alert {
-  margin: 0.9rem 1rem 0;
-  display: flex;
-  gap: 0.55rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(245, 165, 36, 0.35);
-  background: var(--warning-soft);
-  color: #fcd34d;
-  font-size: 0.8rem;
-  line-height: 1.4;
-}
-
-.alert p {
-  margin: 0;
-}
-
-.messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.75rem 1rem 1rem;
-  display: flex;
-  flex-direction: column;
-}
-
-.day-sep {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin: 1rem 0 0.4rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: capitalize;
-}
-
-.day-sep::before,
-.day-sep::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-.system-msg {
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0.5rem 0;
-  padding: 0.35rem 0.7rem;
-  border-radius: 99px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-size: 0.72rem;
-  color: var(--text-soft);
-  text-align: center;
-}
-
-.msg {
-  display: flex;
-  gap: 0.6rem;
-  margin-top: 0.75rem;
-  max-width: 88%;
-}
-
-.msg.grouped {
-  margin-top: 0.2rem;
-}
-
-.avatar-slot {
-  width: 32px;
-  flex-shrink: 0;
-}
-
-.body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.meta {
-  display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  margin-bottom: 0.2rem;
-}
-
-.author {
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.time {
-  font-size: 0.68rem;
-  color: var(--muted);
-}
-
-.bubble {
-  margin: 0;
-  padding: 0.55rem 0.75rem;
-  border-radius: 4px 12px 12px 12px;
-  background: var(--surface-2);
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--text);
-  word-wrap: break-word;
-}
-
-.msg.mine {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-
-.msg.mine .avatar-slot {
-  display: none;
-}
-
-.msg.mine .body {
-  align-items: flex-end;
-}
-
-.msg.mine .bubble {
-  border-radius: 12px 4px 12px 12px;
-  background: var(--primary-strong);
-  color: #fff;
-}
-
-.composer {
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem 1rem;
-  border-top: 1px solid var(--border);
-}
-
-.composer input {
-  flex: 1;
-  min-width: 0;
-  padding: 0.65rem 0.85rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  font-size: 0.86rem;
-  outline: none;
-}
-
-.composer input:focus {
-  border-color: var(--primary);
-}
-
-.send {
-  width: 40px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--primary-strong);
-  color: #fff;
-}
-
-.send:disabled {
-  background: var(--surface-2);
-  color: var(--muted);
-  cursor: not-allowed;
-}
+.chat{height:100%;min-height:0;display:flex;flex-direction:column;background:#1e1b28;color:#eee5f6}.chat-head{display:flex;align-items:center;gap:11px;padding:19px 16px;background:#342741;border-bottom:2px solid #53405f}.chat-emblem{display:grid;place-items:center;width:41px;height:43px;background:#aa83cc;border:2px solid #d5b5eb;border-bottom:4px solid #73518c;border-radius:12px;color:#291a35;transform:rotate(-5deg)}.chat-title{flex:1}.chat-title h3{font-size:17px;margin:0 0 6px;letter-spacing:-.02em}.chat-title>span{display:flex;align-items:center;gap:5px;font-size:9px;color:#cbb5dc}.chat-title i{width:5px;height:5px;background:#b8d69b;border-radius:50%}.chat-head-actions{display:flex;align-items:center;gap:6px}.size-toggle-btn{display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 9px;background:#281c34;color:#dec6f5;border:1px solid #6c4d7d;border-bottom:3px solid #180f21;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer}.size-toggle-btn:hover{background:#352546;color:#fff}.icon-button{width:28px;height:30px;background:#281c34;color:#d9c0ee;border:1px solid #6c4d7d;border-bottom:3px solid #180f21;border-radius:7px;display:grid;place-items:center;cursor:pointer}.team-checks{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;background:#272031;border-bottom:1px solid #43334e;gap:12px}.camp-avatars{display:flex;padding-left:5px;gap:3px}.camp-avatars>*{margin-left:-5px}.team-checks>span{display:flex;align-items:center;gap:5px;font-size:9px;color:#c4d7a8;background:#34402e;border:1px solid #526443;padding:5px 8px;border-radius:6px}.alert{display:flex;gap:8px;align-items:flex-start;padding:12px 15px;background:#40302a;color:#ead0a0;font-size:10px;border-bottom:1px solid #69503a}.alert p{margin:0;line-height:1.6}.alert svg{flex-shrink:0}.messages{flex:1;min-height:0;overflow-y:auto;padding:4px 16px 17px;display:flex;flex-direction:column;scrollbar-color:#695276 #201928}.day-sep{display:flex;align-items:center;gap:8px;margin:17px 0 9px;font-size:9px;text-transform:capitalize;color:#ac96be}.day-sep:before,.day-sep:after{content:'';height:1px;background:#44344f;flex:1}.day-sep span{background:#2b2235;border:1px solid #493451;border-radius:5px;padding:4px 7px}.system-msg{align-self:center;display:flex;align-items:center;gap:9px;margin:8px 0;padding:11px;background:#303b2c;border:1px solid #536848;border-bottom:3px solid #1a2617;border-radius:9px;color:#cdddba;max-width:100%}.system-msg>span{color:#d6c58a;flex-shrink:0}.system-msg p{font-size:10px;line-height:1.6;margin:0;overflow-wrap:anywhere}.msg{display:flex;align-items:flex-start;gap:10px;max-width:95%;margin-top:13px}.msg.grouped{margin-top:4px}.avatar-slot{width:28px;flex-shrink:0;padding-top:4px}.message-body{min-width:0;flex:1}.meta{display:flex;align-items:center;gap:6px;margin:0 0 6px}.meta strong{font-size:10px;font-weight:700;color:#d4b9e9}.leader{font-size:6px;background:#51412e;color:#e3ca94;border:1px solid #75603d;padding:2px 3px;border-radius:3px}.bubble{font-size:12px;line-height:1.7;padding:11px 13px;margin:0;background:#352a41;border:1px solid #604570;border-bottom:3px solid #171020;border-radius:3px 13px 13px 13px;color:#ede1f6;white-space:pre-wrap;overflow-wrap:anywhere}.msg.mine{align-self:flex-end;flex-direction:row-reverse}.mine .meta{justify-content:flex-end}.mine .bubble{background:#654b7c;border-color:#a17bba;border-bottom-color:#332140;border-radius:13px 3px 13px 13px}.message-foot{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin:4px 0}.message-foot time{font-size:8px;color:#b5a0c4}.reaction{display:inline-flex;align-items:center;gap:3px;border:0;border-radius:5px;background:none;color:#a88dbb;padding:3px;font-size:8px}.reaction:hover,.reaction.reacted{color:#f1b1c3;background:#4f3048}.reaction.reacted svg{fill:#e6a1b4}.quick-replies{display:flex;gap:6px;overflow-x:auto;padding:11px 12px 5px;border-top:1px solid #493451;flex-shrink:0}.quick-replies button{border:1px solid #684979;border-bottom:3px solid #1a1024;background:#36263f;color:#d8bce9;border-radius:7px;padding:6px;font-size:8px;white-space:nowrap}.quick-replies button:hover{background:#4d355b}.composer{display:flex;gap:8px;align-items:center;padding:10px 12px 14px}.composer input{flex:1;min-width:0;border:1px solid #715180;border-bottom:3px solid #100a18;border-radius:9px;background:#15101d;color:#f3e8fc;font-size:11px;padding:13px 11px;outline-offset:2px}.composer input::placeholder{color:#a48bb7}.send{width:42px;height:43px;display:grid;place-items:center;background:#b4d58b;border:1px solid #daecb7;border-bottom:4px solid #687e4e;border-radius:10px;color:#2e4229;transition:transform .15s}.send:enabled:hover{transform:translateY(-2px);background:#c8e5a3}.send:disabled{background:#43364e;border-color:#655171;color:#9983a8;cursor:default}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.empty-chat{font-size:11px;color:#b7a3c6;text-align:center;padding:25px}.chat button:focus-visible,.chat input:focus-visible{outline:2px solid #e0bdff;outline-offset:2px}
 </style>

@@ -1,308 +1,41 @@
 <script setup lang="ts">
-/**
- * VISTA CALENDARIO
- * Como pidió Valeria: un calendario limpio con algunos checks de días cumplidos,
- * coherente con el resto del diseño sin sobrecargas.
- */
 import { computed, ref } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
+import StreakFlame from '@/components/ui/StreakFlame.vue'
 import { toDateKey } from '@/mocks/demoGroups'
 import { useGroupsStore } from '@/stores/groups'
-
-const groupsStore = useGroupsStore()
-
-const currentDate = ref(new Date())
-
-const monthNames = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-]
-const weekDays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-
-const currentMonthLabel = computed(() => {
-  return `${monthNames[currentDate.value.getMonth()]} ${currentDate.value.getFullYear()}`
+import '@/assets/styles/game-views.css'
+const store = useGroupsStore()
+const current = ref(new Date())
+const selected = ref(toDateKey(new Date()))
+const today = toDateKey(new Date())
+const checked = computed(() => new Set(store.checkInHistory))
+const label = computed(() => current.value.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }))
+const weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+const days = computed(() => {
+  const y = current.value.getFullYear(), m = current.value.getMonth()
+  const offset = (new Date(y, m, 1).getDay() + 6) % 7
+  const count = new Date(y, m + 1, 0).getDate()
+  return Array.from({ length: Math.ceil((offset + count) / 7) * 7 }, (_, i) => {
+    const d = new Date(y, m, i - offset + 1), key = toDateKey(d)
+    return { number: d.getDate(), key, inMonth: d.getMonth() === m, done: checked.value.has(key), future: key > today }
+  })
 })
-
-interface CalendarDay {
-  dayNumber: number
-  dateKey: string
-  isCurrentMonth: boolean
-  isToday: boolean
-  hasCheckIn: boolean
-}
-
-const calendarDays = computed<CalendarDay[]>(() => {
-  const year = currentDate.value.getFullYear()
-  const month = currentDate.value.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-
-  // En JS: 0=Dom, 1=Lun. Para que lunes sea 0:
-  let startingDay = firstDay.getDay() - 1
-  if (startingDay === -1) startingDay = 6
-
-  const totalDays = lastDay.getDate()
-  const days: CalendarDay[] = []
-
-  const todayKey = toDateKey(new Date())
-  const checkedSet = new Set(groupsStore.checkInHistory)
-
-  // Días previos de relleno
-  const prevMonthLastDay = new Date(year, month, 0).getDate()
-  for (let i = startingDay - 1; i >= 0; i--) {
-    const d = prevMonthLastDay - i
-    days.push({
-      dayNumber: d,
-      dateKey: `prev-${d}`,
-      isCurrentMonth: false,
-      isToday: false,
-      hasCheckIn: false,
-    })
-  }
-
-  // Días del mes
-  for (let d = 1; d <= totalDays; d++) {
-    const key = toDateKey(new Date(year, month, d))
-    days.push({
-      dayNumber: d,
-      dateKey: key,
-      isCurrentMonth: true,
-      isToday: key === todayKey,
-      hasCheckIn: checkedSet.has(key),
-    })
-  }
-
-  // Rellenar hasta completar semanas
-  const remaining = (7 - (days.length % 7)) % 7
-  for (let i = 1; i <= remaining; i++) {
-    days.push({
-      dayNumber: i,
-      dateKey: `next-${i}`,
-      isCurrentMonth: false,
-      isToday: false,
-      hasCheckIn: false,
-    })
-  }
-
-  return days
-})
-
-function prevMonth() {
-  currentDate.value = new Date(currentDate.value.getFullYear(), currentDate.value.getMonth() - 1, 1)
-}
-
-function nextMonth() {
-  currentDate.value = new Date(currentDate.value.getFullYear(), currentDate.value.getMonth() + 1, 1)
-}
+const completed = computed(() => days.value.filter(d => d.inMonth && d.done).length)
+const elapsed = computed(() => days.value.filter(d => d.inMonth && d.key <= today).length)
+const percent = computed(() => elapsed.value ? Math.round(completed.value / elapsed.value * 100) : 0)
+const selectedLabel = computed(() => new Date(`${selected.value}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }))
+function move(n: number) { current.value = new Date(current.value.getFullYear(), current.value.getMonth() + n, 1); selected.value = toDateKey(current.value) }
+function reset() { current.value = new Date(); selected.value = today }
 </script>
-
-<template>
-  <div class="page">
-    <div class="page-inner">
-      <header class="page-head">
-        <div>
-          <h1>Calendario de Hábitos</h1>
-          <p>Visualiza tu constancia y días cumplidos a lo largo del mes.</p>
-        </div>
-
-        <div class="month-controls">
-          <button type="button" class="btn btn-ghost icon-only" @click="prevMonth" title="Mes anterior">
-            <AppIcon name="chevron-left" :size="16" />
-          </button>
-          <span class="month-title">{{ currentMonthLabel }}</span>
-          <button type="button" class="btn btn-ghost icon-only" @click="nextMonth" title="Mes siguiente">
-            <AppIcon name="chevron-right" :size="16" />
-          </button>
-        </div>
-      </header>
-
-      <section class="panel calendar-panel">
-        <div class="weekdays-grid">
-          <span v-for="w in weekDays" :key="w" class="weekday-header">{{ w }}</span>
-        </div>
-
-        <div class="days-grid">
-          <div
-            v-for="(day, idx) in calendarDays"
-            :key="idx"
-            class="day-cell"
-            :class="{
-              'other-month': !day.isCurrentMonth,
-              'today': day.isToday,
-              'has-check': day.hasCheckIn,
-            }"
-          >
-            <span class="day-num">{{ day.dayNumber }}</span>
-
-            <div v-if="day.hasCheckIn" class="check-indicator" title="Hábito cumplido">
-              <AppIcon name="check" :size="13" :stroke-width="3" />
-            </div>
-            <div v-else-if="day.isToday && !day.hasCheckIn" class="pending-indicator">
-              <span>Pendiente</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Resumen rápido -->
-      <footer class="legend-row">
-        <div class="legend-item">
-          <span class="legend-dot check"></span>
-          <span>Día con check-in completado</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot today"></span>
-          <span>Día actual</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot empty"></span>
-          <span>Sin registro</span>
-        </div>
-      </footer>
-    </div>
-  </div>
-</template>
-
+<template><div class="game-page"><div class="game-wrap">
+<header class="game-header"><div><h1>Calendario</h1></div><button class="game-button secondary" @click="reset"><AppIcon name="calendar" :size="15" />Volver a hoy</button></header>
+<div class="game-stat-grid"><div class="game-stat"><AppIcon name="check" /><strong>{{ completed }}</strong><small>Días registrados este mes</small></div><div class="game-stat"><AppIcon name="target" /><strong>{{ percent }}%</strong><small>De los días transcurridos</small></div><div class="game-stat"><AppIcon name="flame" /><strong>{{ store.bestStreak }}</strong><small>Mejor racha personal</small></div></div>
+<div class="game-grid"><section class="game-panel calendar"><div class="game-title"><div class="month-name"><h2>{{ label }}</h2></div><div class="month-buttons"><button class="month-button" aria-label="Mes anterior" @click="move(-1)"><AppIcon name="chevron-left" /></button><button class="month-button" aria-label="Mes siguiente" @click="move(1)"><AppIcon name="chevron-right" /></button></div></div>
+<div class="calendar-grid"><span v-for="w in weekdays" :key="w" class="weekday">{{ w }}</span><button v-for="d in days" :key="d.key" class="day" :class="{ outside: !d.inMonth, done: d.done, today: d.key === today, selected: d.key === selected, future: d.future }" :aria-label="`${d.key}${d.done ? ', con check-in' : ', sin registro'}${d.key === today ? ', hoy' : ''}`" :aria-pressed="d.key === selected" :aria-current="d.key === today ? 'date' : undefined" @click="selected = d.key"><span class="day-number">{{ d.number }}</span><span v-if="d.done" class="day-seal"><AppIcon name="check" :size="20" :stroke-width="3" /></span><span v-else-if="d.key === today" class="today-dot"></span><span v-else class="day-dot"></span><small v-if="d.key === today">HOY</small></button></div><div class="legend"><span><i class="checked"></i>Con check-in</span><span><i class="current"></i>Hoy</span><span><i></i>Sin registro</span></div></section>
+<aside class="game-stack"><section class="game-panel selected-panel" aria-live="polite"><span class="game-kicker">DÍA SELECCIONADO</span><h2>{{ selectedLabel }}</h2><div class="selected-seal" :class="{ complete: checked.has(selected) }"><AppIcon :name="checked.has(selected) ? 'shield' : selected > today ? 'calendar' : 'target'" :size="43" /></div><h3>{{ checked.has(selected) ? 'Check-in registrado' : selected > today ? 'Próximo día' : selected === today ? 'Sin check-in hoy' : 'Sin registro' }}</h3><RouterLink v-if="selected === today" :to="{ name: 'inicio' }" class="game-button">Ver hábitos de hoy<AppIcon name="arrow-right" :size="15" /></RouterLink></section>
+<section class="game-panel flame-panel"><StreakFlame :size="110" /><div><strong>{{ store.bestStreak }} días</strong><h2>Mejor racha</h2></div></section></aside></div>
+</div></div></template>
 <style scoped>
-.month-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: var(--surface);
-  padding: 0.35rem 0.6rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-
-.month-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  min-width: 140px;
-  text-align: center;
-}
-
-.icon-only {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
-
-.calendar-panel {
-  padding: 1.5rem;
-}
-
-.weekdays-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  text-align: center;
-}
-
-.weekday-header {
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-.days-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 0.5rem;
-}
-
-.day-cell {
-  aspect-ratio: 1;
-  min-height: 80px;
-  padding: 0.5rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: border-color 0.15s, transform 0.15s;
-}
-
-.day-cell.other-month {
-  opacity: 0.28;
-  background: transparent;
-  border-color: transparent;
-}
-
-.day-cell.today {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary);
-}
-
-.day-cell.has-check {
-  background: rgba(34, 197, 94, 0.08);
-  border-color: rgba(34, 197, 94, 0.4);
-}
-
-.day-num {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text-soft);
-}
-
-.day-cell.today .day-num {
-  color: #c4b5fd;
-}
-
-.check-indicator {
-  align-self: flex-end;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--success);
-  color: #052e16;
-}
-
-.pending-indicator {
-  align-self: flex-start;
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: var(--warning);
-  background: var(--warning-soft);
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-}
-
-.legend-row {
-  display: flex;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  font-size: 0.82rem;
-  color: var(--text-soft);
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.legend-dot.check {
-  background: var(--success);
-}
-
-.legend-dot.today {
-  background: var(--primary);
-}
-
-.legend-dot.empty {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-}
+.month-name h2{font-size:24px;text-transform:capitalize;margin-top:8px;letter-spacing:-.04em}.month-buttons{display:flex;gap:7px}.month-button{width:35px;height:36px;display:grid;place-items:center;background:#35283f;color:#dec5f5;border:1px solid #60466e;border-bottom-width:3px;border-radius:8px}.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px}.weekday{text-align:center;color:#baabc9;font-size:10px;font-weight:700;padding:5px 0 12px}.day{aspect-ratio:.92;min-height:65px;padding:9px;background:#2a2235;border:1px solid #46334f;border-bottom:4px solid #140f1e;border-radius:12px;color:#d8c9e7;display:flex;flex-direction:column;align-items:center;position:relative;transition:transform .18s,border-color .18s}.day:hover{transform:translateY(-3px);border-color:#ae85cf}.day-number{align-self:flex-start;font-size:11px;font-weight:700}.day-seal{margin:auto;display:grid;place-items:center;width:31px;height:31px;border-radius:9px;background:var(--theme-accent,#b5d68c);color:#35442c;border-bottom:3px solid #799653;transform:rotate(-7deg)}.day.done{background:color-mix(in srgb,var(--theme-accent) 24%,#24202e);border-color:var(--theme-accent);border-bottom-color:var(--theme-dark)}.day-dot{width:4px;height:4px;border-radius:50%;background:#65516f;margin:auto}.day.today{border-color:var(--theme-accent);background:color-mix(in srgb,var(--theme-accent) 24%,#211c2d)}.day.selected{outline:2px solid var(--theme-accent);outline-offset:2px}.day small{font-size:7px;letter-spacing:.09em;color:#ead5ff;position:absolute;bottom:7px}.today-dot{width:12px;height:12px;transform:rotate(45deg);background:var(--theme-accent);margin:auto;border-radius:3px}.day.outside{opacity:.3}.day.future:not(.today){background:#221a2c}.legend{display:flex;flex-wrap:wrap;gap:18px;margin-top:25px;color:#b5a4c5;font-size:9px}.legend>span{display:flex;align-items:center;gap:7px}.legend i{display:inline-block;width:8px;height:8px;background:#65516f;border-radius:3px}.legend .checked{background:var(--theme-accent)}.legend .current{background:var(--theme-accent)}.selected-panel{text-align:center}.selected-panel h2{text-transform:capitalize;font-size:17px;margin-top:13px;line-height:1.5}.selected-seal{margin:25px auto;width:88px;height:94px;display:grid;place-items:center;background:color-mix(in srgb,var(--theme-accent) 22%,#382741);color:var(--theme-accent);clip-path:polygon(50% 0,95% 23%,95% 73%,50% 100%,5% 73%,5% 23%)}.selected-seal.complete{background:var(--theme-accent);color:#39482e}.selected-panel h3{font-size:16px;margin:0 0 12px}.selected-panel .game-button{margin-top:22px;width:100%;font-size:11px}.flame-panel{display:flex;align-items:center;gap:15px;padding:19px}.flame-panel strong{color:#ffc17b;font-size:21px;display:block;margin-bottom:9px}.flame-panel h2{font-size:14px;margin-bottom:7px}.flame-panel p{font-size:10px}.calendar-tip{display:flex;align-items:center;justify-content:center;gap:10px;color:#ab94bc}.calendar-tip p{font-size:10px;line-height:1.9}.calendar-tip strong{font-weight:500;color:#ccb1dd}@media(max-width:650px){.calendar{padding:15px}.calendar-grid{gap:6px}.day{padding:6px;min-height:56px;border-radius:8px}.day-number{font-size:10px}.day-seal{width:22px;height:24px}.day-seal svg{width:15px}.day small{font-size:6px;bottom:4px}.month-name h2{font-size:21px}.calendar .game-kicker{font-size:8px}.weekday{font-size:8px}}
 </style>

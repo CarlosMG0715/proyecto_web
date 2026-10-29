@@ -1,7 +1,9 @@
+// comprueba el token de acceso antes de dejar pasar a una ruta privada.
 const jwt = require('jsonwebtoken')
 const { jwtSecret } = require('../config')
 
 function authenticateToken(req, res, next) {
+  // espera el formato authorization: bearer <token>.
   const authHeader = req.headers.authorization
   const token = authHeader && authHeader.split(' ')[1]
 
@@ -13,6 +15,7 @@ function authenticateToken(req, res, next) {
   }
 
   try {
+    // verify revisa la firma y la expiracion; el resultado identifica al usuario.
     req.user = jwt.verify(token, jwtSecret)
     next()
   } catch {

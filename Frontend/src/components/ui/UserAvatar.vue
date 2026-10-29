@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// avatar reutilizable; muestra una imagen si existe y si no genera iniciales.
 /**
  * Foto de perfil circular. Si no hay foto, muestra las iniciales con un color
  * estable (siempre el mismo color para el mismo nombre).
@@ -70,6 +71,10 @@ const dotSize = computed(() => Math.max(8, Math.round(props.size * 0.26)))
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+  object-position: center;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .initials {
