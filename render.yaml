@@ -26,5 +26,4 @@ databases:
     databaseName: kordia
     user: kordia
     plan: free
-    diskSizeGB: 1
     region: ohio
