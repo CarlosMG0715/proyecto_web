@@ -4,7 +4,22 @@ const { prisma } = require('../prisma')
 const groupRepository = require('../repositories/groupRepository')
 
 const httpError = (message, status) => Object.assign(new Error(message), { status })
-const newInviteCode = () => crypto.randomBytes(4).toString('hex').toUpperCase()
+const INVITE_CODE_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+const inviteCodePrefix = (groupName) => {
+  const clean = String(groupName || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+  return (clean.slice(0, 4) || 'KORD').padEnd(4, 'X')
+}
+const newInviteCode = (groupName) => {
+  let suffix = ''
+  for (let i = 0; i < 4; i++) {
+    suffix += INVITE_CODE_CHARS[crypto.randomInt(INVITE_CODE_CHARS.length)]
+  }
+  return `${inviteCodePrefix(groupName)}-${suffix}`
+}
 
 // Convierte la fila de Prisma en el contrato `Group` del frontend (types/group.ts)
 function toGroupDto(group, currentUserId) {
@@ -109,10 +124,15 @@ const groupInclude = () => ({
 class GroupService {
   async create({ userId, ...data }) {
     // genera un codigo unico y agrega al creador con rol de admin.
-    for (let i = 0; i < 3; i++) {
+    const requestedInviteCode = data.inviteCode?.startsWith(`${inviteCodePrefix(data.name)}-`)
+      ? data.inviteCode
+      : null
+    for (let i = 0; i < 10; i++) {
       try {
         const group = await groupRepository.createWithAdmin({
-          ...data, userId, inviteCode: newInviteCode(),
+          ...data,
+          userId,
+          inviteCode: i === 0 && requestedInviteCode ? requestedInviteCode : newInviteCode(data.name),
         })
         return this.getForMember({ userId, groupId: group.id })
       } catch (err) {

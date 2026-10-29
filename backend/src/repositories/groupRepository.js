@@ -23,8 +23,11 @@ const groupRepository = {
     })
   },
 
-  findByInviteCode(inviteCode) {
-    return prisma.group.findUnique({ where: { inviteCode }, include: withMembers })
+  async findByInviteCode(inviteCode) {
+    const normalizedCode = inviteCode.trim().toUpperCase()
+    const group = await prisma.group.findUnique({ where: { inviteCode: normalizedCode }, include: withMembers })
+    if (group || !normalizedCode.includes('-')) return group
+    return prisma.group.findUnique({ where: { inviteCode: normalizedCode.replace('-', '') }, include: withMembers })
   },
 
   findMembership(groupId, userId) {

@@ -20,7 +20,13 @@ async function requestJoin(req, res, next) {
   try {
     const code = typeof req.body.inviteCode === 'string' ? req.body.inviteCode.trim().toUpperCase() : ''
     if (!code) return res.status(400).json({ error: 'Escribe el código de invitación' })
-    const group = await prisma.group.findUnique({ where: { inviteCode: code }, select: { id: true, name: true } })
+    let group = await prisma.group.findUnique({ where: { inviteCode: code }, select: { id: true, name: true } })
+    if (!group && code.includes('-')) {
+      group = await prisma.group.findUnique({
+        where: { inviteCode: code.replace('-', '') },
+        select: { id: true, name: true },
+      })
+    }
     if (!group) return res.status(404).json({ error: 'No encontramos una aventura con ese código' })
     const memberCount = await prisma.groupMembership.count({ where: { groupId: group.id } })
     if (memberCount === 0) return res.status(410).json({ error: 'Esta aventura quedó archivada y ya no recibe solicitudes' })
