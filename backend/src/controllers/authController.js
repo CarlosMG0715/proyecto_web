@@ -64,6 +64,23 @@ class AuthController {
     }
   }
 
+   // Lista las sesiones abiertas del usuario.
+
+    async listSessions(req, res, next) {
+    try {
+      const refreshToken = extractRefreshToken(req)
+
+      const sessions = await authService.listSessions({
+        userId: req.user.userId,
+        refreshToken,
+      })
+
+      return res.json({ sessions })
+    } catch (error) {
+      return next(error)
+    }
+  }
+
   async logout(req, res, next) {
     try {
       const refreshToken = extractRefreshToken(req)
@@ -77,6 +94,7 @@ class AuthController {
       next(error)
     }
   }
+
 
   async logoutAll(req, res, next) {
     try {

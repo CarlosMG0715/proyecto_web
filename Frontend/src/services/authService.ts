@@ -5,6 +5,7 @@ import { useSessionStore } from '@/stores/session'
 import type {
   ApiErrorResponse,
   AuthResponse,
+  DeviceSession,
   LoginCredentials,
   RegisterPayload,
 } from '@/types/auth'
@@ -70,4 +71,9 @@ export async function logout(): Promise<void> {
   } finally {
     session.clearSession()
   }
+}
+
+export async function fetchSessions(): Promise<DeviceSession[]> {
+  const { data } = await api.get<{ sessions: DeviceSession[] }>('/auth/sessions')
+  return data.sessions
 }

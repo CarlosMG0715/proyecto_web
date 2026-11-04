@@ -34,3 +34,12 @@ export interface ApiErrorResponse {
   error: string
   correlationId?: string
 }
+
+export interface DeviceSession {
+  id: string
+  userAgent: string | null
+  createdAt: string
+  lastUsedAt: string | null
+  expiresAt: string
+  isCurrent: boolean
+}

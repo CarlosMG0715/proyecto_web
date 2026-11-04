@@ -188,6 +188,46 @@ class AuthService {
     })
   }
 
+  // Identificar sesiones abiertas al navegador y permitir revocarlas 
+    async listSessions({ userId, refreshToken }) {
+    const now = new Date()
+    const currentSession = refreshToken
+      ? await prisma.session.findFirst({
+          where: {
+            tokenHash: hashToken(refreshToken),
+            userId,
+            isRevoked: false,
+          },
+          select: { familyId: true },
+        })
+      : null
+
+    // Busca las sesiones vigentes de esta cuenta.
+    const sessions = await prisma.session.findMany({
+      where: {
+        userId,
+        isRevoked: false,
+        expiresAt: { gt: now },
+      },
+      select: {
+        id: true,
+        familyId: true,
+        userAgent: true,
+        createdAt: true,
+        lastUsedAt: true,
+        expiresAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // Envía a la pantalla los datos visibles y marca la sesión actual.
+    return sessions.map(({ familyId, ...session }) => ({
+      ...session,
+      isCurrent: familyId === currentSession?.familyId,
+    }))
+  }
+
+
   async revokeAllUserSessions(userId) {
     // invalida todas las sesiones activas de la cuenta.
     await prisma.session.updateMany({
@@ -196,5 +236,7 @@ class AuthService {
     })
   }
 }
+
+
 
 module.exports = new AuthService()
