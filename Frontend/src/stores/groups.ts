@@ -10,7 +10,9 @@ import {
   deleteHabitRequest,
   fetchCheckInHistory,
   leaveGroupRequest,
+  removeGroupMemberRequest,
   sendGroupMessageRequest,
+  setGroupMemberRoleRequest,
   toggleCheckInRequest,
   updateGroupRequest,
   updateHabitRequest,
@@ -113,7 +115,7 @@ export const useGroupsStore = defineStore('groups', () => {
       streak: remote.streak ?? previous?.streak ?? 0,
       health: remote.health ?? previous?.health ?? 100,
       completionHistory: remote.completionHistory ?? previous?.completionHistory ?? [0, 0, 0, 0, 0, 0, 0],
-      habits: remote.habits ?? previous?.habits ?? [],
+      habits: (remote.habits ?? previous?.habits ?? []).map((habit) => ({ ...habit, targetDays: habit.targetDays ?? 30 })),
       timeZone: remote.timeZone ?? previous?.timeZone ?? 'America/Bogota',
       members: remote.memberships.map((membership) => {
         const old = priorMembers.get(membership.user.id)
@@ -472,10 +474,20 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  async function createGroupHabit(groupId: string, name: string, icon = '🎯'): Promise<void> {
+  async function setGroupMemberRole(groupId: string, memberId: string, role: 'ADMIN' | 'MIEMBRO'): Promise<void> {
+    await setGroupMemberRoleRequest(groupId, memberId, role)
+    await refreshRemoteGroups()
+  }
+
+  async function removeGroupMember(groupId: string, memberId: string): Promise<void> {
+    await removeGroupMemberRequest(groupId, memberId)
+    await refreshRemoteGroups()
+  }
+
+  async function createGroupHabit(groupId: string, name: string, icon = '🎯', targetDays: 30 | 90 | 120 = 30): Promise<void> {
     error.value = null
     try {
-      await createHabitRequest(groupId, name, icon)
+      await createHabitRequest(groupId, name, icon, targetDays)
       await refreshRemoteGroups()
     } catch (cause) {
       error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -484,11 +496,11 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  async function editGroupHabit(groupId: string, habitId: string, name: string, icon = '🎯'): Promise<void> {
+  async function editGroupHabit(groupId: string, habitId: string, name: string, targetDays: 30 | 90 | 120, icon = '🎯'): Promise<void> {
     error.value = null
     try {
       const currentIcon = allGroups.value.find((group) => group.id === groupId)?.habits?.find((habit) => habit.id === habitId)?.icon
-      await updateHabitRequest(groupId, habitId, { name, icon: currentIcon ?? icon })
+      await updateHabitRequest(groupId, habitId, { name, icon: currentIcon ?? icon, targetDays })
       await refreshRemoteGroups()
     } catch (cause) {
       error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -616,6 +628,8 @@ export const useGroupsStore = defineStore('groups', () => {
     toggleMyCheckIn,
     updateMyHabit,
     updateGroup,
+    setGroupMemberRole,
+    removeGroupMember,
     createGroupHabit,
     editGroupHabit,
     removeGroupHabit,

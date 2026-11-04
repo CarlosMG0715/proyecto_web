@@ -94,6 +94,29 @@ async function updateGroup(req, res, next) {
   catch (error) { return next(error) }
 }
 
+async function setMemberRole(req, res, next) {
+  try {
+    const group = await groupService.setMemberRole({
+      userId: req.user.userId,
+      groupId: req.params.groupId,
+      memberId: req.params.memberId,
+      role: req.body.role,
+    })
+    return res.json({ group })
+  } catch (error) { return next(error) }
+}
+
+async function removeGroupMember(req, res, next) {
+  try {
+    const group = await groupService.removeGroupMember({
+      userId: req.user.userId,
+      groupId: req.params.groupId,
+      memberId: req.params.memberId,
+    })
+    return res.json({ group })
+  } catch (error) { return next(error) }
+}
+
 async function leaveGroup(req, res, next) {
   try { return res.json(await groupService.leaveGroup({ userId: req.user.userId, groupId: req.params.groupId })) }
   catch (error) { return next(error) }
@@ -131,4 +154,4 @@ async function sendMessage(req, res, next) {
   catch (error) { return next(error) }
 }
 
-module.exports = { list: listMine, listMine, create, requestJoin, inbox, myRequests, decide, checkInHistory, getOne, updateGroup, leaveGroup, createHabit, updateHabit, deleteHabit, checkIn, updateCheckInNote, sendMessage }
+module.exports = { list: listMine, listMine, create, requestJoin, inbox, myRequests, decide, checkInHistory, getOne, updateGroup, setMemberRole, removeGroupMember, leaveGroup, createHabit, updateHabit, deleteHabit, checkIn, updateCheckInNote, sendMessage }

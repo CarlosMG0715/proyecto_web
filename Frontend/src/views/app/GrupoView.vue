@@ -41,6 +41,7 @@ const editing = ref(false)
 const editingGroup = ref(false)
 const confirmingLeave = ref(false)
 const draft = ref('')
+const targetDaysDraft = ref<30 | 90 | 120>(30)
 const editingHabitId = ref<string | null>(null)
 const groupNameDraft = ref('')
 const groupCategoryDraft = ref('')
@@ -82,6 +83,7 @@ const lastMessage = computed(() =>
   group.value?.messages.filter((m) => m.authorId === selectedMember.value?.id).at(-1),
 )
 const milestones = [1, 3, 7, 14, 30]
+const missionLengths = [30, 90, 120] as const
 
 watch(
   () => group.value?.id,
@@ -105,6 +107,7 @@ async function toggle() {
 
 function openEditor(habit?: GroupHabit) {
   draft.value = habit?.name ?? ''
+  targetDaysDraft.value = habit?.targetDays ?? 30
   editingHabitId.value = habit?.id ?? null
   editing.value = true
 }
@@ -113,8 +116,8 @@ async function saveHabit() {
   if (!group.value || !draft.value.trim() || !isAdmin.value) return
   saving.value = true
   try {
-    if (editingHabitId.value) await store.editGroupHabit(group.value.id, editingHabitId.value, draft.value.trim())
-    else await store.createGroupHabit(group.value.id, draft.value.trim())
+    if (editingHabitId.value) await store.editGroupHabit(group.value.id, editingHabitId.value, draft.value.trim(), targetDaysDraft.value)
+    else await store.createGroupHabit(group.value.id, draft.value.trim(), '🎯', targetDaysDraft.value)
     editing.value = false
     editingHabitId.value = null
   } catch {
@@ -130,6 +133,29 @@ async function removeHabit(habitId: string, habitName: string) {
     await store.removeGroupHabit(group.value.id, habitId)
   } catch {
     notice.value = store.error ?? 'No se pudo quitar el hábito.'
+  }
+}
+
+async function toggleMemberRole(member: NonNullable<typeof selectedMember.value>) {
+  if (!group.value || !isAdmin.value || member.isCurrentUser) return
+  const nextRole = member.role === 'ADMIN' ? 'MIEMBRO' : 'ADMIN'
+  try {
+    await store.setGroupMemberRole(group.value.id, member.id, nextRole)
+    notice.value = nextRole === 'ADMIN' ? `${nameOf(member)} ahora administra el grupo.` : `Se quitó el rol admin de ${nameOf(member)}.`
+  } catch {
+    notice.value = store.error ?? 'No se pudo cambiar el rol.'
+  }
+}
+
+async function removeMember(member: NonNullable<typeof selectedMember.value>) {
+  if (!group.value || !isAdmin.value || member.isCurrentUser) return
+  if (!window.confirm(`¿Sacar a ${nameOf(member)} del grupo?`)) return
+  try {
+    await store.removeGroupMember(group.value.id, member.id)
+    selectedId.value = ''
+    notice.value = `${nameOf(member)} salió del grupo.`
+  } catch {
+    notice.value = store.error ?? 'No se pudo quitar a esta persona.'
   }
 }
 
@@ -425,7 +451,7 @@ async function handleLeaveGroup() {
                   <span class="team-habit-icon">{{ habit.icon || '🎯' }}</span>
                   <div class="team-habit-copy">
                     <strong>{{ habit.name }}</strong>
-                    <small>{{ habit.description || 'Misión diaria del equipo' }}</small>
+                    <small>{{ habit.description || 'Misión diaria del equipo' }} · Meta: {{ habit.targetDays }} días</small>
                   </div>
                   <span class="habit-check-state" :class="{ complete: habit.checks[me?.id ?? '']?.done }">
                     {{ habit.checks[me?.id ?? '']?.done ? 'Hecho' : 'Pendiente' }}
@@ -454,6 +480,23 @@ async function handleLeaveGroup() {
                   </span>
                   <AppIcon :name="m.checkedInToday ? 'check' : 'clock'" :size="17" />
                 </button>
+                <section v-if="isAdmin && selectedMember && !selectedMember.isCurrentUser" class="member-command-card">
+                  <span class="member-command-icon"><AppIcon name="shield" :size="20" /></span>
+                  <div class="member-command-copy">
+                    <small>GESTIONAR JUGADOR</small>
+                    <strong>{{ nameOf(selectedMember) }}</strong>
+                    <span>{{ selectedMember.role === 'ADMIN' ? 'Admin de la aventura' : 'Miembro del equipo' }}</span>
+                  </div>
+                  <div class="member-admin-actions">
+                    <button class="member-role-button" @click="toggleMemberRole(selectedMember)">
+                      <AppIcon name="shield" :size="14" />
+                      {{ selectedMember.role === 'ADMIN' ? 'Quitar admin' : 'Dar admin' }}
+                    </button>
+                    <button class="member-remove-button" @click="removeMember(selectedMember)">
+                      <AppIcon name="logout" :size="14" />Sacar
+                    </button>
+                  </div>
+                </section>
               </section>
 
               <div class="reminder">
@@ -499,21 +542,70 @@ async function handleLeaveGroup() {
         @keydown.esc="editing = false"
       >
         <form
-          class="adventure-modal"
+          class="adventure-modal mission-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-title"
           @submit.prevent="saveHabit"
         >
-          <h2 id="edit-title">{{ editingHabitId ? 'Editar hábito del grupo' : 'Agregar hábito al grupo' }}</h2>
-          <label for="habit-name">Nombre del hábito</label>
-          <input id="habit-name" v-model="draft" autofocus maxlength="120" required />
-          <div>
+          <button type="button" class="mission-close" aria-label="Cerrar" @click="editing = false">
+            <AppIcon name="x" :size="19" />
+          </button>
+
+          <header class="mission-hero">
+            <div class="mission-flag" aria-hidden="true">
+              <span><AppIcon name="trophy" :size="31" /></span>
+            </div>
+            <div>
+              <span class="mission-kicker">NUEVA AVENTURA DEL EQUIPO</span>
+              <h2 id="edit-title">{{ editingHabitId ? 'Ajustar misión' : '¡Prepara la próxima misión!' }}</h2>
+              <p>Define el reto y hasta dónde llegará el equipo.</p>
+            </div>
+          </header>
+
+          <section class="mission-step">
+            <span class="mission-step-number">1</span>
+            <div class="mission-field">
+              <label for="habit-name">¿Cuál será el reto?</label>
+              <div class="mission-name-input">
+                <AppIcon name="target" :size="20" />
+                <input id="habit-name" v-model="draft" autofocus maxlength="120" placeholder="Ej. Leer 20 minutos" required />
+              </div>
+            </div>
+          </section>
+
+          <section class="mission-step">
+            <span class="mission-step-number">2</span>
+            <div class="mission-field">
+              <label>Elige la distancia</label>
+              <div class="mission-length-options">
+                <button
+                  v-for="days in missionLengths"
+                  :key="days"
+                  type="button"
+                  class="mission-length-card"
+                  :class="{ selected: targetDaysDraft === days }"
+                  :aria-pressed="targetDaysDraft === days"
+                  @click="targetDaysDraft = days"
+                >
+                  <span class="length-flag"><AppIcon name="flag" :size="18" /></span>
+                  <strong>{{ days }}</strong>
+                  <small>DÍAS</small>
+                  <em>{{ days === 30 ? 'Reto corto' : days === 90 ? 'Gran recorrido' : 'Aventura épica' }}</em>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <footer class="mission-actions">
             <button type="button" class="game-button secondary" @click="editing = false">
               Cancelar
             </button>
-            <button class="game-button" type="submit" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
-          </div>
+            <button class="mission-launch-button" type="submit" :disabled="saving">
+              <AppIcon name="flag" :size="18" />
+              {{ saving ? 'Preparando…' : editingHabitId ? 'Guardar misión' : '¡Iniciar misión!' }}
+            </button>
+          </footer>
         </form>
       </div>
 
@@ -1588,6 +1680,17 @@ async function handleLeaveGroup() {
   }
 }
 .team-habits { display: grid; gap: 12px; }
+.member-command-card { display: grid; grid-template-columns:auto 1fr; gap: 11px; margin-top: 13px; padding: 14px; background: linear-gradient(135deg,#342641,#281f32); border: 1px solid #624576; border-bottom: 3px solid #17101e; border-radius: 13px; }
+.member-command-icon { display: grid; place-items: center; width: 38px; height: 38px; color: #2a1f31; background: #c6a4eb; border-radius: 11px; box-shadow: 0 3px 0 #755598; }
+.member-command-copy { min-width: 0; }
+.member-command-copy > small,.member-command-copy > strong,.member-command-copy > span { display: block; }
+.member-command-copy > small { color:#ac8fc8; font-size:7px; letter-spacing:.12em; }
+.member-command-copy > strong { margin-top:4px; font-size:12px; }
+.member-command-copy > span { margin-top:3px; color:#b8a6c7; font-size:9px; }
+.member-admin-actions { grid-column: 1/-1; display:grid; grid-template-columns:1fr auto; gap:8px; margin-top:3px; }
+.member-admin-actions button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:36px; border-radius:9px; font-size:10px; font-weight:800; cursor:pointer; }
+.member-role-button { color:#281d31; background:#bfa0e1; border:1px solid #dabefa; border-bottom:3px solid #775990; }
+.member-remove-button { color:#ffc5ce; background:#492934; border:1px solid #7c4454; border-bottom:3px solid #211119; }
 .team-habit-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-top: 1px solid #43304e; }
 .team-habit-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 10px; background: #382b45; font-size: 18px; }
 .team-habit-copy { min-width: 0; flex: 1; }
@@ -1598,10 +1701,42 @@ async function handleLeaveGroup() {
 .habit-check-state.complete { background: #32402d; color: #c4dfa2; }
 .remove-habit { color: #f1a3ad; }
 .group-edit-modal { display: grid; gap: 10px; }
+.mission-modal { position:relative; width:min(720px,100%); max-height:calc(100vh - 34px); overflow-y:auto; padding:0; border:2px solid #725291; border-bottom:6px solid #160d20; border-radius:24px; background:#241b2e; box-shadow:0 30px 90px #050208cc; }
+.mission-close { position:absolute; z-index:3; top:17px; right:17px; display:grid; place-items:center; width:36px; height:36px; color:#d8c8e5; background:#291f34cc; border:1px solid #684e7b; border-radius:10px; cursor:pointer; }
+.mission-hero { display:grid; grid-template-columns:120px 1fr; align-items:center; gap:23px; min-height:190px; padding:30px 64px 27px 34px; overflow:hidden; background:linear-gradient(135deg,#5a3b73,#7b55a0 58%,#4a3161); border-bottom:1px solid #a17abb; position:relative; }
+.mission-hero::after { content:''; position:absolute; width:190px; height:190px; right:-75px; top:-95px; border:25px solid #ffffff0b; border-radius:50%; }
+.mission-flag { position:relative; display:grid; place-items:center; width:96px; height:104px; }
+.mission-flag::before { content:''; position:absolute; left:13px; bottom:0; width:8px; height:88px; background:#26172f; border-radius:5px; box-shadow:3px 0 #a97dcc; }
+.mission-flag::after { content:''; position:absolute; left:21px; top:6px; width:72px; height:56px; background:#c6e87e; border:4px solid #291936; border-radius:7px 10px 10px 5px; clip-path:polygon(0 0,100% 0,84% 50%,100% 100%,0 100%); box-shadow:0 5px 0 #34233f; }
+.mission-flag > span { position:relative; z-index:1; margin:-34px 0 0 16px; color:#35451f; }
+.mission-kicker { display:block; margin-bottom:8px; color:#d9f59f; font-size:9px; font-weight:900; letter-spacing:.14em; }
+.mission-hero h2 { margin:0; max-width:440px; font-size:29px; line-height:1.13; color:#fff; text-shadow:0 3px #382345; }
+.mission-hero p { margin:9px 0 0; color:#e2d4eb; font-size:12px; }
+.mission-step { display:grid; grid-template-columns:38px 1fr; gap:15px; padding:22px 30px 0; }
+.mission-step-number { display:grid; place-items:center; align-self:start; width:34px; height:34px; color:#2d2135; background:#c9ed7c; border:2px solid #e0ffa1; border-bottom:4px solid #718d3d; border-radius:10px; font-size:14px; font-weight:900; }
+.mission-field { min-width:0; }
+.mission-field > label { margin:0 0 10px; color:#f2e9f8; font-size:13px; font-weight:800; }
+.mission-name-input { display:flex; align-items:center; gap:11px; padding:0 14px; color:#c1e777; background:#191220; border:2px solid #5e456f; border-bottom:4px solid #0d0911; border-radius:13px; }
+.mission-name-input:focus-within { border-color:#b38bd0; box-shadow:0 0 0 3px #ae7dd524; }
+.mission-name-input input { min-width:0; padding:15px 0; background:transparent; border:0; outline:0; }
+.mission-length-options { display:grid; grid-template-columns:repeat(3,1fr); gap:11px; }
+.mission-length-card { position:relative; display:grid; justify-items:center; min-height:132px; padding:13px 8px 11px; color:#cbbbd7; background:#30263a; border:2px solid #51405e; border-bottom:5px solid #15101b; border-radius:15px; cursor:pointer; transition:transform .15s,border-color .15s,background .15s; }
+.mission-length-card:hover { transform:translateY(-2px); border-color:#8e6ba6; }
+.mission-length-card.selected { color:#2b3520; background:#c8e87d; border-color:#ebffad; border-bottom-color:#69813d; transform:translateY(-3px); box-shadow:0 7px 20px #0b071040; }
+.length-flag { display:grid; place-items:center; width:30px; height:30px; color:#d4b5ed; background:#493557; border-radius:9px; }
+.selected .length-flag { color:#f4ffcf; background:#6c863d; }
+.mission-length-card strong { margin-top:4px; font-size:29px; line-height:1; }
+.mission-length-card small { font-size:8px; font-weight:900; letter-spacing:.15em; }
+.mission-length-card em { margin-top:5px; font-size:8px; font-style:normal; opacity:.75; }
+.mission-actions { display:grid; grid-template-columns:auto minmax(260px,1fr); gap:12px; padding:26px 30px 30px 83px; }
+.mission-launch-button { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:60px; color:#28331c; background:#c8e87c; border:2px solid #e8ffa6; border-bottom:6px solid #6d863d; border-radius:14px; font-size:15px; font-weight:900; cursor:pointer; }
+.mission-launch-button:hover { background:#d7f58c; transform:translateY(-1px); }
+.mission-launch-button:active { transform:translateY(3px); border-bottom-width:2px; }
+.mission-launch-button:disabled { opacity:.55; cursor:default; transform:none; }
 .group-edit-modal textarea { width: 100%; resize: vertical; color: #fff; background: #18101f; border: 1px solid #6c4a81; border-radius: 8px; padding: 12px; font: inherit; }
 .group-edit-modal .color-label { font-size: 11px; margin-top: 5px; }
 .group-color-options { display: flex; gap: 10px; }
 .group-color-options button { width: 28px; height: 28px; border-radius: 50%; background: var(--group-color); border: 2px solid #ffffff55; padding: 0; }
 .group-color-options button.selected { outline: 2px solid #fff; outline-offset: 2px; }
-@media(max-width:700px) { .team-habit-row { flex-wrap: wrap; } .team-habit-copy { min-width: calc(100% - 55px); } .group-edit-modal > div:last-child { flex-wrap: wrap; } }
+@media(max-width:700px) { .team-habit-row { flex-wrap: wrap; } .team-habit-copy { min-width: calc(100% - 55px); } .group-edit-modal > div:last-child { flex-wrap: wrap; } .mission-hero{grid-template-columns:72px 1fr;min-height:150px;padding:25px 48px 22px 18px;gap:12px}.mission-flag{transform:scale(.72);transform-origin:left center}.mission-hero h2{font-size:21px}.mission-step{grid-template-columns:30px 1fr;padding:18px 16px 0;gap:10px}.mission-step-number{width:29px;height:29px}.mission-length-options{gap:6px}.mission-length-card{min-height:118px;padding-inline:4px}.mission-length-card strong{font-size:24px}.mission-actions{grid-template-columns:1fr;padding:22px 16px;}.mission-actions .secondary{order:2}.mission-actions button{width:100%}.member-admin-actions{grid-template-columns:1fr}.mission-modal{max-height:calc(100vh - 16px)} }
 </style>
