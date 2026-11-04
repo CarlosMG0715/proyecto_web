@@ -8,6 +8,7 @@ import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
 import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
+import '@/assets/styles/views/inicio.css'
 
 const session = useSessionStore()
 const characters = useCharacterStore()
@@ -15,59 +16,611 @@ const store = useGroupsStore()
 const modal = useCreateGroupModal()
 const { hours, minutes } = useMidnightCountdown()
 const name = computed(() => session.currentUser?.name ?? 'Valeria')
-const date = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+const date = new Date().toLocaleDateString('es-CO', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+})
 const habits = computed(() => store.groups.flatMap(group => {
   const member = group.members.find(m => m.isCurrentUser)
   return member ? [{ group, member }] : []
 }))
 const total = computed(() => store.doneToday + store.pendingToday)
 const ready = computed(() => total.value > 0 && !store.pendingToday)
-const progress = computed(() => total.value ? Math.round(store.doneToday / total.value * 100) : 0)
+const progress = computed(() =>
+  total.value ? Math.round((store.doneToday / total.value) * 100) : 0,
+)
 const claimed = ref(false)
 const missing = ref(false)
-function claim() { if (ready.value) claimed.value = true; else missing.value = true }
-const average = computed(() => Math.round(store.weekProgress.reduce((s, d) => s + d.value, 0) / 7))
+function claim() {
+  if (ready.value) claimed.value = true
+  else missing.value = true
+}
+const average = computed(() =>
+  Math.round(store.weekProgress.reduce((sum, day) => sum + day.value, 0) / 7),
+)
 const activity = computed(() => store.activity.slice(0, 5))
-function time(at: string) { return new Date(at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }
+function time(at: string) {
+  return new Date(at).toLocaleString('es-CO', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 </script>
 
 <template>
-  <div class="inicio-page"><div class="dashboard">
-    <header class="heading"><div><h1>Hola, {{ name.split(' ')[0] }}<em>.</em></h1></div><span class="date"><AppIcon name="calendar" :size="16" />{{ date }}</span></header>
-    <div class="columns"><div class="main-column"><div v-if="claimed" class="day-victory" role="status"><StreakFlame :size="58" /><div><strong>Día completado</strong></div><AppIcon name="shield" :size="30" /></div>
-      <section class="daily surface"><div class="daily-top"><div><h2>Progreso de hoy</h2></div><div class="score"><span class="score-label">PROGRESO DIARIO</span><strong>{{ store.doneToday }}<span>/{{ total }}</span></strong><small>hábitos de hoy</small></div></div><div class="track" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100" aria-label="Hábitos completados hoy"><span :style="{ width: `${progress}%` }"></span></div><div class="daily-bottom"><span><i class="dot"></i>{{ ready ? 'Todo listo. Cierra tu día.' : 'Pendientes: ' + store.pendingToday }}</span><span><AppIcon name="clock" :size="13" />{{ hours }} h {{ String(minutes).padStart(2, '0') }} min restantes</span></div></section>
-      <section><div class="section-title"><h2>Hábitos de hoy <b class="count">{{ total }}</b></h2></div><div class="surface habits">
-        <RouterLink v-for="(h, i) in habits" :key="h.group.id" :to="{ name: 'grupo', params: { groupId: h.group.id } }" class="habit" :class="{ done: h.member.checkedInToday }"><span class="habit-number"><AppIcon v-if="h.member.checkedInToday" name="check" /><template v-else>{{ String(i + 1).padStart(2, '0') }}</template></span><div class="habit-copy"><small>{{ h.group.name }}</small><h3>{{ h.member.habit }}</h3><p>{{ h.member.checkedInToday ? 'Completado · Sumaste a tu equipo' : 'Registra tu avance dentro del grupo' }}</p></div><span class="habit-link"><span>{{ h.member.checkedInToday ? 'Ver grupo' : 'Continuar' }}</span><AppIcon name="arrow-right" :size="16" /></span></RouterLink>
-        <div v-if="!habits.length" class="empty"><AppIcon name="target" :size="30" /><h3>Tu primer hábito empieza aquí</h3><p>Crea un grupo y comienza a avanzar en equipo.</p><button class="secondary" @click="modal.open">Crear grupo</button></div>
-        <div class="check-footer"><span><AppIcon name="shield" :size="18" />{{ claimed ? 'Día completado. ¡Bien hecho!' : 'Check diario' }}</span><button class="claim" :disabled="claimed || !total" @click="claim"><AppIcon :name="claimed ? 'check' : 'flame'" :size="16" />{{ claimed ? 'Check completado' : 'Check general' }}</button></div>
-      </div></section>
-      <section><div class="section-title"><h2>Tus equipos <b class="count">{{ store.groups.length }}</b></h2><div style="display:flex;gap:14px"><button class="text-button" @click="modal.openCreate"><AppIcon name="plus" :size="15" />Crear grupo</button><button class="text-button" @click="modal.openJoin"><AppIcon name="link" :size="15" />Unirme a un grupo</button></div></div><div class="teams">
-        <RouterLink v-for="g in store.groups" :key="g.id" :to="{ name: 'grupo', params: { groupId: g.id } }" class="team surface" :style="{ '--team': g.color }"><div class="team-top"><span class="emblem"><AppIcon name="users" :size="24" /></span><span class="team-streak"><StreakFlame :size="24" />{{ g.streak }} días</span></div><h3>{{ g.name }}</h3><p>{{ g.category }}</p><div class="team-people"><div class="avatars"><template v-for="m in g.members.slice(0, 5)" :key="m.id"><CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="33" /></template></div><AppIcon name="arrow-right" :size="17" /></div><div class="team-track"><span :style="{ width: `${g.members.length ? g.members.filter(m => m.checkedInToday).length / g.members.length * 100 : 0}%` }"></span></div><small>{{ g.members.filter(m => m.checkedInToday).length }} de {{ g.members.length }} completaron hoy</small></RouterLink>
-        <button class="new-team" @click="modal.open"><span><AppIcon name="plus" :size="24" /></span><strong>Un nuevo equipo</strong></button>
-      </div></section>
-      <section><div class="section-title"><h2>En comunidad</h2><small class="live"><i class="dot"></i>Actividad de tus equipos</small></div><div class="surface feed"><article v-for="a in activity" :key="a.id" class="feed-row"><span class="feed-icon" :class="a.kind"><AppIcon :name="a.kind === 'check-in' ? 'check' : a.kind === 'streak' ? 'flame' : a.kind === 'join' ? 'users' : 'bell'" :size="19" /></span><div><RouterLink :to="{ name: 'grupo', params: { groupId: a.groupId } }" class="feed-group">{{ store.groupById(a.groupId)?.name ?? 'Kordia' }}</RouterLink><p>{{ a.text }}</p><time :datetime="a.at">{{ time(a.at) }}</time></div><AppIcon name="activity" :size="17" class="feed-mark" /></article><p v-if="!activity.length" class="empty">Los avances de tus equipos aparecerán aquí.</p></div></section>
+<div
+  class="inicio-page">
+  <div
+    class="dashboard">
+    <header
+      class="heading">
+      <div>
+        <h1>
+          Hola,
+          {{ name.split(' ')[0] }}
+          <em>
+            .
+          </em>
+        </h1>
+      </div>
+      <span
+        class="date">
+        <AppIcon
+          name="calendar"
+          :size="16" />
+        {{ date }}
+      </span>
+    </header>
+    <div
+      class="columns">
+      <div
+        class="main-column">
+        <div
+          v-if="claimed"
+          class="day-victory"
+          role="status">
+          <StreakFlame
+            :size="58" />
+          <div>
+            <strong>
+              Día completado
+            </strong>
+          </div>
+          <AppIcon
+            name="shield"
+            :size="30" />
+        </div>
+        <section
+          class="daily surface">
+          <div
+            class="daily-top">
+            <div>
+              <h2>
+                Progreso de hoy
+              </h2>
+            </div>
+            <div
+              class="score">
+              <span
+                class="score-label">
+                PROGRESO DIARIO
+              </span>
+              <strong>
+                {{ store.doneToday }}
+                <span>
+                  /
+                  {{ total }}
+                </span>
+              </strong>
+              <small>
+                hábitos de hoy
+              </small>
+            </div>
+          </div>
+          <div
+            class="track"
+            role="progressbar"
+            :aria-valuenow="progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-label="Hábitos completados hoy">
+            <span
+              :style="{ width: `${progress}%` }">
+            </span>
+          </div>
+          <div
+            class="daily-bottom">
+            <span>
+              <i
+                class="dot">
+              </i>
+              {{ ready ? 'Todo listo. Cierra tu día.' : 'Pendientes: ' + store.pendingToday }}
+            </span>
+            <span>
+              <AppIcon
+                name="clock"
+                :size="13" />
+              {{ hours }}
+              h
+              {{ String(minutes).padStart(2, '0') }}
+              min restantes
+            </span>
+          </div>
+        </section>
+        <section>
+          <div
+            class="section-title">
+            <h2>
+              Hábitos de hoy
+              <b
+                class="count">
+                {{ total }}
+              </b>
+            </h2>
+          </div>
+          <div
+            class="surface habits">
+            <RouterLink
+              v-for="(h, i) in habits"
+              :key="h.group.id"
+              :to="{ name: 'grupo', params: { groupId: h.group.id } }"
+              class="habit"
+              :class="{ done: h.member.checkedInToday }">
+              <span
+                class="habit-number">
+                <AppIcon
+                  v-if="h.member.checkedInToday"
+                  name="check" />
+                <template
+                  v-else>
+                  {{ String(i + 1).padStart(2, '0') }}
+                </template>
+              </span>
+              <div
+                class="habit-copy">
+                <small>
+                  {{ h.group.name }}
+                </small>
+                <h3>
+                  {{ h.member.habit }}
+                </h3>
+                <p>
+                  {{ h.member.checkedInToday ? 'Completado · Sumaste a tu equipo' : 'Registra tu avance dentro del grupo' }}
+                </p>
+              </div>
+              <span
+                class="habit-link">
+                <span>
+                  {{ h.member.checkedInToday ? 'Ver grupo' : 'Continuar' }}
+                </span>
+                <AppIcon
+                  name="arrow-right"
+                  :size="16" />
+              </span>
+            </RouterLink>
+            <div
+              v-if="!habits.length"
+              class="empty">
+              <AppIcon
+                name="target"
+                :size="30" />
+              <h3>
+                Tu primer hábito empieza aquí
+              </h3>
+              <p>
+                Crea un grupo y comienza a avanzar en equipo.
+              </p>
+              <button
+                class="secondary"
+                @click="modal.open">
+                Crear grupo
+              </button>
+            </div>
+            <div
+              class="check-footer">
+              <span>
+                <AppIcon
+                  name="shield"
+                  :size="18" />
+                {{ claimed ? 'Día completado. ¡Bien hecho!' : 'Check diario' }}
+              </span>
+              <button
+                class="claim"
+                :disabled="claimed || !total"
+                @click="claim">
+                <AppIcon
+                  :name="claimed ? 'check' : 'flame'"
+                  :size="16" />
+                {{ claimed ? 'Check completado' : 'Check general' }}
+              </button>
+            </div>
+          </div>
+        </section>
+        <section>
+          <div
+            class="section-title">
+            <h2>
+              Tus equipos
+              <b
+                class="count">
+                {{ store.groups.length }}
+              </b>
+            </h2>
+            <div
+              style="display:flex;gap:14px">
+              <button
+                class="text-button"
+                @click="modal.openCreate">
+                <AppIcon
+                  name="plus"
+                  :size="15" />
+                Crear grupo
+              </button>
+              <button
+                class="text-button"
+                @click="modal.openJoin">
+                <AppIcon
+                  name="link"
+                  :size="15" />
+                Unirme a un grupo
+              </button>
+            </div>
+          </div>
+          <div
+            class="teams">
+            <RouterLink
+              v-for="g in store.groups"
+              :key="g.id"
+              :to="{ name: 'grupo', params: { groupId: g.id } }"
+              class="team surface"
+              :style="{ '--team': g.color }">
+              <div
+                class="team-top">
+                <span
+                  class="emblem">
+                  <AppIcon
+                    name="users"
+                    :size="24" />
+                </span>
+                <span
+                  class="team-streak">
+                  <StreakFlame
+                    :size="24" />
+                  {{ g.streak }}
+                  días
+                </span>
+              </div>
+              <h3>
+                {{ g.name }}
+              </h3>
+              <p>
+                {{ g.category }}
+              </p>
+              <div
+                class="team-people">
+                <div
+                  class="avatars">
+                  <template
+                    v-for="m in g.members.slice(0, 5)"
+                    :key="m.id">
+                    <CharacterIcon
+                      :character="characters.forMember(m.id, m.isCurrentUser, m.name)"
+                      :size="33" />
+                  </template>
+                </div>
+                <AppIcon
+                  name="arrow-right"
+                  :size="17" />
+              </div>
+              <div
+                class="team-track">
+                <span
+                  :style="{ width: `${g.members.length ? g.members.filter(m => m.checkedInToday).length / g.members.length * 100 : 0}%` }">
+                </span>
+              </div>
+              <small>
+                {{ g.members.filter(m => m.checkedInToday).length }}
+                de
+                {{ g.members.length }}
+                completaron hoy
+              </small>
+            </RouterLink>
+            <button
+              class="new-team"
+              @click="modal.open">
+              <span>
+                <AppIcon
+                  name="plus"
+                  :size="24" />
+              </span>
+              <strong>
+                Un nuevo equipo
+              </strong>
+            </button>
+          </div>
+        </section>
+        <section>
+          <div
+            class="section-title">
+            <h2>
+              En comunidad
+            </h2>
+            <small
+              class="live">
+              <i
+                class="dot">
+              </i>
+              Actividad de tus equipos
+            </small>
+          </div>
+          <div
+            class="surface feed">
+            <article
+              v-for="a in activity"
+              :key="a.id"
+              class="feed-row">
+              <span
+                class="feed-icon"
+                :class="a.kind">
+                <AppIcon
+                  :name="a.kind === 'check-in' ? 'check' : a.kind === 'streak' ? 'flame' : a.kind === 'join' ? 'users' : 'bell'"
+                  :size="19" />
+              </span>
+              <div>
+                <RouterLink
+                  :to="{ name: 'grupo', params: { groupId: a.groupId } }"
+                  class="feed-group">
+                  {{ store.groupById(a.groupId)?.name ?? 'Kordia' }}
+                </RouterLink>
+                <p>
+                  {{ a.text }}
+                </p>
+                <time
+                  :datetime="a.at">
+                  {{ time(a.at) }}
+                </time>
+              </div>
+              <AppIcon
+                name="activity"
+                :size="17"
+                class="feed-mark" />
+            </article>
+            <p
+              v-if="!activity.length"
+              class="empty">
+              Los avances de tus equipos aparecerán aquí.
+            </p>
+          </div>
+        </section>
+      </div>
+      <aside
+        class="right-column">
+        <section
+          class="profile surface"
+          :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color }">
+          <div
+            class="cover">
+            <span
+              class="cover-shape first">
+            </span>
+            <span
+              class="cover-shape second">
+            </span>
+            <AppIcon
+              name="target"
+              :size="58" />
+          </div>
+          <div
+            class="profile-body">
+            <div
+              class="character">
+              <CharacterIcon
+                :character="characters.current"
+                :size="96" />
+            </div>
+            <h2>
+              {{ name }}
+            </h2>
+            <RouterLink
+              :to="{ name: 'perfil' }">
+              Ver mi perfil
+              <AppIcon
+                name="arrow-right"
+                :size="14" />
+            </RouterLink>
+          </div>
+          <div
+            class="profile-stats">
+            <div>
+              <strong>
+                {{ store.groups.length }}
+              </strong>
+              <span>
+                equipos
+              </span>
+            </div>
+            <div>
+              <strong>
+                {{ store.doneToday }}
+              </strong>
+              <span>
+                checks hoy
+              </span>
+            </div>
+            <div>
+              <strong>
+                {{ store.bestStreak }}
+              </strong>
+              <span>
+                mejor racha
+              </span>
+            </div>
+          </div>
+        </section>
+        <section
+          class="streak surface">
+          <div
+            class="section-title">
+            <h2>
+              Racha personal
+            </h2>
+            <StreakFlame
+              :size="32" />
+          </div>
+          <div
+            class="streak-score">
+            <strong>
+              {{ store.bestStreak }}
+            </strong>
+            <div>
+              <b>
+                días
+              </b>
+              <small>
+                mejor racha
+              </small>
+            </div>
+            <StreakFlame
+              :size="90" />
+          </div>
+          <div
+            class="week">
+            <div
+              v-for="d in store.weekProgress"
+              :key="d.key"
+              :class="{ today: d.isToday, full: d.value === 100 }">
+              <small>
+                {{ d.label }}
+              </small>
+              <span
+                :title="`${d.value}% de cumplimiento del equipo`">
+                <AppIcon
+                  v-if="d.value === 100"
+                  name="check"
+                  :size="15" />
+                <i
+                  v-else>
+                </i>
+              </span>
+            </div>
+          </div>
+        </section>
+        <section
+          class="weekly surface">
+          <div
+            class="section-title">
+            <h2>
+              El ritmo del equipo
+            </h2>
+            <AppIcon
+              name="activity"
+              :size="18" />
+          </div>
+          <div
+            class="weekly-score">
+            <strong>
+              {{ average }}
+              <span>
+                %
+              </span>
+            </strong>
+            <p>
+              cumplimiento promedio
+              <br />
+              en los últimos 7 días
+            </p>
+          </div>
+          <div
+            class="chart"
+            role="img"
+            aria-label="Cumplimiento grupal de los últimos siete días">
+            <div
+              v-for="d in store.weekProgress"
+              :key="d.key"
+              :class="{ today: d.isToday }">
+              <div
+                class="bar">
+                <span
+                  :style="{ height: `${Math.max(d.value, 3)}%` }"
+                  :title="`${d.label}: ${d.value}%`">
+                </span>
+              </div>
+              <small>
+                {{ d.label }}
+              </small>
+            </div>
+          </div>
+          <div
+            class="monthly">
+            <span>
+              Tu constancia · últimos 30 días
+            </span>
+            <strong>
+              {{ store.completionRate30 }}
+              %
+            </strong>
+          </div>
+        </section>
+      </aside>
     </div>
-    <aside class="right-column">
-      <section class="profile surface" :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color }"><div class="cover"><span class="cover-shape first"></span><span class="cover-shape second"></span><AppIcon name="target" :size="58" /></div><div class="profile-body"><div class="character"><CharacterIcon :character="characters.current" :size="96" /></div><h2>{{ name }}</h2><RouterLink :to="{ name: 'perfil' }">Ver mi perfil<AppIcon name="arrow-right" :size="14" /></RouterLink></div><div class="profile-stats"><div><strong>{{ store.groups.length }}</strong><span>equipos</span></div><div><strong>{{ store.doneToday }}</strong><span>checks hoy</span></div><div><strong>{{ store.bestStreak }}</strong><span>mejor racha</span></div></div></section>
-      <section class="streak surface"><div class="section-title"><h2>Racha personal</h2><StreakFlame :size="32" /></div><div class="streak-score"><strong>{{ store.bestStreak }}</strong><div><b>días</b><small>mejor racha</small></div><StreakFlame :size="90" /></div><div class="week"><div v-for="d in store.weekProgress" :key="d.key" :class="{ today: d.isToday, full: d.value === 100 }"><small>{{ d.label }}</small><span :title="`${d.value}% de cumplimiento del equipo`"><AppIcon v-if="d.value === 100" name="check" :size="15" /><i v-else></i></span></div></div></section>
-      <section class="weekly surface"><div class="section-title"><h2>El ritmo del equipo</h2><AppIcon name="activity" :size="18" /></div><div class="weekly-score"><strong>{{ average }}<span>%</span></strong><p>cumplimiento promedio<br />en los últimos 7 días</p></div><div class="chart" role="img" aria-label="Cumplimiento grupal de los últimos siete días"><div v-for="d in store.weekProgress" :key="d.key" :class="{ today: d.isToday }"><div class="bar"><span :style="{ height: `${Math.max(d.value, 3)}%` }" :title="`${d.label}: ${d.value}%`"></span></div><small>{{ d.label }}</small></div></div><div class="monthly"><span>Tu constancia · últimos 30 días</span><strong>{{ store.completionRate30 }}%</strong></div></section>
-
-    </aside></div>
   </div>
-  <Teleport to="body"><div v-if="missing" class="inicio-backdrop" @click.self="missing = false" @keydown.esc="missing = false"><section class="inicio-dialog" role="dialog" aria-modal="true" aria-labelledby="missing-title"><button autofocus class="close" aria-label="Cerrar" @click="missing = false"><AppIcon name="x" /></button><AppIcon name="target" :size="30" /><h2 id="missing-title">Un paso antes del check</h2><p>Completa tus hábitos pendientes dentro de cada grupo para cerrar el día.</p><RouterLink v-for="h in habits.filter(h => !h.member.checkedInToday)" :key="h.group.id" :to="{ name: 'grupo', params: { groupId: h.group.id } }" class="missing-habit" @click="missing = false"><span><small>{{ h.group.name }}</small><strong>{{ h.member.habit }}</strong></span><AppIcon name="arrow-right" /></RouterLink><button class="secondary" @click="missing = false">Volver al inicio</button></section></div></Teleport>
-  </div>
+  <Teleport
+    to="body">
+    <div
+      v-if="missing"
+      class="inicio-backdrop"
+      @click.self="missing = false"
+      @keydown.esc="missing = false">
+      <section
+        class="inicio-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="missing-title">
+        <button
+          autofocus
+          class="close"
+          aria-label="Cerrar"
+          @click="missing = false">
+          <AppIcon
+            name="x" />
+        </button>
+        <AppIcon
+          name="target"
+          :size="30" />
+        <h2
+          id="missing-title">
+          Un paso antes del check
+        </h2>
+        <p>
+          Completa tus hábitos pendientes dentro de cada grupo para cerrar el día.
+        </p>
+        <RouterLink
+          v-for="h in habits.filter(h => !h.member.checkedInToday)"
+          :key="h.group.id"
+          :to="{ name: 'grupo', params: { groupId: h.group.id } }"
+          class="missing-habit"
+          @click="missing = false">
+          <span>
+            <small>
+              {{ h.group.name }}
+            </small>
+            <strong>
+              {{ h.member.habit }}
+            </strong>
+          </span>
+          <AppIcon
+            name="arrow-right" />
+        </RouterLink>
+        <button
+          class="secondary"
+          @click="missing = false">
+          Volver al inicio
+        </button>
+      </section>
+    </div>
+  </Teleport>
+</div>
 </template>
-
-<style scoped>
-.inicio-page{--muted-local:#aaa6ba;--line:#34303f;--accent:#c1a8ee;height:100%;overflow-y:auto;background:#131219;color:#efedf4;padding:36px 36px 22px}.dashboard{max-width:1280px;margin:auto}.heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:30px}.eyebrow{font-size:9px;font-weight:800;letter-spacing:.16em;color:#b0a6c1}h1{font-size:35px;letter-spacing:-.05em;margin:8px 0 7px;line-height:1.2}h1 em{font-style:normal;color:var(--accent)}.heading p{font-size:13px;color:var(--muted-local);margin:0}.date{font-size:10px;color:var(--muted-local);display:flex;align-items:center;gap:8px;text-transform:capitalize}.columns{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:26px;align-items:start}.main-column,.right-column{display:grid;gap:27px;min-width:0}.right-column{gap:18px}.surface{background:#1d1b25;border:1px solid var(--line);border-radius:15px;overflow:hidden}h2,h3,p{overflow-wrap:anywhere}h2{font-size:15px;letter-spacing:-.025em;margin:0}h3{margin:0}.daily{background:#2c253a;border-color:#4b405f;padding:25px}.daily .eyebrow{color:#cbb6f3}.daily-top{display:flex;justify-content:space-between;align-items:center;gap:18px}.daily h2{font-size:clamp(22px,2.2vw,30px);letter-spacing:-.045em;margin:10px 0}.daily p{margin:0;color:#c0b3cf;font-size:12px}.score{text-align:right;flex-shrink:0}.score strong{font-size:38px;letter-spacing:-.06em}.score strong span{font-size:23px;color:#a89ab9}.score small{display:block;font-size:9px;color:#c0b3cf}.track{height:7px;background:#493b59;border-radius:3px;margin-top:27px;overflow:hidden}.track>span{display:block;height:100%;background:#c5acf4;transition:width .3s}.daily-bottom{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;color:#cfc1de;font-size:10px}.daily-bottom>span,.live{display:inline-flex;align-items:center;gap:6px}.dot{width:5px;height:5px;border-radius:50%;background:#bbd69e;display:inline-block;flex-shrink:0}.section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.section-title h2{display:flex;gap:8px;align-items:center}.section-title>small{font-size:9px;color:var(--muted-local)}.count{font-size:9px;color:#c7b9dc;background:#302a3d;border-radius:5px;padding:3px 6px}.text-button{border:0;background:none;padding:3px 0;display:flex;align-items:center;gap:5px;color:var(--accent);font-size:10px}.habit{display:flex;align-items:center;gap:15px;padding:22px 20px;border-bottom:1px solid var(--line);transition:background .18s}.habit:hover{background:#282431}.habit-number{display:grid;place-items:center;width:43px;height:46px;border-radius:10px;border:1px solid #534365;background:#31283e;color:#cbb1f4;font-size:16px;font-weight:700;flex-shrink:0}.habit-copy{flex:1;min-width:0}.habit-copy>small{font-size:9px;letter-spacing:.09em;color:#bda3e2;font-weight:700}.habit-copy h3{font-size:14px;margin:6px 0;font-weight:650}.habit-copy p{margin:0;font-size:10px;color:var(--muted-local)}.habit-link{display:flex;align-items:center;gap:7px;font-size:10px;color:#ccc1dc}.done .habit-number{background:#29382d;border-color:#495d49;color:#afd2a8}.done h3{color:#a9a5b6;text-decoration:line-through}.done .habit-copy>small{color:#afd2a8}.check-footer{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:16px 20px;background:#231f2d}.check-footer>span{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted-local)}.claim{display:flex;align-items:center;justify-content:center;gap:7px;background:#c4a9ee;border:1px solid #d7bfff;border-bottom:3px solid #8063aa;border-radius:8px;padding:10px 13px;color:#251b31;font-size:11px;font-weight:800;white-space:nowrap}.claim:hover{background:#d5bcf7}.claim:disabled{opacity:.55;cursor:default}.teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.team{padding:19px;transition:transform .2s,border-color .2s}.team:hover{transform:translateY(-2px);border-color:var(--team)}.team-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:17px}.emblem{display:grid;place-items:center;width:43px;height:43px;border:1px solid #4d405e;background:#302739;border-radius:12px;color:var(--team)}.team-streak{display:flex;gap:5px;align-items:center;font-size:10px;color:#e2b07c}.team h3{font-size:13px;letter-spacing:.015em}.team>p{font-size:11px;color:var(--muted-local);margin:5px 0 20px}.team-people{display:flex;align-items:center;justify-content:space-between;color:#b6a5c8}.avatars{display:flex;padding-left:5px}.avatars>*{margin-left:-5px;outline:3px solid #1d1b25;border-radius:50%}.team-track{height:4px;background:#3c3447;border-radius:2px;overflow:hidden;margin:17px 0 8px}.team-track>span{display:block;height:100%;background:var(--team)}.team>small{font-size:10px;color:var(--muted-local)}.new-team{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;min-height:205px;padding:22px;background:transparent;border:1px dashed #494052;border-radius:15px;color:var(--muted-local)}.new-team>span{width:44px;height:44px;border-radius:12px;background:#292331;display:grid;place-items:center;color:#c1a8ee}.new-team strong{font-size:12px;color:#d0c5df}.new-team small{font-size:10px}.new-team:hover{border-color:#b598dc;background:#201c29}.feed-row{display:flex;gap:13px;align-items:flex-start;padding:19px 20px;border-bottom:1px solid var(--line)}.feed-row:last-child{border-bottom:0}.feed-icon{width:37px;height:37px;display:grid;place-items:center;flex-shrink:0;border-radius:11px;background:#34293f;color:#c9aff0}.feed-icon.check-in{background:#2c392f;color:#b1d4a7}.feed-icon.streak{background:#403027;color:#e9b17c}.feed-row>div{flex:1;min-width:0}.feed-group{font-size:9px;letter-spacing:.07em;font-weight:700;color:#c4b1da}.feed-row p{font-size:12px;line-height:1.7;margin:5px 0}.feed-row time{font-size:9px;color:var(--muted-local)}.feed-mark{color:#7c6d8d;margin-top:8px}.cover{height:100px;background:#9a80bc;position:relative;overflow:hidden}.cover>.eyebrow{position:absolute;top:16px;left:18px;color:#35233f;font-size:8px}.cover>svg{position:absolute;right:23px;bottom:15px;color:#dbc3ee;transform:rotate(-15deg)}.cover-shape{position:absolute;width:170px;height:170px;border:1px solid #c6a6dd;border-radius:35px;transform:rotate(35deg)}.first{top:25px;left:60px}.second{top:13px;left:86px}.profile-body{text-align:center;padding:0 15px 20px;position:relative}.character{display:inline-flex;border:6px solid #1d1b25;background:#1d1b25;border-radius:50%;margin-top:-45px;position:relative}.profile-body>small{display:block;font-size:8px;letter-spacing:.13em;color:#c1a8e3;font-weight:700;margin-top:9px}.profile-body h2{font-size:21px;margin:9px 0 6px}.profile-body p{font-size:10px;color:var(--muted-local);margin:0}.profile-body>a{display:inline-flex;align-items:center;gap:6px;color:#d1bde9;font-size:10px;margin-top:17px}.profile-stats{display:grid;grid-template-columns:repeat(3,1fr);padding:17px 8px;border-top:1px solid var(--line)}.profile-stats>div{text-align:center;border-right:1px solid var(--line)}.profile-stats>div:last-child{border:0}.profile-stats strong{font-size:18px;display:block}.profile-stats span{font-size:9px;color:var(--muted-local)}.streak,.weekly{padding:20px}.right-column .section-title h2{font-size:12px}.streak .section-title>svg{color:#e9b17c}.streak-score{display:flex;align-items:center;gap:12px;margin:20px 0}.streak-score>strong{font-size:50px;letter-spacing:-.06em;line-height:1}.streak-score b{font-size:13px}.streak-score small{display:block;font-size:9px;color:var(--muted-local);margin-top:5px}.streak-score>svg{margin-left:auto;color:#e7b180;transform:rotate(10deg)}.week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.week>div{text-align:center}.week small{font-size:8px;color:var(--muted-local);display:block;margin-bottom:9px}.week>div>span{display:grid;place-items:center;aspect-ratio:1;background:#2c2632;border:1px solid #413746;border-radius:7px;color:#bed9ad}.week .full>span{background:#323d30;border-color:#506246}.week .today>span{outline:1px solid #e2ad7b;outline-offset:3px}.week i{width:4px;height:4px;border-radius:50%;background:#85778f}.streak>p{font-size:9px;color:var(--muted-local);margin:18px 0 0}.weekly .section-title>svg{color:var(--muted-local)}.weekly-score{display:flex;align-items:center;gap:12px;margin:18px 0 22px}.weekly-score>strong{font-size:33px;letter-spacing:-.04em}.weekly-score strong span{font-size:17px;color:var(--accent)}.weekly-score p{font-size:9px;line-height:1.7;color:var(--muted-local);margin:0}.chart{display:flex;gap:10px}.chart>div{flex:1;min-width:0;text-align:center}.bar{height:87px;display:flex;align-items:flex-end;border-bottom:1px solid #504352}.bar>span{width:100%;background:#6a567a;border-radius:4px 4px 0 0}.chart .today .bar>span{background:#c8aff0}.chart small{font-size:8px;color:var(--muted-local);display:block;margin-top:9px}.monthly{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:16px;margin-top:21px;font-size:9px;color:var(--muted-local)}.monthly strong{font-size:12px;color:#efedf4}.note{display:flex;align-items:center;justify-content:center;gap:11px;color:#a38db6}.note p{font-size:10px;line-height:1.8}.note strong{font-weight:500;color:#b9a7c9}footer{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #302835;margin-top:35px;padding-top:18px;font-size:8px;letter-spacing:.08em;color:#a596b1}.empty{padding:28px;text-align:center;color:var(--muted-local);font-size:12px;line-height:1.7}.empty h3{font-size:15px;margin-top:12px}.empty>svg{color:var(--accent)}.secondary{border:1px solid #655076;border-radius:8px;background:#372b44;color:#ddc7f3;padding:10px 15px;font-size:12px}.inicio-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:#08060dbf;backdrop-filter:blur(5px)}.inicio-dialog{width:min(460px,100%);max-height:85vh;overflow-y:auto;padding:30px;background:#251e30;color:#efedf4;border:1px solid #594369;border-radius:18px;position:relative}.inicio-dialog>svg{color:#c9aff0;margin-bottom:20px}.inicio-dialog h2{font-size:22px}.inicio-dialog>p{font-size:12px;line-height:1.8;color:#c2afcf}.close{position:absolute;top:15px;right:15px;background:none;border:0;color:#c2afcf;padding:5px}.missing-habit{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #4b375a;padding:16px 0}.missing-habit small{display:block;font-size:9px;color:#cfb0f1;margin-bottom:6px}.missing-habit strong{font-size:13px}.inicio-dialog .secondary{margin-top:25px;width:100%}a:focus-visible,button:focus-visible{outline:2px solid #dbbaff;outline-offset:4px}
-@media(min-width:1600px){.columns{grid-template-columns:minmax(0,1fr) 330px;gap:32px}.inicio-page{padding-top:45px}}
-@media(max-width:1200px){.inicio-page{padding:28px 24px}.columns{grid-template-columns:minmax(0,1fr) 260px;gap:18px}.daily{padding:20px}.daily h2{font-size:23px}.habit-link>span{display:none}.check-footer{flex-wrap:wrap}.claim{margin-left:auto}}
-@media(max-width:1000px){.columns{grid-template-columns:minmax(0,1fr)}.right-column{grid-template-columns:repeat(2,minmax(0,1fr))}.profile{grid-row:span 2}.note{display:none}.date{max-width:145px}.weekly{padding:18px}}
-@media(max-width:600px){.inicio-page{padding:22px 14px}.heading{flex-wrap:wrap;gap:14px;margin-bottom:22px}h1{font-size:29px}.date{max-width:none}.daily{padding:18px}.daily h2{font-size:22px}.daily .eyebrow{font-size:8px}.daily p{font-size:11px}.score strong{font-size:29px}.score small{font-size:8px}.daily-top{align-items:flex-start}.teams,.right-column{grid-template-columns:minmax(0,1fr)}.profile{grid-row:auto}.habit{padding:17px 14px;gap:11px}.habit-copy h3{font-size:12px}.habit-copy p{font-size:9px}.section-title>small{font-size:8px}.check-footer{padding:14px}.check-footer>span{font-size:9px}.new-team{min-height:145px}.week>div>span{max-height:42px}.cover{height:115px}footer{font-size:7px}}
-@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
-.day-victory{display:flex;align-items:center;gap:15px;padding:17px 22px;background:#34402c;border:1px solid #81975e;border-bottom:4px solid #1c2817;border-radius:14px;animation:victory-in .4s ease-out}.day-victory>div{flex:1}.day-victory span{font-size:8px;letter-spacing:.13em;color:#c5dda1}.day-victory strong{display:block;font-size:18px;color:#eff7dd;margin:6px 0}.day-victory p{font-size:10px;color:#c3d0b0;margin:0}.day-victory>svg{color:#c9e5a2}@keyframes victory-in{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}} /* Relieve y estados de juego, limitados a Inicio. */
-.inicio-page{background:#14111e}.surface{background:#211c2d;border-color:#3c3049;border-bottom-width:3px}.daily{background:linear-gradient(115deg,color-mix(in srgb,var(--theme-dark) 78%,#201b27),#292038);border-color:#755391;box-shadow:inset 0 1px #b18ad026,0 8px 0 -4px #100b18}.daily h2{max-width:360px;font-size:32px}.daily .eyebrow{display:inline-block;padding:6px 9px;background:#1e1429;border:1px solid #705082;border-radius:6px;font-size:8px;color:#ddc0fa}.score{background:#21162d;border:1px solid #74528c;border-bottom:4px solid #140c1c;border-radius:13px;padding:15px 20px;transform:rotate(3deg)}.score-label{display:block;font-size:7px;letter-spacing:.12em;color:#c6a5e4;margin-bottom:7px}.score strong{font-size:40px}.track{height:12px;background:#171020;border:1px solid #644479;border-radius:5px}.track>span{background:repeating-linear-gradient(90deg,var(--theme-accent) 0,var(--theme-accent) 20px,color-mix(in srgb,var(--theme-accent),white 24%) 20px,color-mix(in srgb,var(--theme-accent),white 24%) 23px)}.habit-number{height:49px;border-bottom:4px solid #1a1125;background:#40304f;transform:rotate(-3deg)}.done .habit-number{border-bottom:4px solid #1b291d;background:#b5d68c;color:#31412a}.habit-link{background:#35263f;border:1px solid #674978;border-bottom:3px solid #160d20;padding:9px;border-radius:8px}.check-footer{background:#2a2034}.team{background:#272031;border-bottom-width:4px}.emblem{border-bottom:4px solid #170f23;transform:rotate(-6deg)}.new-team{border-width:2px;background:#1d1727}.team-track{height:7px;background:#140f1d}.profile .cover{height:125px;background:var(--theme-accent,#9978bd)}.profile-body .character{margin-top:-55px;padding:3px;background:#211c2d;border:4px solid var(--profile-accent,#9978bd);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(0,0,0,.5);position:relative;z-index:2}.profile-body .character :deep(.avatar){width:96px!important;height:96px!important}.avatars>*{margin-left:-7px;border-radius:50%;box-shadow:0 0 0 2px #1d1b25!important}.streak{background:linear-gradient(145deg,#3d2934,#251d2b);border-color:#745044}.streak .section-title>svg{display:none}.streak-score{position:relative;min-height:100px;margin:8px 0 20px}.streak-score>strong{font-size:58px;color:#ffce91}.streak-score>.streak-fire{margin-left:auto}.streak-score small{max-width:85px;line-height:1.6}.week>div>span{border-bottom-width:3px}.week .full>span{background:var(--theme-accent);color:#2c3e25;border-color:#809c5e;border-bottom-color:#405832}.week .today>span{outline-color:#ffbf76}.claim{padding:11px 16px;box-shadow:0 4px 0 #150b20}.claim:active{transform:translateY(3px);box-shadow:none}.weekly .bar>span{background:repeating-linear-gradient(0deg,#745b8a 0,#745b8a 10px,#513d65 10px,#513d65 13px)}.weekly .today .bar>span{background:repeating-linear-gradient(0deg,#cfadf5 0,#cfadf5 10px,#9b79be 10px,#9b79be 13px)}
-@media(max-width:1200px){.daily h2{font-size:26px}.score{padding:12px}.streak-score>.streak-fire{width:70px!important;height:80px!important}.streak-score{gap:8px}.streak-score>strong{font-size:48px}}
-@media(max-width:600px){.daily h2{font-size:23px}.score{padding:10px}.score-label{font-size:6px}.score strong{font-size:31px}.score strong span{font-size:19px}.daily-top{gap:10px}.daily .eyebrow{font-size:7px;padding:5px}.habit-link{padding:7px}.profile .cover{height:130px}}
-.profile .cover{background:var(--profile-cover,#9978bd)}.profile .cover-shape{border-color:var(--profile-accent,#c6a6dd)}.profile .cover>svg{color:var(--profile-accent,#dbc3ee)}
-</style>
