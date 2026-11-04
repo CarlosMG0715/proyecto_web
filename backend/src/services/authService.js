@@ -287,15 +287,22 @@ class AuthService {
 
 
 
-  async revokeAllUserSessions(userId) {
-    // invalida todas las sesiones activas de la cuenta.
+  async revokeAllUserSessions(userId, password) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    })
+
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw unauthorized('La contraseña no es correcta')
+    }
+
     await prisma.session.updateMany({
       where: { userId, isRevoked: false },
       data: { isRevoked: true, revokedAt: new Date() },
     })
   }
 }
-
 
 
 module.exports = new AuthService()

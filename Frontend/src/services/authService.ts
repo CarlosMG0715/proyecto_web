@@ -77,3 +77,12 @@ export async function fetchSessions(): Promise<DeviceSession[]> {
   const { data } = await api.get<{ sessions: DeviceSession[] }>('/auth/sessions')
   return data.sessions
 }
+
+export async function revokeSession(sessionId: string): Promise<void> {
+  await api.delete(`/auth/sessions/${encodeURIComponent(sessionId)}`)
+}
+
+export async function logoutAllDevices(password: string): Promise<void> {
+  await api.post('/auth/logout-all', { password })
+  useSessionStore().clearSession()
+}
