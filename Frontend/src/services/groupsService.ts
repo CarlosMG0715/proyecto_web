@@ -37,18 +37,28 @@ export async function updateGroupRequest(groupId: string, updates: { name?: stri
   return data.group
 }
 
+export async function setGroupMemberRoleRequest(groupId: string, memberId: string, role: 'ADMIN' | 'MIEMBRO'): Promise<Group> {
+  const { data } = await api.patch<{ group: Group }>(`/groups/${groupId}/members/${memberId}`, { role })
+  return data.group
+}
+
+export async function removeGroupMemberRequest(groupId: string, memberId: string): Promise<Group> {
+  const { data } = await api.delete<{ group: Group }>(`/groups/${groupId}/members/${memberId}`)
+  return data.group
+}
+
 export async function leaveGroupRequest(groupId: string): Promise<{ groupId: string; groupDeleted: boolean; groupArchived?: boolean; promotedMemberId: string | null }> {
   const { data } = await api.delete<{ groupId: string; groupDeleted: boolean; groupArchived?: boolean; promotedMemberId: string | null }>(`/groups/${groupId}/membership`)
   return data
 }
 
-export async function createHabitRequest(groupId: string, name: string, icon: string): Promise<GroupHabit> {
+export async function createHabitRequest(groupId: string, name: string, icon: string, targetDays: 30 | 90 | 120): Promise<GroupHabit> {
   // solicita crear un habito; el backend verifica que quien lo pide sea admin.
-  const { data } = await api.post<{ habit: GroupHabit }>(`/groups/${groupId}/habits`, { name, icon })
+  const { data } = await api.post<{ habit: GroupHabit }>(`/groups/${groupId}/habits`, { name, icon, targetDays })
   return data.habit
 }
 
-export async function updateHabitRequest(groupId: string, habitId: string, updates: { name: string; icon: string }): Promise<GroupHabit> {
+export async function updateHabitRequest(groupId: string, habitId: string, updates: { name: string; icon: string; targetDays: 30 | 90 | 120 }): Promise<GroupHabit> {
   // envia los cambios del habito; el servidor limita esta operacion a administradores.
   const { data } = await api.patch<{ habit: GroupHabit }>(`/groups/${groupId}/habits/${habitId}`, updates)
   return data.habit

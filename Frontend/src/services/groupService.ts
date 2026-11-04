@@ -19,7 +19,7 @@ export interface RemoteGroup {
   health?: number
   completionHistory?: number[]
   messages?: Array<{ id: string; kind: 'user' | 'system'; authorId: string | null; text: string; sentAt: string }>
-  habits?: Array<{ id: string; name: string; icon?: string; description: string | null; checks: Record<string, { done: boolean; note: string }> }>
+  habits?: Array<{ id: string; name: string; icon?: string; description: string | null; targetDays?: 30 | 90 | 120; checks: Record<string, { done: boolean; note: string }> }>
   timeZone?: string
 }
 

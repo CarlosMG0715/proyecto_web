@@ -64,6 +64,37 @@ class AuthController {
     }
   }
 
+   // Lista las sesiones abiertas del usuario.
+
+    async listSessions(req, res, next) {
+    try {
+      const refreshToken = extractRefreshToken(req)
+
+      const sessions = await authService.listSessions({
+        userId: req.user.userId,
+        refreshToken,
+      })
+
+      return res.json({ sessions })
+    } catch (error) {
+      return next(error)
+    }
+  }
+
+  async revokeSession(req, res, next) {
+    try {
+      const result = await authService.revokeSession({
+        userId: req.user.userId,
+        sessionId: req.params.sessionId,
+        refreshToken: extractRefreshToken(req),
+      })
+
+      return res.json(result)
+    } catch (error) {
+      return next(error)
+    }
+  }
+
   async logout(req, res, next) {
     try {
       const refreshToken = extractRefreshToken(req)
@@ -80,9 +111,20 @@ class AuthController {
 
   async logoutAll(req, res, next) {
     try {
-      await authService.revokeAllUserSessions(req.user.userId)
+      const { password } = req.body
+
+      if (typeof password !== 'string' || !password) {
+        return res.status(400).json({
+          error: 'Ingresa tu contraseña para continuar',
+        })
+      }
+
+      await authService.revokeAllUserSessions(req.user.userId, password)
+
       res.clearCookie(cookieName, { ...cookieOptions, maxAge: 0 })
-      res.status(200).json({ message: 'Se cerraron todas las sesiones en todos los dispositivos' })
+      return res.status(200).json({
+        message: 'Se cerraron todas las sesiones en todos los dispositivos',
+      })
     } catch (error) {
       next(error)
     }

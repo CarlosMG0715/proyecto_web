@@ -42,6 +42,7 @@ const editing = ref(false)
 const editingGroup = ref(false)
 const confirmingLeave = ref(false)
 const draft = ref('')
+const targetDaysDraft = ref<30 | 90 | 120>(30)
 const editingHabitId = ref<string | null>(null)
 const groupNameDraft = ref('')
 const groupCategoryDraft = ref('')
@@ -83,6 +84,7 @@ const lastMessage = computed(() =>
   group.value?.messages.filter((m) => m.authorId === selectedMember.value?.id).at(-1),
 )
 const milestones = [1, 3, 7, 14, 30]
+const missionLengths = [30, 90, 120] as const
 
 watch(
   () => group.value?.id,
@@ -106,6 +108,7 @@ async function toggle() {
 
 function openEditor(habit?: GroupHabit) {
   draft.value = habit?.name ?? ''
+  targetDaysDraft.value = habit?.targetDays ?? 30
   editingHabitId.value = habit?.id ?? null
   editing.value = true
 }
@@ -114,8 +117,8 @@ async function saveHabit() {
   if (!group.value || !draft.value.trim() || !isAdmin.value) return
   saving.value = true
   try {
-    if (editingHabitId.value) await store.editGroupHabit(group.value.id, editingHabitId.value, draft.value.trim())
-    else await store.createGroupHabit(group.value.id, draft.value.trim())
+    if (editingHabitId.value) await store.editGroupHabit(group.value.id, editingHabitId.value, draft.value.trim(), targetDaysDraft.value)
+    else await store.createGroupHabit(group.value.id, draft.value.trim(), '🎯', targetDaysDraft.value)
     editing.value = false
     editingHabitId.value = null
   } catch {
@@ -131,6 +134,29 @@ async function removeHabit(habitId: string, habitName: string) {
     await store.removeGroupHabit(group.value.id, habitId)
   } catch {
     notice.value = store.error ?? 'No se pudo quitar el hábito.'
+  }
+}
+
+async function toggleMemberRole(member: NonNullable<typeof selectedMember.value>) {
+  if (!group.value || !isAdmin.value || member.isCurrentUser) return
+  const nextRole = member.role === 'ADMIN' ? 'MIEMBRO' : 'ADMIN'
+  try {
+    await store.setGroupMemberRole(group.value.id, member.id, nextRole)
+    notice.value = nextRole === 'ADMIN' ? `${nameOf(member)} ahora administra el grupo.` : `Se quitó el rol admin de ${nameOf(member)}.`
+  } catch {
+    notice.value = store.error ?? 'No se pudo cambiar el rol.'
+  }
+}
+
+async function removeMember(member: NonNullable<typeof selectedMember.value>) {
+  if (!group.value || !isAdmin.value || member.isCurrentUser) return
+  if (!window.confirm(`¿Sacar a ${nameOf(member)} del grupo?`)) return
+  try {
+    await store.removeGroupMember(group.value.id, member.id)
+    selectedId.value = ''
+    notice.value = `${nameOf(member)} salió del grupo.`
+  } catch {
+    notice.value = store.error ?? 'No se pudo quitar a esta persona.'
   }
 }
 
@@ -426,7 +452,7 @@ async function handleLeaveGroup() {
                   <span class="team-habit-icon">{{ habit.icon || '🎯' }}</span>
                   <div class="team-habit-copy">
                     <strong>{{ habit.name }}</strong>
-                    <small>{{ habit.description || 'Misión diaria del equipo' }}</small>
+                    <small>{{ habit.description || 'Misión diaria del equipo' }} · Meta: {{ habit.targetDays }} días</small>
                   </div>
                   <span class="habit-check-state" :class="{ complete: habit.checks[me?.id ?? '']?.done }">
                     {{ habit.checks[me?.id ?? '']?.done ? 'Hecho' : 'Pendiente' }}
@@ -455,6 +481,23 @@ async function handleLeaveGroup() {
                   </span>
                   <AppIcon :name="m.checkedInToday ? 'check' : 'clock'" :size="17" />
                 </button>
+                <section v-if="isAdmin && selectedMember && !selectedMember.isCurrentUser" class="member-command-card">
+                  <span class="member-command-icon"><AppIcon name="shield" :size="20" /></span>
+                  <div class="member-command-copy">
+                    <small>GESTIONAR JUGADOR</small>
+                    <strong>{{ nameOf(selectedMember) }}</strong>
+                    <span>{{ selectedMember.role === 'ADMIN' ? 'Admin de la aventura' : 'Miembro del equipo' }}</span>
+                  </div>
+                  <div class="member-admin-actions">
+                    <button class="member-role-button" @click="toggleMemberRole(selectedMember)">
+                      <AppIcon name="shield" :size="14" />
+                      {{ selectedMember.role === 'ADMIN' ? 'Quitar admin' : 'Dar admin' }}
+                    </button>
+                    <button class="member-remove-button" @click="removeMember(selectedMember)">
+                      <AppIcon name="logout" :size="14" />Sacar
+                    </button>
+                  </div>
+                </section>
               </section>
 
               <div class="reminder">
@@ -500,21 +543,70 @@ async function handleLeaveGroup() {
         @keydown.esc="editing = false"
       >
         <form
-          class="adventure-modal"
+          class="adventure-modal mission-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-title"
           @submit.prevent="saveHabit"
         >
-          <h2 id="edit-title">{{ editingHabitId ? 'Editar hábito del grupo' : 'Agregar hábito al grupo' }}</h2>
-          <label for="habit-name">Nombre del hábito</label>
-          <input id="habit-name" v-model="draft" autofocus maxlength="120" required />
-          <div>
+          <button type="button" class="mission-close" aria-label="Cerrar" @click="editing = false">
+            <AppIcon name="x" :size="19" />
+          </button>
+
+          <header class="mission-hero">
+            <div class="mission-flag" aria-hidden="true">
+              <span><AppIcon name="trophy" :size="31" /></span>
+            </div>
+            <div>
+              <span class="mission-kicker">NUEVA AVENTURA DEL EQUIPO</span>
+              <h2 id="edit-title">{{ editingHabitId ? 'Ajustar misión' : '¡Prepara la próxima misión!' }}</h2>
+              <p>Define el reto y hasta dónde llegará el equipo.</p>
+            </div>
+          </header>
+
+          <section class="mission-step">
+            <span class="mission-step-number">1</span>
+            <div class="mission-field">
+              <label for="habit-name">¿Cuál será el reto?</label>
+              <div class="mission-name-input">
+                <AppIcon name="target" :size="20" />
+                <input id="habit-name" v-model="draft" autofocus maxlength="120" placeholder="Ej. Leer 20 minutos" required />
+              </div>
+            </div>
+          </section>
+
+          <section class="mission-step">
+            <span class="mission-step-number">2</span>
+            <div class="mission-field">
+              <label>Elige la distancia</label>
+              <div class="mission-length-options">
+                <button
+                  v-for="days in missionLengths"
+                  :key="days"
+                  type="button"
+                  class="mission-length-card"
+                  :class="{ selected: targetDaysDraft === days }"
+                  :aria-pressed="targetDaysDraft === days"
+                  @click="targetDaysDraft = days"
+                >
+                  <span class="length-flag"><AppIcon name="flag" :size="18" /></span>
+                  <strong>{{ days }}</strong>
+                  <small>DÍAS</small>
+                  <em>{{ days === 30 ? 'Reto corto' : days === 90 ? 'Gran recorrido' : 'Aventura épica' }}</em>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <footer class="mission-actions">
             <button type="button" class="game-button secondary" @click="editing = false">
               Cancelar
             </button>
-            <button class="game-button" type="submit" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
-          </div>
+            <button class="mission-launch-button" type="submit" :disabled="saving">
+              <AppIcon name="flag" :size="18" />
+              {{ saving ? 'Preparando…' : editingHabitId ? 'Guardar misión' : '¡Iniciar misión!' }}
+            </button>
+          </footer>
         </form>
       </div>
 
