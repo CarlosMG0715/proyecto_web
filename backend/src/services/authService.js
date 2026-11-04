@@ -23,9 +23,9 @@ function hashToken(token) {
   return crypto.createHmac('sha256', refreshPepper).update(token).digest('hex')
 }
 
-function createAccessToken(user) {
+function createAccessToken(user, familyId) {
   return jwt.sign(
-    { userId: user.id, email: user.email, name: user.name },
+    { userId: user.id, email: user.email, name: user.name, familyId },
     jwtSecret,
     { expiresIn: accessTokenExpiration },
   )
@@ -96,11 +96,10 @@ class AuthService {
     const isValid = await bcrypt.compare(password, user.passwordHash)
     if (!isValid) throw unauthorized('Credenciales inválidas')
 
-    const accessToken = createAccessToken(user)
     const { refreshToken, tokenHash, expiresAt } = createRefreshToken()
 
     // familyId se genera solo (@default(cuid())): cada login abre una familia nueva
-    await prisma.session.create({
+    const session = await prisma.session.create({
       data: {
         userId: user.id,
         tokenHash,
@@ -109,6 +108,7 @@ class AuthService {
         expiresAt,
       },
     })
+    const accessToken = createAccessToken(user, session.familyId)
 
     return {
       accessToken,
@@ -172,11 +172,66 @@ class AuthService {
     }
 
     return {
-      accessToken: createAccessToken(session.user),
+      accessToken: createAccessToken(session.user, session.familyId),
       refreshToken: nextRefresh.refreshToken,
       user: publicUser(session.user),
     }
   }
+
+  async revokeSession({ userId, sessionId, refreshToken }) {
+    if (!refreshToken) {
+      throw httpError('No se pudo identificar este dispositivo', 401)
+    }
+
+    const currentSession = await prisma.session.findFirst({
+      where: {
+        tokenHash: hashToken(refreshToken),
+        userId,
+        isRevoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      select: { familyId: true },
+    })
+
+    if (!currentSession) {
+      throw httpError('La sesión actual ya no está activa', 401)
+    }
+
+    const targetSession = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+        isRevoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      select: { familyId: true },
+    })
+
+    if (!targetSession) {
+      throw httpError('No encontramos esa sesión activa', 404)
+    }
+
+    if (targetSession.familyId === currentSession.familyId) {
+      throw httpError('No puedes cerrar este dispositivo desde aquí', 409)
+    }
+
+    await prisma.session.updateMany({
+      where: {
+        userId,
+        familyId: targetSession.familyId,
+        isRevoked: false,
+      },
+      data: {
+        isRevoked: true,
+        revokedAt: new Date(),
+      },
+    })
+
+    return { revoked: true }
+  }
+
+
+
 
   async logout({ refreshToken }) {
     // invalida la sesion asociada al refresh recibido.
@@ -188,8 +243,8 @@ class AuthService {
     })
   }
 
-  // Identificar sesiones abiertas al navegador y permitir revocarlas 
-    async listSessions({ userId, refreshToken }) {
+  // Lista los inicios de sesión vigentes y señala el dispositivo actual.
+  async listSessions({ userId, refreshToken }) {
     const now = new Date()
     const currentSession = refreshToken
       ? await prisma.session.findFirst({
@@ -197,6 +252,7 @@ class AuthService {
             tokenHash: hashToken(refreshToken),
             userId,
             isRevoked: false,
+            expiresAt: { gt: now },
           },
           select: { familyId: true },
         })
@@ -226,6 +282,9 @@ class AuthService {
       isCurrent: familyId === currentSession?.familyId,
     }))
   }
+
+
+
 
 
   async revokeAllUserSessions(userId) {
