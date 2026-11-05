@@ -33,11 +33,13 @@ const createHabitSchema = z.object({
   name: z.string().trim().min(1).max(80),
   icon: z.string().trim().min(1).max(12).default('🎯'),
   description: z.string().trim().max(300).optional().default(''),
+  targetDays: z.union([z.literal(30), z.literal(90), z.literal(120)]).default(30),
 })
 const updateHabitSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   icon: z.string().trim().min(1).max(12).optional(),
   description: z.string().trim().max(300).nullable().optional(),
+  targetDays: z.union([z.literal(30), z.literal(90), z.literal(120)]).optional(),
 }).refine((data) => Object.values(data).some((value) => value !== undefined), 'Debes enviar al menos un campo para actualizar')
 const checkInSchema = z.object({ note: z.string().trim().max(500).optional().default('') })
 const messageSchema = z.object({ content: z.string().trim().min(1).max(2000) })

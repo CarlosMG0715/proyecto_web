@@ -10,6 +10,8 @@ router.post('/login', (req, res, next) => authController.login(req, res, next))
 router.post('/refresh', (req, res, next) => authController.refresh(req, res, next))
 router.post('/logout', (req, res, next) => authController.logout(req, res, next))
 router.post('/logout-all', authenticateToken, (req, res, next) => authController.logoutAll(req, res, next))
+router.get( '/sessions', authenticateToken, (req, res, next) => authController.listSessions(req, res, next),)
 router.get('/me', authenticateToken, (req, res) => authController.me(req, res))
+router.delete('/sessions/:sessionId', authenticateToken, (req, res, next) => authController.revokeSession(req, res, next))
 
 module.exports = router

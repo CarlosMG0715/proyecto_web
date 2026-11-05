@@ -31,6 +31,7 @@ function toGroupDto(group, currentUserId) {
     name: habit.name,
     icon: habit.icon,
     description: habit.description,
+    targetDays: habit.targetDays,
     checks: Object.fromEntries((habit.checkIns || []).filter((check) => check.checkInDate.toISOString().slice(0, 10) === today).map((check) => [check.userId, {
       done: true, note: check.note || '',
     }])),
@@ -187,6 +188,31 @@ class GroupService {
     return this.getForMember({ userId, groupId: group.id })
   }
 
+  async setMemberRole({ userId, groupId, memberId, role }) {
+    const actor = await groupRepository.findMembership(groupId, userId)
+    if (!actor || actor.role !== 'ADMIN') throw httpError('Solo un admin puede administrar miembros', 403)
+    if (memberId === userId) throw httpError('No puedes cambiar tu propio rol desde aquí', 400)
+    if (!['ADMIN', 'MIEMBRO'].includes(role)) throw httpError('El rol no es válido', 400)
+    const target = await groupRepository.findMembership(groupId, memberId)
+    if (!target) throw httpError('No encontramos a esa persona en el grupo', 404)
+    if (target.role === 'ADMIN' && role === 'MIEMBRO') {
+      const admins = await prisma.groupMembership.count({ where: { groupId, role: 'ADMIN' } })
+      if (admins <= 1) throw httpError('El grupo debe conservar al menos un admin', 409)
+    }
+    await prisma.groupMembership.update({ where: { id: target.id }, data: { role } })
+    return this.getForMember({ userId, groupId })
+  }
+
+  async removeGroupMember({ userId, groupId, memberId }) {
+    const actor = await groupRepository.findMembership(groupId, userId)
+    if (!actor || actor.role !== 'ADMIN') throw httpError('Solo un admin puede administrar miembros', 403)
+    if (memberId === userId) throw httpError('Usa “Salir del grupo” para quitarte del grupo', 400)
+    const target = await groupRepository.findMembership(groupId, memberId)
+    if (!target) throw httpError('No encontramos a esa persona en el grupo', 404)
+    await prisma.groupMembership.delete({ where: { id: target.id } })
+    return this.getForMember({ userId, groupId })
+  }
+
   async leaveGroup({ userId, groupId }) {
     return prisma.$transaction(async (tx) => {
       const membership = await tx.groupMembership.findUnique({ where: { groupId_userId: { groupId, userId } } })
@@ -212,13 +238,13 @@ class GroupService {
     })
   }
 
-  async createHabit({ userId, groupId, name, description, icon }) {
+  async createHabit({ userId, groupId, name, description, icon, targetDays }) {
     // comprueba el rol en el servidor; ocultar el boton en vue no es seguridad.
     const membership = await groupRepository.findMembership(groupId, userId)
     if (!membership) throw httpError('No tienes acceso a este grupo', 403)
     if (membership.role !== 'ADMIN') throw httpError('Solo un administrador puede crear hábitos', 403)
-    const habit = await prisma.habit.create({ data: { groupId, createdById: userId, name, icon, description: description || null } })
-    return { id: habit.id, name: habit.name, icon: habit.icon, description: habit.description, checks: {} }
+    const habit = await prisma.habit.create({ data: { groupId, createdById: userId, name, icon, description: description || null, targetDays } })
+    return { id: habit.id, name: habit.name, icon: habit.icon, description: habit.description, targetDays: habit.targetDays, checks: {} }
   }
 
   async updateHabit({ userId, groupId, habitId, ...data }) {
@@ -229,7 +255,7 @@ class GroupService {
     const existing = await prisma.habit.findFirst({ where: { id: habitId, groupId, isActive: true } })
     if (!existing) throw httpError('Hábito no encontrado', 404)
     const habit = await prisma.habit.update({ where: { id: habitId }, data })
-    return { id: habit.id, name: habit.name, icon: habit.icon, description: habit.description, checks: {} }
+    return { id: habit.id, name: habit.name, icon: habit.icon, description: habit.description, targetDays: habit.targetDays, checks: {} }
   }
 
   async deleteHabit({ userId, groupId, habitId }) {

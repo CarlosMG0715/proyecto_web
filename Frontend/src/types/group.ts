@@ -41,6 +41,7 @@ export interface GroupHabit {
   name: string
   icon?: string
   description: string | null
+  targetDays: 30 | 90 | 120
   checks: Record<string, { done: boolean; note: string }>
 }
 

@@ -46,7 +46,7 @@ api.interceptors.response.use(
     // ante un 401 intenta renovar una vez; si falla, limpia la sesion y avisa a la app.
     if (!axios.isAxiosError(error) || !error.config) throw error
     const original = error.config as RetriableConfig
-    const isAuthCall = original.url?.startsWith('/auth/')
+    const isAuthCall = /^\/auth\/(login|register|refresh|logout)$/.test(original.url ?? '')
 
     if (error.response?.status === 401 && !original._retry && !isAuthCall) {
       original._retry = true
