@@ -1,29 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import AppIcon, { type IconName } from '@/components/ui/AppIcon.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
 import { useCharacterStore } from '@/stores/characters'
 import { GROUP_COLORS, useGroupsStore } from '@/stores/groups'
+import { GROUP_CATEGORIES } from '@/constants/groupCategories'
 import { useSessionStore } from '@/stores/session'
 import { groupService } from '@/services/groupService'
 import type { Group } from '@/types/group'
-
-interface CategoryOption {
-  label: string
-  icon: IconName
-  defaultHabit: string
-}
-
-const CATEGORIES: CategoryOption[] = [
-  { label: 'Programación', icon: 'code', defaultHabit: 'Avanzar en programación' },
-  { label: 'Ejercicio', icon: 'activity', defaultHabit: 'Entrenamiento diario' },
-  { label: 'Lectura', icon: 'globe', defaultHabit: 'Lectura diaria' },
-  { label: 'Estudio', icon: 'monitor', defaultHabit: 'Sesión de estudio' },
-  { label: 'Salud', icon: 'heart', defaultHabit: 'Hábito de bienestar' },
-  { label: 'Otro', icon: 'target', defaultHabit: 'Meta del equipo' },
-]
 
 const router = useRouter()
 const session = useSessionStore()
@@ -57,7 +43,7 @@ watch(joinCode, (value) => {
 })
 
 const currentCategory = computed(
-  () => CATEGORIES.find((c) => c.label === category.value) ?? CATEGORIES[0]!,
+  () => GROUP_CATEGORIES.find((c) => c.label === category.value) ?? GROUP_CATEGORIES[0]!,
 )
 
 function normalizeInvitePrefix(groupName: string): string {
@@ -329,7 +315,7 @@ async function handleJoin(): Promise<void> {
             </div>
             <div class="chips">
               <button
-                v-for="c in CATEGORIES"
+                v-for="c in GROUP_CATEGORIES"
                 :key="c.label"
                 type="button"
                 class="chip"

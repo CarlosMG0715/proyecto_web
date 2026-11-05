@@ -496,11 +496,11 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  async function editGroupHabit(groupId: string, habitId: string, name: string, targetDays: 30 | 90 | 120, icon = '🎯'): Promise<void> {
+  async function editGroupHabit(groupId: string, habitId: string, name: string, targetDays: 30 | 90 | 120, icon?: string): Promise<void> {
     error.value = null
     try {
       const currentIcon = allGroups.value.find((group) => group.id === groupId)?.habits?.find((habit) => habit.id === habitId)?.icon
-      await updateHabitRequest(groupId, habitId, { name, icon: currentIcon ?? icon, targetDays })
+      await updateHabitRequest(groupId, habitId, { name, icon: icon ?? currentIcon ?? '🎯', targetDays })
       await refreshRemoteGroups()
     } catch (cause) {
       error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error

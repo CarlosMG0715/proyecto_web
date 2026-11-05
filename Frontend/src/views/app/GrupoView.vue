@@ -8,6 +8,7 @@ import StreakFlame from '@/components/ui/StreakFlame.vue'
 import GroupChat from '@/components/group/GroupChat.vue'
 import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
 import { GROUP_COLORS, useGroupsStore } from '@/stores/groups'
+import { GROUP_CATEGORIES } from '@/constants/groupCategories'
 import { useCharacterStore } from '@/stores/characters'
 import { useSessionStore } from '@/stores/session'
 import type { GroupHabit } from '@/types/group'
@@ -41,12 +42,16 @@ const editing = ref(false)
 const editingGroup = ref(false)
 const confirmingLeave = ref(false)
 const draft = ref('')
+const habitIconDraft = ref('🎯')
 const targetDaysDraft = ref<30 | 90 | 120>(30)
 const editingHabitId = ref<string | null>(null)
 const groupNameDraft = ref('')
 const groupCategoryDraft = ref('')
 const groupDescriptionDraft = ref('')
 const groupColorDraft = ref('#8b5cf6')
+const groupCategoryIcon = computed(
+  () => GROUP_CATEGORIES.find((category) => category.label === groupCategoryDraft.value)?.icon ?? 'target',
+)
 const saving = ref(false)
 const notice = ref('')
 const codeCopied = ref(false)
@@ -84,6 +89,7 @@ const lastMessage = computed(() =>
 )
 const milestones = [1, 3, 7, 14, 30]
 const missionLengths = [30, 90, 120] as const
+const habitIcons = ['🎯', '🔥', '📚', '💧', '🏃', '🧘', '🌱', '🎨', '💤', '💪', '🎵', '✨']
 
 watch(
   () => group.value?.id,
@@ -107,6 +113,7 @@ async function toggle() {
 
 function openEditor(habit?: GroupHabit) {
   draft.value = habit?.name ?? ''
+  habitIconDraft.value = habit?.icon ?? '🎯'
   targetDaysDraft.value = habit?.targetDays ?? 30
   editingHabitId.value = habit?.id ?? null
   editing.value = true
@@ -116,8 +123,22 @@ async function saveHabit() {
   if (!group.value || !draft.value.trim() || !isAdmin.value) return
   saving.value = true
   try {
-    if (editingHabitId.value) await store.editGroupHabit(group.value.id, editingHabitId.value, draft.value.trim(), targetDaysDraft.value)
-    else await store.createGroupHabit(group.value.id, draft.value.trim(), '🎯', targetDaysDraft.value)
+    if (editingHabitId.value) {
+      await store.editGroupHabit(
+        group.value.id,
+        editingHabitId.value,
+        draft.value.trim(),
+        targetDaysDraft.value,
+        habitIconDraft.value,
+      )
+    } else {
+      await store.createGroupHabit(
+        group.value.id,
+        draft.value.trim(),
+        habitIconDraft.value,
+        targetDaysDraft.value,
+      )
+    }
     editing.value = false
     editingHabitId.value = null
   } catch {
@@ -161,6 +182,7 @@ async function removeMember(member: NonNullable<typeof selectedMember.value>) {
 
 function openGroupEditor() {
   if (!group.value) return
+  selectedId.value = me.value?.id ?? ''
   groupNameDraft.value = group.value.name
   groupCategoryDraft.value = group.value.category
   groupDescriptionDraft.value = group.value.description
@@ -233,7 +255,8 @@ async function handleLeaveGroup() {
           </button>
 
           <button
-            class="game-button secondary"
+            type="button"
+            class="game-button secondary chat-toggle"
             :aria-expanded="isChatOpen"
             @click="isChatOpen = !isChatOpen"
           >
@@ -241,7 +264,7 @@ async function handleLeaveGroup() {
             {{ isChatOpen ? 'Ocultar chat' : 'Abrir chat' }}
           </button>
 
-          <button v-if="isAdmin" type="button" class="game-button secondary" @click="openGroupEditor">
+          <button v-if="isAdmin" type="button" class="game-button secondary edit-group-trigger" @click="openGroupEditor">
             <AppIcon name="settings" :size="15" />Editar grupo
           </button>
 
@@ -427,11 +450,15 @@ async function handleLeaveGroup() {
                 </div>
 
                 <div v-if="selectedMember.isCurrentUser" class="player-controls">
-                  <button class="game-button" @click="toggle">
-                    <AppIcon :name="selectedMember.checkedInToday ? 'check' : 'target'" :size="16" />
-                    {{ selectedMember.checkedInToday ? 'Deshacer check-in' : 'Completar hábito' }}
+                  <button
+                    class="game-button checkin-button"
+                    :class="{ completed: selectedMember.checkedInToday }"
+                    :aria-pressed="selectedMember.checkedInToday"
+                    @click="toggle"
+                  >
+                    <AppIcon :name="selectedMember.checkedInToday ? 'check' : 'flame'" :size="19" />
+                    {{ selectedMember.checkedInToday ? 'Check-in completado · Deshacer' : '¡Hacer check de hoy!' }}
                   </button>
-                  <button v-if="isAdmin" class="edit-habit" @click="openEditor()">Administrar hábitos</button>
                 </div>
 
                 <p v-if="notice && selectedMember.isCurrentUser" class="check-notice" role="status">
@@ -442,8 +469,8 @@ async function handleLeaveGroup() {
               <section class="game-panel team-habits">
                 <div class="game-title">
                   <h2>Hábitos del grupo</h2>
-                  <button v-if="isAdmin" class="game-button secondary" @click="openEditor()">
-                    <AppIcon name="plus" :size="15" />Agregar hábito
+                  <button v-if="isAdmin" class="game-button secondary add-habit-button" @click="openEditor()">
+                    <AppIcon name="plus" :size="19" />Crear hábito
                   </button>
                 </div>
                 <p v-if="!group.habits?.length" class="habit-empty">Aún no hay hábitos activos en esta aventura.</p>
@@ -456,8 +483,14 @@ async function handleLeaveGroup() {
                   <span class="habit-check-state" :class="{ complete: habit.checks[me?.id ?? '']?.done }">
                     {{ habit.checks[me?.id ?? '']?.done ? 'Hecho' : 'Pendiente' }}
                   </span>
-                  <button v-if="isAdmin" class="edit-habit" @click="openEditor(habit)">Editar</button>
-                  <button v-if="isAdmin" class="edit-habit remove-habit" @click="removeHabit(habit.id, habit.name)">Quitar</button>
+                  <div v-if="isAdmin" class="habit-actions">
+                    <button class="edit-habit" @click="openEditor(habit)">
+                      <AppIcon name="settings" :size="14" />Editar
+                    </button>
+                    <button class="edit-habit remove-habit" @click="removeHabit(habit.id, habit.name)">
+                      <AppIcon name="x" :size="14" />Quitar
+                    </button>
+                  </div>
                 </article>
               </section>
 
@@ -466,37 +499,30 @@ async function handleLeaveGroup() {
                   <h2>Equipo</h2>
                   <small>{{ group.members.length }} miembros</small>
                 </div>
-                <button
+                <article
                   v-for="m in group.members"
                   :key="m.id"
                   class="roster-member"
-                  :class="{ active: selectedMember?.id === m.id }"
-                  @click="selectedId = m.id"
                 >
                   <CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="35" />
-                  <span>
+                  <span class="roster-member-copy">
                     {{ nameOf(m) }}
                     <small>{{ m.habit }}</small>
+                    <small class="roster-role" :class="{ leader: m.role === 'ADMIN' }">
+                      {{ m.role === 'ADMIN' ? 'Admin' : 'Miembro' }}
+                    </small>
                   </span>
-                  <AppIcon :name="m.checkedInToday ? 'check' : 'clock'" :size="17" />
-                </button>
-                <section v-if="isAdmin && selectedMember && !selectedMember.isCurrentUser" class="member-command-card">
-                  <span class="member-command-icon"><AppIcon name="shield" :size="20" /></span>
-                  <div class="member-command-copy">
-                    <small>GESTIONAR JUGADOR</small>
-                    <strong>{{ nameOf(selectedMember) }}</strong>
-                    <span>{{ selectedMember.role === 'ADMIN' ? 'Admin de la aventura' : 'Miembro del equipo' }}</span>
-                  </div>
-                  <div class="member-admin-actions">
-                    <button class="member-role-button" @click="toggleMemberRole(selectedMember)">
-                      <AppIcon name="shield" :size="14" />
-                      {{ selectedMember.role === 'ADMIN' ? 'Quitar admin' : 'Dar admin' }}
-                    </button>
-                    <button class="member-remove-button" @click="removeMember(selectedMember)">
-                      <AppIcon name="logout" :size="14" />Sacar
-                    </button>
-                  </div>
-                </section>
+                  <span class="roster-member-progress">
+                    <span class="roster-member-check" :class="{ complete: m.checkedInToday }">
+                      <AppIcon :name="m.checkedInToday ? 'check' : 'clock'" :size="13" />
+                      {{ m.checkedInToday ? 'Completado' : 'Pendiente' }}
+                    </span>
+                    <span class="roster-member-streak">
+                      <AppIcon name="flame" :size="13" />
+                      {{ m.streak }} {{ m.streak === 1 ? 'día' : 'días' }} de racha
+                    </span>
+                  </span>
+                </article>
               </section>
 
               <div class="reminder">
@@ -566,7 +592,7 @@ async function handleLeaveGroup() {
           <section class="mission-step">
             <span class="mission-step-number">1</span>
             <div class="mission-field">
-              <label for="habit-name">¿Cuál será el reto?</label>
+              <label for="habit-name">¿Qué hábito quiere conquistar el equipo?</label>
               <div class="mission-name-input">
                 <AppIcon name="target" :size="20" />
                 <input id="habit-name" v-model="draft" autofocus maxlength="120" placeholder="Ej. Leer 20 minutos" required />
@@ -576,6 +602,28 @@ async function handleLeaveGroup() {
 
           <section class="mission-step">
             <span class="mission-step-number">2</span>
+            <div class="mission-field">
+              <label>Elige un emblema para el hábito</label>
+              <div class="habit-icon-options" role="group" aria-label="Icono del hábito">
+                <button
+                  v-for="icon in habitIcons"
+                  :key="icon"
+                  type="button"
+                  class="habit-icon-option"
+                  :class="{ selected: habitIconDraft === icon }"
+                  :aria-label="`Usar icono ${icon}`"
+                  :aria-pressed="habitIconDraft === icon"
+                  @click="habitIconDraft = icon"
+                >
+                  {{ icon }}
+                </button>
+              </div>
+              <small class="habit-icon-note">Tu emblema aparecerá junto al hábito en la aventura.</small>
+            </div>
+          </section>
+
+          <section class="mission-step">
+            <span class="mission-step-number">3</span>
             <div class="mission-field">
               <label>Elige la distancia</label>
               <div class="mission-length-options">
@@ -602,8 +650,8 @@ async function handleLeaveGroup() {
               Cancelar
             </button>
             <button class="mission-launch-button" type="submit" :disabled="saving">
-              <AppIcon name="flag" :size="18" />
-              {{ saving ? 'Preparando…' : editingHabitId ? 'Guardar misión' : '¡Iniciar misión!' }}
+              <AppIcon :name="editingHabitId ? 'check' : 'flame'" :size="19" />
+              {{ saving ? 'Guardando…' : editingHabitId ? 'Guardar hábito' : '¡Crear hábito!' }}
             </button>
           </footer>
         </form>
@@ -616,18 +664,102 @@ async function handleLeaveGroup() {
         @keydown.esc="editingGroup = false"
       >
         <form class="adventure-modal group-edit-modal" role="dialog" aria-modal="true" aria-labelledby="group-edit-title" @submit.prevent="saveGroup">
-          <h2 id="group-edit-title">Editar aventura</h2>
-          <label for="group-name">Nombre del grupo</label>
-          <input id="group-name" v-model="groupNameDraft" maxlength="60" minlength="3" required />
-          <label for="group-category">Categoría</label>
-          <input id="group-category" v-model="groupCategoryDraft" maxlength="40" />
-          <label for="group-description">Descripción</label>
-          <textarea id="group-description" v-model="groupDescriptionDraft" maxlength="200" rows="3" />
-          <span class="color-label">Color del grupo</span>
-          <div class="group-color-options">
-            <button v-for="color in GROUP_COLORS" :key="color" type="button" :aria-label="`Elegir color ${color}`" :aria-pressed="groupColorDraft === color" :class="{ selected: groupColorDraft === color }" :style="{ '--group-color': color }" @click="groupColorDraft = color" />
+          <header class="group-edit-hero">
+            <span class="group-edit-emblem" :style="{ '--emblem-color': groupColorDraft }">
+              <AppIcon :name="groupCategoryIcon" :size="23" />
+            </span>
+            <div>
+              <small>PERSONALIZA TU CAMPAMENTO</small>
+              <h2 id="group-edit-title">Editar aventura</h2>
+              <p>Ajusta los detalles para que el equipo se sienta como en casa.</p>
+            </div>
+          </header>
+          <div class="group-edit-content">
+            <section class="group-edit-settings">
+              <div class="group-editor-section-title">
+                <span class="group-editor-section-icon"><AppIcon name="settings" :size="18" /></span>
+                <span>
+                  <strong>Configuración del grupo</strong>
+                  <small>Nombre, categoría y apariencia</small>
+                </span>
+              </div>
+              <label for="group-name">Nombre del grupo</label>
+              <input id="group-name" v-model="groupNameDraft" maxlength="60" minlength="3" required />
+              <span class="group-edit-field-label">Categoría del grupo</span>
+              <div class="group-category-options" aria-label="Categoría del grupo">
+                <button
+                  v-for="category in GROUP_CATEGORIES"
+                  :key="category.label"
+                  type="button"
+                  class="group-category-option"
+                  :class="{ selected: groupCategoryDraft === category.label }"
+                  :aria-pressed="groupCategoryDraft === category.label"
+                  @click="groupCategoryDraft = category.label"
+                >
+                  <AppIcon :name="category.icon" :size="16" />
+                  {{ category.label }}
+                </button>
+              </div>
+              <label for="group-description">Descripción</label>
+              <textarea id="group-description" v-model="groupDescriptionDraft" maxlength="200" rows="3" />
+              <span class="color-label">Color del grupo</span>
+              <div class="group-color-options">
+                <button v-for="color in GROUP_COLORS" :key="color" type="button" :aria-label="`Elegir color ${color}`" :aria-pressed="groupColorDraft === color" :class="{ selected: groupColorDraft === color }" :style="{ '--group-color': color }" @click="groupColorDraft = color" />
+              </div>
+            </section>
+            <section class="group-member-editor">
+            <div class="group-member-heading">
+              <span class="group-member-title-icon"><AppIcon name="user" :size="17" /></span>
+              <span class="group-member-title-copy">
+                <strong>Miembros del equipo</strong>
+                <small>Selecciona a alguien para gestionar su acceso</small>
+              </span>
+              <small>{{ group.members.length }} en la aventura</small>
+            </div>
+            <div class="group-member-list">
+              <button
+                v-for="member in group.members"
+                :key="member.id"
+                type="button"
+                class="group-member-option"
+                :class="{ selected: selectedMember?.id === member.id }"
+                :aria-pressed="selectedMember?.id === member.id"
+                @click="selectedId = member.id"
+              >
+                <CharacterIcon
+                  :character="characters.forMember(member.id, member.isCurrentUser, member.name)"
+                  :size="36"
+                />
+                <span class="group-member-copy">
+                  <strong>{{ nameOf(member) }}{{ member.isCurrentUser ? ' (tú)' : '' }}</strong>
+                  <small>{{ member.habit }}</small>
+                </span>
+                <span class="group-member-role" :class="{ admin: member.role === 'ADMIN' }">
+                  {{ member.role === 'ADMIN' ? 'ADMIN' : 'MIEMBRO' }}
+                </span>
+              </button>
+            </div>
+            <div
+              v-if="isAdmin && selectedMember && !selectedMember.isCurrentUser"
+              class="group-member-actions"
+            >
+              <p>Gestionando a <strong>{{ nameOf(selectedMember) }}</strong></p>
+              <div>
+                <button type="button" class="member-role-button" @click="toggleMemberRole(selectedMember)">
+                  <AppIcon name="shield" :size="15" />
+                  {{ selectedMember.role === 'ADMIN' ? 'Quitar admin' : 'Dar admin' }}
+                </button>
+                <button type="button" class="member-remove-button" @click="removeMember(selectedMember)">
+                  <AppIcon name="logout" :size="15" />Expulsar
+                </button>
+              </div>
+            </div>
+            <p v-else-if="isAdmin" class="group-member-hint">
+              Selecciona un miembro para cambiar su rol o expulsarlo.
+            </p>
+            </section>
           </div>
-          <div>
+          <div class="group-edit-actions">
             <button type="button" class="game-button secondary" @click="editingGroup = false">Cancelar</button>
             <button class="game-button" type="submit" :disabled="saving || groupNameDraft.trim().length < 3">{{ saving ? 'Guardando…' : 'Guardar cambios' }}</button>
           </div>
@@ -1739,4 +1871,1335 @@ async function handleLeaveGroup() {
 .group-color-options button { width: 28px; height: 28px; border-radius: 50%; background: var(--group-color); border: 2px solid #ffffff55; padding: 0; }
 .group-color-options button.selected { outline: 2px solid #fff; outline-offset: 2px; }
 @media(max-width:700px) { .team-habit-row { flex-wrap: wrap; } .team-habit-copy { min-width: calc(100% - 55px); } .group-edit-modal > div:last-child { flex-wrap: wrap; } .mission-hero{grid-template-columns:72px 1fr;min-height:150px;padding:25px 48px 22px 18px;gap:12px}.mission-flag{transform:scale(.72);transform-origin:left center}.mission-hero h2{font-size:21px}.mission-step{grid-template-columns:30px 1fr;padding:18px 16px 0;gap:10px}.mission-step-number{width:29px;height:29px}.mission-length-options{gap:6px}.mission-length-card{min-height:118px;padding-inline:4px}.mission-length-card strong{font-size:24px}.mission-actions{grid-template-columns:1fr;padding:22px 16px;}.mission-actions .secondary{order:2}.mission-actions button{width:100%}.member-admin-actions{grid-template-columns:1fr}.mission-modal{max-height:calc(100vh - 16px)} }
+/* Pulido visual de misiones y roles, sin alterar sus acciones. */
+.team-habits .game-title {
+ padding-bottom: 14px;
+ border-bottom: 1px solid #43304e;
+ margin-bottom: 2px;
+}
+
+.team-habit-row {
+ position: relative;
+ padding: 13px;
+ background: linear-gradient(120deg, #2d2438, #251f30);
+ border: 1px solid #43344f;
+ border-bottom: 3px solid #17111e;
+ border-radius: 13px;
+ transition: border-color .18s, transform .18s, background .18s;
+}
+
+.team-habit-row:hover {
+ background: linear-gradient(120deg, #352941, #2b2236);
+ border-color: #76578d;
+ transform: translateY(-2px);
+}
+
+.team-habit-icon {
+ width: 42px;
+ height: 42px;
+ flex-basis: 42px;
+ background: linear-gradient(145deg, #4a3759, #33263f);
+ border: 1px solid #654b78;
+ box-shadow: inset 0 1px #ffffff12, 0 3px 0 #17111e;
+}
+
+.team-habit-copy strong {
+ font-size: 13px;
+ line-height: 1.4;
+}
+
+.team-habit-copy small {
+ line-height: 1.55;
+}
+
+.habit-check-state {
+ border: 1px solid #9a6b3f;
+ border-radius: 999px;
+ padding: 5px 9px;
+ font-weight: 800;
+ letter-spacing: .02em;
+}
+
+.habit-check-state.complete {
+ border-color: #66824a;
+}
+
+.member-command-card {
+ position: relative;
+ overflow: hidden;
+ background:
+   radial-gradient(circle at 100% 0, #9b75ba24, transparent 38%),
+   linear-gradient(135deg, #342641, #281f32);
+ border-color: #705186;
+}
+
+.member-command-icon {
+ border: 1px solid #e3c9ff;
+ box-shadow: 0 3px 0 #755598, 0 0 18px #c6a4eb26;
+}
+
+.member-admin-actions button,
+.edit-habit {
+ transition: filter .16s, transform .16s, background .16s;
+}
+
+.member-admin-actions button:hover,
+.edit-habit:hover {
+ filter: brightness(1.13);
+ transform: translateY(-1px);
+}
+
+.member-role-button {
+ box-shadow: inset 0 1px #ffffff24;
+}
+
+.member-remove-button {
+ border-radius: 9px;
+}
+
+.mission-step {
+ margin: 18px 30px 0;
+ padding: 16px;
+ background: linear-gradient(120deg, #2b2235, #261e30);
+ border: 1px solid #493953;
+ border-radius: 15px;
+}
+
+.mission-length-card {
+ box-shadow: inset 0 1px #ffffff0a, 0 4px 0 #15101b;
+}
+
+.mission-length-card.selected {
+ box-shadow: inset 0 1px #ffffff70, 0 7px 20px #0b071040;
+}
+
+.mission-launch-button {
+ box-shadow: inset 0 1px #ffffff80, 0 6px 18px #c8e87d1c;
+}
+
+@media(max-width:700px) {
+ .team-habit-row {
+   padding: 11px;
+ }
+
+ .mission-step {
+   margin: 16px 16px 0;
+   padding: 14px;
+ }
+}
+
+.adventure-header .header-actions > .game-button.secondary {
+ min-height: 42px;
+ border-radius: 12px;
+ box-shadow: inset 0 1px #ffffff12, 0 3px 0 #17111e;
+ transition: transform .16s, filter .16s, border-color .16s;
+}
+
+.adventure-header .header-actions > .game-button.secondary:hover {
+ border-color: #b28bd1;
+ filter: brightness(1.12);
+ transform: translateY(-2px);
+}
+
+.adventure-header .header-actions > .game-button.secondary:active {
+ transform: translateY(1px);
+}
+
+.team-habit-row .edit-habit,
+.player-controls > .edit-habit {
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ min-height: 32px;
+ padding: 6px 10px;
+ border: 1px solid #624b75;
+ border-bottom: 3px solid #21172b;
+ border-radius: 9px;
+ background: #382a45;
+ color: #e0c8f2;
+ font-size: 10px;
+ font-weight: 800;
+}
+
+.team-habits .game-title > .game-button {
+ min-height: 40px;
+ padding-inline: 14px;
+ color: #2b3520;
+ background: linear-gradient(135deg, #d5f291, #b8dc75);
+ border-color: #e9ffb5;
+ border-bottom-color: #6b843e;
+ box-shadow: inset 0 1px #ffffff80, 0 4px 12px #b8dc7520;
+ transition: filter .16s, transform .16s, box-shadow .16s;
+}
+
+.team-habits .game-title > .game-button:hover {
+ filter: brightness(1.06);
+ box-shadow: inset 0 1px #ffffffa0, 0 7px 16px #b8dc7530;
+ transform: translateY(-2px);
+}
+
+.team-habits .game-title > .game-button:active {
+ transform: translateY(1px);
+}
+
+.team-habit-row .edit-habit.remove-habit {
+ background: #402832;
+ border-color: #754454;
+ border-bottom-color: #211119;
+ color: #ffc0ca;
+}
+
+.team-habit-row .edit-habit:active,
+.member-admin-actions button:active {
+ transform: translateY(1px);
+}
+
+.member-command-card {
+ box-shadow: inset 0 1px #ffffff0a, 0 5px 16px #0e09141c;
+}
+
+.member-command-copy > small {
+ color: #d3b3eb;
+}
+
+.member-admin-actions button {
+ min-height: 40px;
+ font-size: 10px;
+ letter-spacing: .01em;
+ transition: transform .16s, filter .16s, box-shadow .16s;
+}
+
+.member-role-button:hover {
+ box-shadow: 0 0 0 3px #caa9e726, inset 0 1px #ffffff24;
+}
+
+.member-remove-button:hover {
+ box-shadow: 0 0 0 3px #e7798c20;
+}
+
+.group-edit-modal {
+ width: min(500px, 100%);
+ max-height: calc(100vh - 32px);
+ overflow-y: auto;
+ padding: 0 25px 24px;
+ gap: 10px;
+ border: 1px solid #77558f;
+ border-bottom: 5px solid #160d20;
+ background: linear-gradient(160deg, #2b2136, #211a2b 68%);
+ box-shadow: 0 28px 80px #050208c9;
+}
+
+.group-edit-hero {
+ display: flex;
+ align-items: center;
+ gap: 15px;
+ margin: 0 -25px 7px;
+ padding: 23px 25px;
+ background:
+   radial-gradient(circle at 100% 0, #c8a4eb26, transparent 38%),
+   linear-gradient(125deg, #49325f, #30223e);
+ border-bottom: 1px solid #76578d;
+}
+
+.group-edit-emblem {
+ display: grid;
+ place-items: center;
+ width: 48px;
+ height: 48px;
+ flex: 0 0 48px;
+ color: #30223d;
+ background: #d0b1ed;
+ border: 1px solid #f0ddff;
+ border-bottom: 4px solid #80619a;
+ border-radius: 14px;
+ box-shadow: 0 7px 18px #120b1a55;
+}
+
+.group-edit-hero small {
+ display: block;
+ margin-bottom: 5px;
+ color: #d8f39c;
+ font-size: 8px;
+ font-weight: 900;
+ letter-spacing: .13em;
+}
+
+.group-edit-hero h2 {
+ margin: 0;
+ font-size: 22px;
+}
+
+.group-edit-hero p {
+ margin: 5px 0 0;
+ color: #cbb8d9;
+ font-size: 10px;
+ line-height: 1.5;
+}
+
+.group-edit-modal > label,
+.group-edit-modal .color-label {
+ margin: 5px 0 -5px;
+ color: #e7d9f1;
+ font-size: 10px;
+ font-weight: 800;
+}
+
+.group-edit-modal > input,
+.group-edit-modal textarea {
+ width: 100%;
+ color: #f7effc;
+ background: #191420;
+ border: 1px solid #574365;
+ border-bottom: 3px solid #100c15;
+ border-radius: 10px;
+ padding: 11px 12px;
+ font: inherit;
+ font-size: 12px;
+ transition: border-color .16s, box-shadow .16s, background .16s;
+}
+
+.group-edit-modal > input:focus,
+.group-edit-modal textarea:focus {
+ outline: 0;
+ border-color: #b58bd5;
+ background: #21192a;
+ box-shadow: 0 0 0 3px #bd94df20;
+}
+
+.group-edit-modal textarea {
+ min-height: 78px;
+ resize: vertical;
+}
+
+.group-color-options {
+ align-items: center;
+ gap: 12px;
+ padding: 8px 10px;
+ background: #1c1624;
+ border: 1px solid #40314c;
+ border-radius: 12px;
+}
+
+.group-color-options button {
+ width: 30px;
+ height: 30px;
+ cursor: pointer;
+ transition: transform .16s, box-shadow .16s;
+}
+
+.group-color-options button:hover {
+ transform: scale(1.12);
+}
+
+.group-color-options button.selected {
+ outline: 2px solid #f5eaff;
+ outline-offset: 3px;
+ box-shadow: 0 0 14px var(--group-color);
+}
+
+.group-edit-actions {
+ display: flex;
+ justify-content: flex-end;
+ gap: 9px;
+ margin: 8px 0 0;
+ padding-top: 15px;
+ border-top: 1px solid #44334f;
+}
+
+.group-edit-actions .game-button {
+ min-height: 42px;
+}
+
+@media(max-width:700px) {
+ .group-edit-modal {
+   padding: 0 17px 18px;
+ }
+
+ .group-edit-hero {
+   margin-inline: -17px;
+   padding-inline: 17px;
+ }
+
+ .group-edit-actions {
+   flex-direction: column-reverse;
+ }
+
+ .group-edit-actions .game-button {
+   width: 100%;
+ }
+}
+
+.adventure-header .chat-toggle,
+.adventure-header .edit-group-trigger,
+.adventure-header .leave-btn {
+ min-height: 44px;
+ justify-content: center;
+ border-radius: 12px;
+ font-size: 12px;
+ font-weight: 900;
+ box-shadow: inset 0 1px #ffffff18, 0 4px 0 #17111e;
+ transition: transform .16s, filter .16s, box-shadow .16s;
+}
+
+.adventure-header .chat-toggle {
+ color: #ead8fb;
+ background: linear-gradient(145deg, #493358, #34233f);
+ border-color: #8969a1;
+ border-bottom-color: #1b1123;
+}
+
+.adventure-header .edit-group-trigger {
+ color: #2e213b;
+ background: linear-gradient(145deg, #e0c3fa, #b995db);
+ border-color: #f0dcff;
+ border-bottom-color: #72518a;
+}
+
+.adventure-header .leave-btn {
+ padding: 0 14px;
+ color: #ffcbd2;
+ background: linear-gradient(145deg, #542d3b, #3e2530);
+ border: 1px solid #98586a;
+ border-bottom: 4px solid #211119;
+}
+
+.adventure-header .chat-toggle:hover,
+.adventure-header .edit-group-trigger:hover,
+.adventure-header .leave-btn:hover {
+ filter: brightness(1.12);
+ transform: translateY(-2px);
+}
+
+.adventure-header .chat-toggle:active,
+.adventure-header .edit-group-trigger:active,
+.adventure-header .leave-btn:active {
+ transform: translateY(1px);
+ box-shadow: inset 0 1px #ffffff12, 0 1px 0 #17111e;
+}
+
+.player-controls .checkin-button {
+ min-height: 46px;
+ padding: 11px 18px;
+ border-radius: 12px;
+ font-size: 12px;
+ font-weight: 900;
+ box-shadow: inset 0 1px #ffffff80, 0 5px 0 var(--theme-dark, #6b843e), 0 9px 18px #a5ca6926;
+}
+
+.player-controls .checkin-button:hover {
+ filter: brightness(1.1);
+ transform: translateY(-2px);
+}
+
+.team-habits .game-title {
+ align-items: center;
+}
+
+.team-habits .game-title h2 {
+ font-size: 17px;
+}
+
+.team-habits .add-habit-button {
+ min-height: 46px;
+ padding: 9px 16px;
+ gap: 9px;
+ color: #2a351f;
+ background: linear-gradient(145deg, #d8f48f, #aeda68);
+ border: 1px solid #edffb7;
+ border-bottom: 5px solid #617c37;
+ border-radius: 13px;
+ font-size: 12px;
+ font-weight: 900;
+ box-shadow: inset 0 1px #ffffff9c, 0 7px 16px #b8dc7530;
+ transition: transform .16s, filter .16s, box-shadow .16s;
+}
+
+.team-habits .add-habit-button:hover {
+ filter: brightness(1.08);
+ box-shadow: inset 0 1px #ffffffa8, 0 10px 20px #b8dc7542;
+ transform: translateY(-3px);
+}
+
+.team-habits .add-habit-button:active {
+ box-shadow: inset 0 1px #ffffff55, 0 2px 0 #617c37;
+ transform: translateY(2px);
+}
+
+.team-habit-row {
+ display: grid;
+ grid-template-columns: 48px minmax(0, 1fr) auto;
+ align-items: center;
+ gap: 10px 13px;
+ padding: 13px;
+}
+
+.team-habit-icon {
+ grid-row: 1 / 3;
+ width: 46px;
+ height: 46px;
+ flex-basis: 46px;
+ border-radius: 13px;
+ font-size: 21px;
+ box-shadow: inset 0 1px #ffffff20, 0 4px 0 #17111e;
+}
+
+.team-habit-copy strong {
+ font-size: 14px;
+}
+
+.team-habit-copy small {
+ margin-top: 5px;
+ font-size: 11px;
+}
+
+.team-habit-row .habit-check-state {
+ grid-column: 3;
+ grid-row: 1;
+ padding: 6px 11px;
+ font-size: 10px;
+ font-weight: 900;
+ box-shadow: inset 0 1px #ffffff16;
+}
+
+.habit-actions {
+ grid-column: 2 / 4;
+ grid-row: 2;
+ display: flex;
+ justify-content: flex-end;
+ gap: 8px;
+}
+
+.team-habit-row .habit-actions .edit-habit {
+ min-height: 36px;
+ padding: 7px 12px;
+ gap: 7px;
+ font-size: 11px;
+ font-weight: 900;
+ box-shadow: inset 0 1px #ffffff12, 0 3px 0 #21172b;
+}
+
+.team-habit-row .habit-actions .edit-habit:hover {
+ box-shadow: inset 0 1px #ffffff1a, 0 5px 0 #21172b, 0 7px 14px #0e091433;
+ transform: translateY(-2px);
+}
+
+.team-habit-row .habit-actions .remove-habit {
+ border-color: #965568;
+ border-bottom-color: #29141b;
+ background: linear-gradient(145deg, #59313f, #402530);
+}
+
+.team-roster .roster-member {
+ min-height: 64px;
+ padding: 11px 13px;
+ border: 1px solid #493753;
+ border-bottom: 3px solid #17111e;
+ border-radius: 12px;
+ cursor: default;
+}
+
+.team-roster .roster-member-copy {
+ display: block;
+ flex: 1;
+ min-width: 0;
+ overflow-wrap: anywhere;
+ font-size: 12px;
+}
+
+.team-roster .roster-member-progress {
+ display: grid;
+ justify-items: end;
+ gap: 6px;
+ flex: 0 0 auto;
+}
+
+.team-roster .roster-member-check,
+.team-roster .roster-member-streak {
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ gap: 5px;
+ width: fit-content;
+ border: 1px solid #574361;
+ border-radius: 999px;
+ padding: 5px 9px;
+ color: #d3c2df;
+ background: #34283f;
+ font-size: 9px;
+ font-weight: 800;
+ white-space: nowrap;
+}
+
+.team-roster .roster-member-check.complete {
+ color: #d3e8b6;
+ background: #34422e;
+ border-color: #596e48;
+}
+
+.team-roster .roster-member-streak {
+ color: #f0c58e;
+ background: #43332b;
+ border-color: #70513a;
+}
+
+.team-roster .roster-member .roster-role {
+ display: inline-flex;
+ width: fit-content;
+ margin-top: 5px;
+ padding: 3px 7px;
+ color: #d7c3e8;
+ background: #392b45;
+ border: 1px solid #5b456d;
+ border-radius: 999px;
+ font-size: 8px;
+ font-weight: 900;
+ letter-spacing: .06em;
+}
+
+.team-roster .roster-member .roster-role.leader {
+ color: #f0d7a3;
+ background: #46372b;
+ border-color: #79603b;
+}
+
+.member-command-card {
+ padding: 16px;
+ border-radius: 15px;
+}
+
+.member-admin-actions button {
+ min-height: 44px;
+ border-radius: 11px;
+ font-size: 11px;
+ font-weight: 900;
+}
+
+.member-role-button {
+ background: linear-gradient(145deg, #d8b8f3, #b58bd5);
+ border-color: #f0dcff;
+ border-bottom-color: #72518a;
+ box-shadow: inset 0 1px #ffffff80, 0 4px 12px #c6a4eb20;
+}
+
+.member-remove-button {
+ background: linear-gradient(145deg, #59313f, #402530);
+ border-color: #965568;
+ border-bottom-color: #211119;
+}
+
+.habit-empty {
+ padding: 18px;
+ border: 1px dashed #705486;
+ border-radius: 13px;
+ background: #2b2235;
+ font-size: 12px;
+ text-align: center;
+}
+
+@media(max-width:700px) {
+ .team-habit-row {
+   grid-template-columns: 42px minmax(0, 1fr);
+   gap: 9px 11px;
+   padding: 11px;
+ }
+
+ .team-habit-copy {
+   min-width: 0;
+ }
+
+ .team-habit-icon {
+   grid-row: 1 / 3;
+   width: 40px;
+   height: 40px;
+ }
+
+ .team-habit-row .habit-check-state {
+   grid-column: 2;
+   grid-row: 2;
+   justify-self: start;
+ }
+
+ .habit-actions {
+   grid-column: 1 / -1;
+   grid-row: 3;
+   justify-content: stretch;
+ }
+
+ .habit-actions .edit-habit {
+   flex: 1;
+ }
+
+ .header-actions .chat-toggle,
+ .header-actions .edit-group-trigger,
+ .header-actions .leave-btn {
+   min-height: 40px;
+   font-size: 10px;
+ }
+}
+
+.player-controls {
+ display: block;
+}
+
+.player-controls .checkin-button {
+ display: flex;
+ width: 100%;
+ min-height: 66px;
+ justify-content: center;
+ gap: 12px;
+ padding: 14px 20px;
+ color: #382817;
+ background: linear-gradient(135deg, #ffe08b, #ffad55 58%, #f28a45);
+ border: 2px solid #fff0b0;
+ border-bottom: 6px solid #985526;
+ border-radius: 16px;
+ font-size: 16px;
+ font-weight: 950;
+ letter-spacing: .01em;
+ box-shadow: inset 0 1px #ffffffb3, 0 8px 18px #ee9b4635;
+ transition: filter .16s, transform .16s, box-shadow .16s;
+}
+
+.player-controls .checkin-button svg {
+ width: 23px;
+ height: 23px;
+ filter: drop-shadow(0 2px 2px #8c4e3340);
+}
+
+.player-controls .checkin-button:hover {
+ filter: brightness(1.06) saturate(1.08);
+ box-shadow: inset 0 1px #ffffffc9, 0 12px 24px #ee9b4650;
+ transform: translateY(-3px);
+}
+
+.player-controls .checkin-button:active {
+ border-bottom-width: 3px;
+ transform: translateY(2px);
+}
+
+.player-controls .checkin-button.completed {
+ color: #26351f;
+ background: linear-gradient(135deg, #e1f8a7, #bce477 58%, #9ac85d);
+ border-color: #f0ffc6;
+ border-bottom-color: #5f7c37;
+ box-shadow: inset 0 1px #ffffffb3, 0 8px 18px #a9d46a30;
+}
+
+.player-controls .checkin-button.completed:hover {
+ box-shadow: inset 0 1px #ffffffc9, 0 12px 24px #a9d46a48;
+}
+
+.team-habits .add-habit-button {
+ min-height: 54px;
+ padding: 11px 20px;
+ gap: 11px;
+ font-size: 14px;
+ border-radius: 15px;
+ border-bottom-width: 6px;
+ box-shadow: inset 0 1px #ffffffb5, 0 9px 20px #b8dc7542;
+}
+
+.team-habits .add-habit-button svg {
+ width: 21px;
+ height: 21px;
+}
+
+.mission-modal .mission-step {
+ align-items: start;
+}
+
+.habit-icon-options {
+ display: grid;
+ grid-template-columns: repeat(6, minmax(0, 1fr));
+ gap: 9px;
+}
+
+.habit-icon-option {
+ display: grid;
+ place-items: center;
+ min-width: 0;
+ aspect-ratio: 1;
+ color: #f4e9fc;
+ background: linear-gradient(145deg, #392d46, #2a2235);
+ border: 1px solid #5b456c;
+ border-bottom: 4px solid #17111e;
+ border-radius: 13px;
+ font-size: 25px;
+ cursor: pointer;
+ box-shadow: inset 0 1px #ffffff10;
+ transition: transform .16s, border-color .16s, background .16s, box-shadow .16s;
+}
+
+.habit-icon-option:hover {
+ border-color: #b48cd1;
+ background: linear-gradient(145deg, #4a3859, #34273f);
+ transform: translateY(-3px) scale(1.04);
+}
+
+.habit-icon-option.selected {
+ color: #30381f;
+ background: linear-gradient(145deg, #e0f6a1, #b9de76);
+ border-color: #f0ffbf;
+ border-bottom-color: #66803e;
+ box-shadow: inset 0 1px #ffffffb3, 0 0 0 3px #c8e87d26, 0 6px 14px #c8e87d20;
+ transform: translateY(-2px);
+}
+
+.habit-icon-note {
+ display: block;
+ margin-top: 9px;
+ color: #bba8ca;
+ font-size: 10px;
+ line-height: 1.5;
+}
+
+.mission-launch-button {
+ min-height: 64px;
+ font-size: 16px;
+ box-shadow: inset 0 1px #ffffffa8, 0 8px 18px #c8e87d30;
+}
+
+@media(max-width:700px) {
+ .player-controls .checkin-button {
+   min-height: 62px;
+   font-size: 14px;
+ }
+
+ .team-habits .add-habit-button {
+   min-height: 48px;
+   padding-inline: 13px;
+   font-size: 12px;
+ }
+
+ .habit-icon-options {
+   grid-template-columns: repeat(4, minmax(0, 1fr));
+   gap: 8px;
+ }
+
+ .habit-icon-option {
+   font-size: 23px;
+ }
+}
+
+@media(max-width:650px) {
+ .team-roster .roster-member {
+   grid-template-columns: 36px minmax(0, 1fr);
+   gap: 8px 10px;
+ }
+
+ .team-roster .roster-member-progress {
+   grid-column: 2;
+   display: flex;
+   justify-items: start;
+   flex-wrap: wrap;
+   justify-content: flex-start;
+ }
+}
+
+.adventure-header .edit-group-trigger {
+ min-height: 48px;
+ padding: 10px 17px;
+ gap: 9px;
+ font-size: 13px;
+ box-shadow: inset 0 1px #ffffffb3, 0 5px 0 #72518a, 0 8px 18px #b995db30;
+}
+
+.adventure-header .edit-group-trigger svg {
+ width: 18px;
+ height: 18px;
+}
+
+.group-edit-modal {
+ max-height: calc(100vh - 28px);
+ overflow-y: auto;
+ scrollbar-color: #76578d #211a2b;
+}
+
+.group-edit-emblem {
+ color: #fff;
+ background: linear-gradient(145deg, var(--emblem-color, #b995db), #30213d);
+ border-color: color-mix(in srgb, var(--emblem-color, #b995db) 65%, white);
+ box-shadow: inset 0 1px #ffffff80, 0 5px 0 #1b1123, 0 0 20px color-mix(in srgb, var(--emblem-color, #b995db) 35%, transparent);
+}
+
+.group-edit-field-label {
+ margin: 5px 0 -5px;
+ color: #e7d9f1;
+ font-size: 10px;
+ font-weight: 800;
+}
+
+.group-category-options {
+ display: grid;
+ grid-template-columns: repeat(3, minmax(0, 1fr));
+ gap: 8px;
+}
+
+.group-category-option {
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ gap: 7px;
+ min-height: 42px;
+ padding: 7px 8px;
+ color: #d7c6e4;
+ background: linear-gradient(145deg, #34283f, #282130);
+ border: 1px solid #554064;
+ border-bottom: 3px solid #18111f;
+ border-radius: 10px;
+ font-size: 10px;
+ font-weight: 800;
+ cursor: pointer;
+ transition: transform .15s, color .15s, border-color .15s, background .15s;
+}
+
+.group-category-option:hover {
+ border-color: #a886c2;
+ color: #fff;
+ transform: translateY(-2px);
+}
+
+.group-category-option.selected {
+ color: #2e213b;
+ background: linear-gradient(145deg, #e0c3fa, #b995db);
+ border-color: #f0dcff;
+ border-bottom-color: #72518a;
+ box-shadow: inset 0 1px #ffffff80, 0 0 0 2px #caa9e726;
+}
+
+.group-member-editor {
+ display: grid;
+ gap: 10px;
+ margin-top: 6px;
+ padding: 13px;
+ background: linear-gradient(145deg, #261e30, #211a2b);
+ border: 1px solid #493753;
+ border-radius: 13px;
+}
+
+.group-member-heading {
+ display: flex;
+ align-items: center;
+ justify-content: space-between;
+ gap: 8px;
+}
+
+.group-member-heading > span {
+ display: flex;
+ align-items: center;
+ gap: 7px;
+ color: #f1e5fa;
+ font-size: 11px;
+ font-weight: 900;
+}
+
+.group-member-heading svg {
+ color: #d1aff0;
+}
+
+.group-member-heading small {
+ color: #bba8ca;
+ font-size: 9px;
+}
+
+.group-member-list {
+ display: grid;
+ gap: 6px;
+ max-height: 180px;
+ overflow-y: auto;
+ scrollbar-color: #705486 #211a2b;
+}
+
+.group-member-option {
+ display: flex;
+ align-items: center;
+ gap: 9px;
+ width: 100%;
+ min-width: 0;
+ padding: 7px 9px;
+ color: #f2eaf8;
+ background: #30263a;
+ border: 1px solid #493753;
+ border-radius: 10px;
+ text-align: left;
+ cursor: pointer;
+ transition: background .15s, border-color .15s, transform .15s;
+}
+
+.group-member-option:hover {
+ background: #392b45;
+ border-color: #83639b;
+ transform: translateX(2px);
+}
+
+.group-member-option.selected {
+ background: linear-gradient(100deg, #473454, #34283f);
+ border-color: #b58bd5;
+ box-shadow: inset 3px 0 #d8b8f3;
+}
+
+.group-member-copy {
+ display: grid;
+ flex: 1;
+ min-width: 0;
+ gap: 3px;
+}
+
+.group-member-copy strong,
+.group-member-copy small {
+ overflow: hidden;
+ text-overflow: ellipsis;
+ white-space: nowrap;
+}
+
+.group-member-copy strong {
+ font-size: 10px;
+}
+
+.group-member-copy small {
+ color: #bba8ca;
+ font-size: 9px;
+}
+
+.group-member-role {
+ padding: 4px 7px;
+ color: #d8c6e7;
+ background: #44364f;
+ border: 1px solid #645273;
+ border-radius: 999px;
+ font-size: 7px;
+ font-weight: 900;
+ letter-spacing: .04em;
+}
+
+.group-member-role.admin {
+ color: #f2daa2;
+ background: #4a3a2a;
+ border-color: #806442;
+}
+
+.group-member-hint,
+.group-member-actions > p {
+ margin: 0;
+ color: #c4b1d3;
+ font-size: 10px;
+}
+
+.group-member-actions {
+ display: grid;
+ gap: 8px;
+ padding-top: 10px;
+ border-top: 1px solid #493753;
+}
+
+.group-member-actions > div {
+ display: grid;
+ grid-template-columns: 1fr 1fr;
+ gap: 8px;
+}
+
+.group-member-actions button {
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ gap: 7px;
+ min-height: 40px;
+ border-radius: 10px;
+ font-size: 10px;
+ font-weight: 900;
+ cursor: pointer;
+ transition: filter .15s, transform .15s;
+}
+
+.group-member-actions button:hover {
+ filter: brightness(1.1);
+ transform: translateY(-2px);
+}
+
+.group-member-actions .member-role-button {
+ color: #2e213b;
+ background: linear-gradient(145deg, #d8b8f3, #b58bd5);
+ border: 1px solid #f0dcff;
+ border-bottom: 4px solid #72518a;
+}
+
+.group-member-actions .member-remove-button {
+ color: #ffcbd2;
+ background: linear-gradient(145deg, #59313f, #402530);
+ border: 1px solid #965568;
+ border-bottom: 4px solid #211119;
+}
+
+@media(max-width:700px) {
+ .group-category-options {
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+ }
+
+ .group-member-editor {
+   padding: 10px;
+ }
+}
+
+.group-edit-modal {
+ display: flex;
+ flex-direction: column;
+ width: min(940px, 100%);
+ max-height: calc(100vh - 36px);
+ gap: 0;
+ padding: 0;
+ overflow: hidden;
+}
+
+.group-edit-hero {
+ flex: 0 0 auto;
+ margin: 0;
+ padding: 22px 28px;
+}
+
+.group-edit-content {
+ display: grid;
+ grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+ align-items: start;
+ gap: 18px;
+ min-height: 0;
+ padding: 20px 24px;
+ overflow-y: auto;
+ scrollbar-color: #76578d #211a2b;
+}
+
+.adventure-modal.group-edit-modal > .group-edit-content {
+ display: grid;
+ justify-content: stretch;
+ gap: 18px;
+ margin: 0;
+}
+
+.group-edit-settings,
+.group-member-editor {
+ display: flex;
+ flex-direction: column;
+ align-items: stretch;
+ gap: 11px;
+ min-width: 0;
+ margin: 0;
+ padding: 17px;
+ background:
+   radial-gradient(ellipse at 100% 0, #9b75ba12, transparent 38%),
+   linear-gradient(155deg, #292132, #211a2b);
+ border: 1px solid #4d3a5b;
+ border-bottom: 3px solid #17111e;
+ border-radius: 16px;
+}
+
+.group-editor-section-title {
+ display: flex;
+ align-items: center;
+ gap: 11px;
+ padding-bottom: 13px;
+ border-bottom: 1px solid #493753;
+}
+
+.group-editor-section-icon,
+.group-member-title-icon {
+ display: grid;
+ place-items: center;
+ width: 42px;
+ height: 42px;
+ flex: 0 0 42px;
+ color: #f0ddff;
+ background: linear-gradient(145deg, #72558c, #493358);
+ border: 1px solid #b28bd1;
+ border-bottom: 4px solid #21152b;
+ border-radius: 12px;
+ box-shadow: inset 0 1px #ffffff38, 0 4px 10px #0e091433;
+}
+
+.group-editor-section-title > span:last-child,
+.group-member-title-copy {
+ display: grid;
+ gap: 4px;
+ min-width: 0;
+}
+
+.group-editor-section-title strong,
+.group-member-title-copy strong {
+ color: #f4eafa;
+ font-size: 13px;
+}
+
+.group-editor-section-title small,
+.group-member-title-copy small {
+ color: #bba8ca;
+ font-size: 9px;
+ line-height: 1.4;
+}
+
+.group-edit-settings > label,
+.group-edit-settings .group-edit-field-label,
+.group-edit-settings .color-label {
+ margin: 3px 0 -4px;
+ color: #e7d9f1;
+ font-size: 10px;
+ font-weight: 850;
+}
+
+.group-edit-settings > input,
+.group-edit-settings textarea {
+ width: 100%;
+}
+
+.group-edit-settings .group-category-options {
+ grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.group-edit-settings .group-category-option {
+ min-height: 40px;
+ justify-content: flex-start;
+ padding-inline: 10px;
+}
+
+.group-edit-settings .group-color-options {
+ justify-content: space-around;
+ gap: 8px;
+}
+
+.group-member-editor {
+ gap: 12px;
+ align-self: start;
+}
+
+.group-member-heading {
+ justify-content: flex-start;
+ flex-wrap: nowrap;
+ padding-bottom: 12px;
+ border-bottom: 1px solid #493753;
+}
+
+.group-member-heading .group-member-title-icon {
+ color: #e8d2fa;
+ background: linear-gradient(145deg, #644a7b, #3e2d4d);
+ border-color: #9878b0;
+}
+
+.group-member-heading .group-member-title-copy {
+ flex: 1;
+}
+
+.group-member-heading > small {
+ flex: 0 0 auto;
+ margin-left: auto;
+ padding: 5px 8px;
+ color: #d7c3e8;
+ background: #392b45;
+ border: 1px solid #5b456d;
+ border-radius: 999px;
+}
+
+.group-member-list {
+ max-height: 250px;
+ flex: 0 0 auto;
+}
+
+.group-member-option {
+ min-height: 58px;
+ padding: 9px 10px;
+ border-radius: 12px;
+}
+
+.group-member-option.selected {
+ box-shadow: inset 4px 0 #d8b8f3, 0 0 0 2px #caa9e71a;
+}
+
+.group-member-copy strong {
+ font-size: 11px;
+}
+
+.group-member-role {
+ font-size: 8px;
+}
+
+.group-member-actions {
+ margin-top: auto;
+ padding: 12px;
+ background: #30263a;
+ border: 1px solid #59436a;
+ border-radius: 13px;
+}
+
+.group-member-actions > p {
+ font-size: 11px;
+}
+
+.group-member-actions button {
+ min-height: 44px;
+ font-size: 11px;
+}
+
+.group-member-hint {
+ display: flex;
+ align-items: center;
+ min-height: 52px;
+ padding: 11px 12px;
+ background: #30263a;
+ border: 1px dashed #705486;
+ border-radius: 12px;
+ line-height: 1.5;
+}
+
+.group-edit-actions {
+ flex: 0 0 auto;
+ margin: 0;
+ padding: 14px 24px 18px;
+ background: #211a2b;
+ border-top: 1px solid #493753;
+}
+
+.adventure-modal.group-edit-modal > .group-edit-actions {
+ display: flex;
+ justify-content: flex-end;
+ margin: 0;
+}
+
+@media(max-width:700px) {
+ .group-edit-modal {
+   max-height: calc(100vh - 20px);
+ }
+
+ .group-edit-hero {
+   padding: 17px;
+ }
+
+ .group-edit-content {
+   grid-template-columns: minmax(0, 1fr);
+   gap: 12px;
+   padding: 13px;
+ }
+
+ .group-member-heading {
+   flex-wrap: wrap;
+ }
+
+ .group-member-heading > small {
+   margin-left: 53px;
+ }
+
+ .group-edit-settings,
+ .group-member-editor {
+   padding: 13px;
+ }
+
+ .group-edit-actions {
+   flex-direction: row;
+   padding: 12px 13px;
+ }
+
+ .adventure-modal.group-edit-modal > .group-edit-actions {
+   flex-direction: row;
+ }
+
+ .group-edit-actions .game-button {
+   width: auto;
+   flex: 1;
+ }
+}
 </style>
