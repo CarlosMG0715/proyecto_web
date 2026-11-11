@@ -6,6 +6,7 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import streakLostBanner from '@/assets/Racha perdida.png'
+import expulsionBanner from '@/assets/expulsion.png'
 import '@/assets/styles/game-views.css'
 import TeamNotifications from '@/components/layout/TeamNotifications.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
@@ -14,6 +15,7 @@ import { getThemeBackground } from '@/constants/themeBackgrounds'
 import { useCharacterStore } from '@/stores/characters'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
+import { api } from '@/services/api'
 import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
 
 const characters = useCharacterStore()
@@ -22,11 +24,41 @@ const groups = useGroupsStore()
 const session = useSessionStore()
 const { dayKey } = useMidnightCountdown()
 const streakLossDialog = ref<HTMLDialogElement | null>(null)
+const expelledDialog = ref<HTMLDialogElement | null>(null)
+const expelledNotice = ref<{ id: string; groupName: string } | null>(null)
+let updatingExpulsion = false
 const accountCreated = ref(false)
 const shownLosses = new Set<string>()
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 
 watch(dayKey, () => { void groups.refreshRemoteGroups() }, { flush: 'sync' })
+
+async function loadExpulsion() {
+  const userId = session.currentUser?.id
+  if (!userId || updatingExpulsion || expelledNotice.value) return
+  updatingExpulsion = true
+  try {
+    const { data } = await api.get<typeof expelledNotice.value>('/groups/expulsions')
+    const dialog = expelledDialog.value
+    if (data && dialog && session.currentUser?.id === userId) {
+      expelledNotice.value = data
+      dialog.showModal()
+    }
+  } catch { /* La próxima actualización vuelve a consultar. */ }
+  finally { updatingExpulsion = false }
+}
+
+async function acknowledgeExpulsion() {
+  const notice = expelledNotice.value
+  if (!notice) return
+  updatingExpulsion = true
+  try { await api.delete('/groups/expulsions/' + encodeURIComponent(notice.id)) }
+  catch { /* El servidor conserva el aviso para volver a mostrarlo. */ }
+  finally {
+    expelledNotice.value = null
+    updatingExpulsion = false
+  }
+}
 
 watch(() => [dayKey.value, groups.checkInHistory, groups.isLoading, groups.error, session.currentUser?.id, streakLossDialog.value], () => {
   const userId = session.currentUser?.id
@@ -50,9 +82,11 @@ function refreshProfiles() {
   if (document.visibilityState === 'hidden') return
   void characters.refreshPreferences()
   void groups.refreshRemoteGroups()
+  void loadExpulsion()
 }
 
 onMounted(() => {
+  void loadExpulsion()
   if (window.history.state?.kordiaAccountCreated === true) {
     accountCreated.value = true
     window.history.replaceState({ ...window.history.state, kordiaAccountCreated: false }, '')
@@ -92,6 +126,13 @@ onUnmounted(() => {
         <img class="streak-loss-banner" :src="streakLostBanner" alt="" />
         <h2 id="personal-penalty-title">Racha personal perdida</h2>
         <p>Ayer terminó sin un check registrado. Puedes empezar una nueva racha hoy.</p>
+        <form method="dialog"><button class="game-button">Entendido</button></form>
+      </dialog>
+      <dialog ref="expelledDialog" class="streak-loss-dialog" aria-labelledby="expelled-title"
+        :style="{ '--theme-accent': characters.theme.color }" @close="acknowledgeExpulsion">
+        <img class="streak-loss-banner" :src="expulsionBanner" alt="" />
+        <h2 id="expelled-title">Saliste de la aventura</h2>
+        <p>Un administrador te expulsó de «{{ expelledNotice?.groupName }}».</p>
         <form method="dialog"><button class="game-button">Entendido</button></form>
       </dialog>
     </Teleport>

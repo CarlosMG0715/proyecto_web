@@ -110,6 +110,7 @@ async function decide(req, res, next) {
           where: { groupId: request.groupId, userId: request.requesterId, fallenAt: { not: null } },
         })
         if (!removed.count) throw httpError('La persona ya no está caída en este grupo', 409)
+        await tx.groupExpulsion.create({ data: { userId: request.requesterId, groupName: request.group.name } })
       } else if (action === 'ACCEPTED' && request.isReturn) {
         const restored = await tx.groupMembership.updateMany({
           where: { groupId: request.groupId, userId: request.requesterId, fallenAt: { not: null } },

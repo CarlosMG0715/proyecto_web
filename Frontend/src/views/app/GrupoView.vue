@@ -88,7 +88,7 @@ const participationState = computed(() => {
   if (group.value?.archivedAt) return { level: 'empty', label: 'Aventura cerrada', icon: 'users' as const }
   if (selectedMember.value?.hasPendingReturn) return { level: 'return', label: 'Quiere volver · regreso pendiente', icon: 'users' as const }
   const missed = selectedMember.value?.dropoutRiskMissedDays ?? 0
-  if (missed >= 5) return { level: 'high', label: 'Riesgo alto de abandono', icon: 'flame' as const }
+  if (missed >= 5 || (missed >= 3 && riskPercent.value >= 80)) return { level: 'high', label: 'Riesgo alto de abandono', icon: 'flame' as const }
   if (missed >= 3) return { level: 'risk', label: 'En riesgo de abandono', icon: 'flame' as const }
   return { level: 'low', label: 'Riesgo bajo · sigue participando', icon: 'check' as const }
 })
@@ -1073,7 +1073,7 @@ async function handleLeaveGroup() {
                       <div><dt>Miembros del grupo</dt><dd>{{ group.members.length }}</dd></div>
                     </dl>
                   </div>
-                  <template v-else-if="!selectedMember.isFallen">
+                  <template v-else>
                   <header class="participation-heading">
                     <CharacterIcon :character="characters.forMember(selectedMember.id, selectedMember.isCurrentUser, selectedMember.name)" :size="64" />
                     <div>
@@ -1084,9 +1084,6 @@ async function handleLeaveGroup() {
                   <p class="participation-status">
                     <AppIcon :name="participationState.icon" :size="22" />
                     {{ participationState.label }}
-                  </p>
-                  <p v-if="selectedMember.dropoutRiskMissedDays" class="participation-help">
-                    Lleva {{ selectedMember.missedDaysLastWeek }} días sin check esta semana y aún no ha pedido volver. Un mensaje del equipo puede ayudarle a retomar.
                   </p>
                   <div class="participation-risk">
                     <strong>{{ riskPercent === null ? 'Sin datos' : riskPercent + '%' }}</strong>

@@ -41,6 +41,7 @@ enum RiskLevel {
 model User {
   sentStreakPokes StreakPoke[] @relation("StreakPokeSender")
   receivedStreakPokes StreakPoke[] @relation("StreakPokeRecipient")
+  expulsions GroupExpulsion[]
   notificationPreferences Json?
   lastReminderDay String?
   emailVerificationRequired Boolean @default(true)
@@ -303,6 +304,17 @@ model GroupJoinRequest {
   @@index([groupId, status, createdAt])
   @@index([requesterId, status])
   @@map("group_join_requests")
+}
+
+model GroupExpulsion {
+  id        String   @id @default(cuid())
+  userId    String
+  groupName String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("group_expulsions")
 }
 
 model StreakPoke {

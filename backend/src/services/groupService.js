@@ -91,7 +91,7 @@ function toGroupDto(group, currentUserId) {
       returnRequests: returns?.count ?? 0,
       revivalCount: returns?.revived ?? 0,
       hasPendingReturn: returns?.pending ?? false,
-      dropoutRiskMissedDays: !group.archivedAt && !m.fallenAt && missedDays >= 3 && !returns?.pending ? missedDays : 0,
+      dropoutRiskMissedDays: !group.archivedAt && missedDays >= 3 && !returns?.pending ? missedDays : 0,
       habit: habits.map((h) => h.name).join(', '),
       daysCompleted,
       daysTotal,
@@ -439,6 +439,8 @@ class GroupService {
         data: { status: 'REJECTED', decidedAt: new Date(), decidedById: userId },
       })
       await tx.groupMembership.delete({ where: { id: target.id } })
+      const group = await tx.group.findUniqueOrThrow({ where: { id: groupId }, select: { name: true } })
+      await tx.groupExpulsion.create({ data: { userId: memberId, groupName: group.name } })
     })
     return this.getForMember({ userId, groupId })
   }
