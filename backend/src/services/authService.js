@@ -74,7 +74,14 @@ class AuthService {
   async register({ name, email, password }) {
     // normaliza el correo y crea una contraseña cifrada con bcrypt.
     const normalizedEmail = email.toLowerCase().trim()
-    const mailConfig = getVerificationEmailConfig()
+    let mailConfig = null
+    try {
+      mailConfig = getVerificationEmailConfig()
+    } catch {
+      // Si el correo no está configurado (ej. en Render sin RESEND_API_KEY),
+      // permitimos el registro directo sin bloquear con 503.
+      mailConfig = null
+    }
 
     const existing = await prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -85,13 +92,23 @@ class AuthService {
 
     const passwordHash = await bcrypt.hash(password, 12)
 
-    const verification = newEmailVerification()
+    const verification = mailConfig ? newEmailVerification() : null
+    const verificationFields = verification
+      ? verification.fields
+      : {
+          emailVerificationRequired: false,
+          emailVerifiedAt: new Date(),
+          emailVerificationHash: null,
+          emailVerificationExpiresAt: null,
+          emailVerificationSentAt: null,
+        }
+
     const user = await prisma.user.create({
       data: {
         name: name.trim(),
         email: normalizedEmail,
         passwordHash,
-        ...verification.fields,
+        ...verificationFields,
       },
       select: {
         id: true,
@@ -105,8 +122,29 @@ class AuthService {
       if (error.code === 'P2002') throw httpError('El correo electrónico ya está registrado', 400)
       throw error
     })
-    const verificationSent = await sendVerificationEmail(mailConfig, user.email, verification.token)
-    return { user, verificationSent }
+
+    let verificationSent = false
+    let verificationRequired = Boolean(mailConfig)
+
+    if (mailConfig) {
+      verificationSent = await sendVerificationEmail(mailConfig, user.email, verification.token)
+      if (!verificationSent) {
+        // Si Resend no pudo enviar el correo (por ejemplo un correo de profesor o compañero en la cuenta free de Resend),
+        // auto-verificamos para que puedan ingresar sin quedar bloqueados.
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            emailVerificationRequired: false,
+            emailVerifiedAt: new Date(),
+            emailVerificationHash: null,
+            emailVerificationExpiresAt: null,
+          },
+        })
+        verificationRequired = false
+      }
+    }
+
+    return { user, verificationSent, verificationRequired }
   }
 
   async deleteAccount(userId, password) {

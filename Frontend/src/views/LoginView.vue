@@ -45,6 +45,17 @@ async function onSubmit(): Promise<void> {
   try {
     if (isRegister.value) {
       const result = await register({ name: name.value, ...credentials })
+      if (result.verificationRequired === false) {
+        try {
+          await login(credentials)
+          await router.push(getRedirect())
+          return
+        } catch {
+          mode.value = 'login'
+          success.value = '¡Cuenta creada con éxito! Ya puedes iniciar sesión.'
+          return
+        }
+      }
       mode.value = 'login'
       pendingVerificationEmail.value = credentials.email
       if (result.verificationSent) {
