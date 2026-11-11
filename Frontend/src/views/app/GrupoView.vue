@@ -42,15 +42,26 @@ const countdownUrgency = computed(() => {
 const group = computed(() => store.groupById(String(route.params.groupId)))
 const selectedId = ref('')
 const showTeamStatistics = ref(false)
+const todayCheckCount = computed(() => group.value?.members.filter(member => member.checkedInToday).length ?? 0)
 const teamActivity = computed(() => {
-  const dates = group.value?.members[0]?.recentActivity ?? []
-  return dates.map(day => {
-    const records = (group.value?.members ?? []).flatMap(member =>
+  const current = group.value
+  if (!current) return []
+  const dates = current.members[0]?.recentActivity ?? []
+  const activity = dates.map(day => {
+    const records = current.members.flatMap(member =>
       (member.recentActivity ?? []).filter(entry => entry.date === day.date && entry.completed !== null))
     const completed = records.filter(entry => entry.completed).length
     return { date: day.date, label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
       percent: records.length ? Math.round(completed / records.length * 100) : null }
   })
+  if (!current.archivedAt && current.habits?.length && current.members.length) {
+    activity.push({
+      date: 'today',
+      label: 'Hoy',
+      percent: Math.round(todayCheckCount.value / current.members.length * 100),
+    })
+  }
+  return activity
 })
 const selectedMember = computed(
   () =>
@@ -1046,16 +1057,18 @@ async function handleLeaveGroup() {
                     </button>
                   </nav>
                   <div v-if="showTeamStatistics" class="team-statistics-content">
-                    <header><small>ESTADÍSTICAS GENERALES</small><h3>{{ group.name }}</h3><p>Participación de los miembros actuales durante los últimos siete días cerrados.</p></header>
-                    <ul class="participation-chart team-activity-chart" aria-label="Cumplimiento diario del equipo">
-                      <li v-for="day in teamActivity" :key="day.date" :aria-label="day.date + ': ' + (day.percent === null ? 'Sin datos' : day.percent + '% de cumplimiento')">
+                    <header><small>ESTADÍSTICAS GENERALES</small><h3>{{ group.name }}</h3><p>Cumplimiento diario de los miembros actuales. La barra «Hoy» muestra el avance del día en curso cuando el grupo está activo.</p></header>
+                    <ul class="participation-chart team-activity-chart" aria-label="Cumplimiento diario del equipo"
+                      :style="{ gridTemplateColumns: 'repeat(' + Math.max(1, teamActivity.length) + ', minmax(0, 1fr))' }">
+                      <li v-for="day in teamActivity" :key="day.date" :class="{ 'is-today': day.date === 'today' }"
+                        :aria-label="(day.date === 'today' ? 'Hoy' : day.date) + ': ' + (day.percent === null ? 'Sin datos' : day.percent + '% de cumplimiento')">
                         <strong>{{ day.percent === null ? '—' : day.percent + '%' }}</strong>
                         <span class="team-activity-track"><span :style="{ height: (day.percent ?? 0) + '%' }" /></span><small>{{ day.label }}</small>
                       </li>
                     </ul>
                     <dl>
                       <div><dt>Racha del equipo</dt><dd>{{ group.streak }} días</dd></div>
-                      <div><dt>Checks de hoy</dt><dd>{{ group.members.filter(member => member.checkedInToday).length }}/{{ group.members.length }}</dd></div>
+                      <div><dt>Checks de hoy</dt><dd>{{ todayCheckCount }}/{{ group.members.length }}</dd></div>
                       <div><dt>Revividas aprobadas</dt><dd>{{ teamReturns.revived }}</dd></div>
                       <div><dt>Regresos pendientes</dt><dd>{{ teamReturns.pending }}</dd></div>
                       <div><dt>Personajes caídos</dt><dd>{{ teamReturns.fallen }}</dd></div>
@@ -5473,6 +5486,7 @@ async function handleLeaveGroup() {
 .team-statistics-content header small { color: var(--theme-accent); }
 .group-columns > .member-participation .team-activity-chart li { grid-template-rows: auto 100px auto; }
 .team-activity-chart strong { font-size: .85rem; }
+.team-activity-chart .is-today strong, .team-activity-chart .is-today small { color: var(--theme-accent); font-weight: 800; }
 .team-activity-track { display: flex; align-items: end; width: min(100%, 36px); height: 100px; border-radius: 8px; overflow: hidden; background: #ffffff12; }
 .team-activity-track > span { width: 100%; background: linear-gradient(var(--theme-accent), color-mix(in srgb, var(--theme-accent) 45%, #241b30)); border-radius: 8px; }
 .group-columns > .member-participation .team-statistics-content dl { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
