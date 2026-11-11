@@ -439,6 +439,8 @@ class GroupService {
         data: { status: 'REJECTED', decidedAt: new Date(), decidedById: userId },
       })
       await tx.groupMembership.delete({ where: { id: target.id } })
+      const group = await tx.group.findUniqueOrThrow({ where: { id: groupId }, select: { name: true } })
+      await tx.groupExpulsion.create({ data: { userId: memberId, groupName: group.name } })
     })
     return this.getForMember({ userId, groupId })
   }

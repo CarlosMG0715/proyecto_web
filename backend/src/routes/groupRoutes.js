@@ -1,4 +1,5 @@
 const { Router } = require('express')
+const { prisma } = require('../prisma')
 const { authenticateToken } = require('../middlewares/authMiddleware')
 const { validate } = require('../middlewares/validate')
 const profile = require('../controllers/profileController')
@@ -24,6 +25,18 @@ router.get('/groups/join-requests/inbox', groups.inbox)
 router.get('/groups/join-requests/mine', groups.myRequests)
 router.patch('/groups/join-requests/:requestId', groups.decide)
 router.get('/groups/history', groups.checkInHistory)
+router.get('/groups/expulsions', async (req, res) => {
+  const notice = await prisma.groupExpulsion.findFirst({
+    where: { userId: req.user.userId },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, groupName: true },
+  })
+  res.set('Cache-Control', 'no-store').json(notice)
+})
+router.delete('/groups/expulsions/:id', async (req, res) => {
+  await prisma.groupExpulsion.deleteMany({ where: { id: req.params.id, userId: req.user.userId } })
+  res.sendStatus(204)
+})
 router.get('/streak-pokes', async (req, res) => {
   res.json(await streakPokes.list(req.user.userId))
 })
