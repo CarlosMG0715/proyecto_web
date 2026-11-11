@@ -122,10 +122,29 @@ class AuthService {
       if (error.code === 'P2002') throw httpError('El correo electrónico ya está registrado', 400)
       throw error
     })
-    const verificationSent = mailConfig
-      ? await sendVerificationEmail(mailConfig, user.email, verification.token)
-      : false
-    return { user, verificationSent, verificationRequired: Boolean(mailConfig) }
+
+    let verificationSent = false
+    let verificationRequired = Boolean(mailConfig)
+
+    if (mailConfig) {
+      verificationSent = await sendVerificationEmail(mailConfig, user.email, verification.token)
+      if (!verificationSent) {
+        // Si Resend no pudo enviar el correo (por ejemplo un correo de profesor o compañero en la cuenta free de Resend),
+        // auto-verificamos para que puedan ingresar sin quedar bloqueados.
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            emailVerificationRequired: false,
+            emailVerifiedAt: new Date(),
+            emailVerificationHash: null,
+            emailVerificationExpiresAt: null,
+          },
+        })
+        verificationRequired = false
+      }
+    }
+
+    return { user, verificationSent, verificationRequired }
   }
 
   async deleteAccount(userId, password) {

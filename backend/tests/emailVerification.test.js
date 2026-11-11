@@ -36,6 +36,13 @@ function fakeDatabase(initialUser) {
     Object.assign(user, data)
     return { count: 1 }
   }
+  prisma.user.update = async ({ where, data }) => {
+    if (user && user.id === where.id) {
+      Object.assign(user, data)
+      return { ...user }
+    }
+    return null
+  }
   prisma.session.create = async () => ({ familyId: 'session-1' })
   return () => user
 }
@@ -115,4 +122,17 @@ test('cuando el servicio de correo no está configurado, el usuario se crea veri
     process.env.RESEND_API_KEY = origKey
   }
 })
+
+test('si el envío de correo falla por rechazo de Resend, la cuenta se auto-verifica para no bloquear al usuario', async (t) => {
+  const getUser = fakeDatabase()
+  captureEmail(t, { ok: false })
+  const result = await authService.register({ email: 'profesor@universidad.test', password: 'password123', name: 'Profesor' })
+  assert.equal(result.verificationSent, false)
+  assert.equal(result.verificationRequired, false)
+  assert.equal(getUser().emailVerificationRequired, false)
+  assert.ok(getUser().emailVerifiedAt instanceof Date)
+  const session = await authService.login({ email: 'profesor@universidad.test', password: 'password123' })
+  assert.ok(session.accessToken)
+})
+
 
