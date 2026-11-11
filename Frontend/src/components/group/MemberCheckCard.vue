@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// tarjeta reutilizable para representar a un miembro y su estado de cumplimiento.
 /**
  * Tarjeta de hábito por miembro (Diseño exacto Kordia Dark).
  * Coincidencia 100% con la estética:
@@ -22,7 +21,6 @@ const emit = defineEmits<{ toggle: [] }>()
       mine: member.isCurrentUser
     }"
   >
-    <!-- Encabezado con Avatar, Nombre, Tag y Estado -->
     <header class="head">
       <UserAvatar
         :name="member.name"
@@ -41,19 +39,16 @@ const emit = defineEmits<{ toggle: [] }>()
         </span>
       </div>
 
-      <!-- Ícono circular verde de check cuando está cumplido (esquina superior derecha) -->
       <span v-if="member.checkedInToday" class="check-circle">
         <AppIcon name="check" :size="14" :stroke-width="3" />
       </span>
     </header>
 
-    <!-- Caja del Hábito (< > Nombre del Hábito) -->
     <div class="habit">
       <AppIcon name="code" :size="16" :stroke-width="2.5" class="code-icon" />
       <span class="habit-name">{{ member.habit }}</span>
     </div>
 
-    <!-- Fila de estadísticas (Días a la izquierda, Fueguito a la derecha) -->
     <div class="stats">
       <span class="days">{{ member.daysCompleted }}/{{ member.daysTotal }} días</span>
       <span class="streak">
@@ -62,7 +57,6 @@ const emit = defineEmits<{ toggle: [] }>()
       </span>
     </div>
 
-    <!-- Botón de acción al fondo de la card -->
     <button
       v-if="member.isCurrentUser"
       type="button"
@@ -111,19 +105,16 @@ const emit = defineEmits<{ toggle: [] }>()
   transform: translateY(-2px);
 }
 
-/* 1. Tarjeta Cumplida (Borde Verde como Carlos en la imagen) */
 .card.done {
   border: 1.5px solid #10b981;
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.16), 0 12px 28px -8px rgba(0, 0, 0, 0.6);
 }
 
-/* 2. Tarjeta Propia Pendiente (Borde Morado como Valeria en la imagen) */
 .card.mine:not(.done) {
   border: 1.5px solid #7c3aed;
   box-shadow: 0 0 16px rgba(124, 58, 237, 0.18), 0 12px 28px -8px rgba(0, 0, 0, 0.6);
 }
 
-/* Header */
 .head {
   display: flex;
   align-items: center;
@@ -151,7 +142,6 @@ const emit = defineEmits<{ toggle: [] }>()
   color: #ffffff;
 }
 
-/* Tags de rol */
 .tag {
   font-size: 0.65rem;
   font-weight: 800;
@@ -173,7 +163,6 @@ const emit = defineEmits<{ toggle: [] }>()
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-/* Subtítulo de estado */
 .status {
   font-size: 0.82rem;
   font-weight: 600;
@@ -185,7 +174,6 @@ const emit = defineEmits<{ toggle: [] }>()
   color: #10b981;
 }
 
-/* Ícono circular superior derecho (✓) */
 .check-circle {
   width: 26px;
   height: 26px;
@@ -198,7 +186,6 @@ const emit = defineEmits<{ toggle: [] }>()
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
 }
 
-/* Caja de hábito (< > Programar 1 hora) */
 .habit {
   display: flex;
   align-items: center;
@@ -220,7 +207,6 @@ const emit = defineEmits<{ toggle: [] }>()
   color: #e2e8f0;
 }
 
-/* Estadísticas (días y fueguito) */
 .stats {
   display: flex;
   justify-content: space-between;
@@ -253,7 +239,6 @@ const emit = defineEmits<{ toggle: [] }>()
   color: #f97316;
 }
 
-/* Botón de acción al pie */
 .action {
   width: 100%;
   display: flex;
@@ -270,7 +255,6 @@ const emit = defineEmits<{ toggle: [] }>()
   user-select: none;
 }
 
-/* Botón de Valeria cuando está pendiente (Morado vibrante con ícono de diana) */
 .action.todo {
   background: #7c3aed;
   color: #ffffff;
@@ -287,7 +271,6 @@ const emit = defineEmits<{ toggle: [] }>()
   transform: translateY(1px);
 }
 
-/* Botón de Carlos o Valeria cuando ya cumplieron (Verde transparente con borde) */
 .action.completed {
   background: rgba(16, 185, 129, 0.08);
   border: 1px solid #10b981;

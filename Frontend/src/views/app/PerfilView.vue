@@ -46,7 +46,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
         </span>
       </header>
 
-      <!-- Tarjeta de Identidad y Avatar -->
       <section
         class="identity game-panel"
         :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color, '--theme-bg': `url('${getThemeBackground(characters.theme.id)}')` }"
@@ -80,7 +79,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
         </div>
       </section>
 
-      <!-- Personalización de personaje y tema -->
       <section
         id="personalizar"
         class="game-panel personalization"
@@ -157,7 +155,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
         </p>
       </section>
 
-      <!-- Métricas -->
       <div class="game-stat-grid">
         <div class="game-stat">
           <AppIcon name="calendar" />
@@ -176,7 +173,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
         </div>
       </div>
 
-      <!-- Hitos -->
       <section class="game-panel">
         <div class="game-title">
           <h2>Tu colección de hitos</h2>
@@ -202,7 +198,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
         </div>
       </section>
 
-      <!-- Misiones -->
       <section class="game-panel">
         <div class="game-title">
           <h2>Mis misiones de equipo</h2>
@@ -741,7 +736,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
   font-size: 10px;
 }
 
-/* Responsividad ajustada a pantallas */
 @media (max-width: 1200px) {
   .badges {
     grid-template-columns: repeat(2, minmax(0, 1fr));

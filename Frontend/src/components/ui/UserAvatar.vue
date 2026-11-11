@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// avatar reutilizable; muestra una imagen si existe y si no genera iniciales.
 /**
  * Foto de perfil circular. Si no hay foto, muestra las iniciales con un color
  * estable (siempre el mismo color para el mismo nombre).

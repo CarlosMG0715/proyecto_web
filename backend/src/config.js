@@ -1,4 +1,3 @@
-// valores de seguridad y conexion usados por varios modulos del backend.
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())

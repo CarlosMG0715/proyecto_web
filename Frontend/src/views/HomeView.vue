@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// pagina publica que presenta el proposito del producto y dirige al acceso.
 /**
  * KORDIA - LANDING HERO PAGE
  * Ajustes solicitados por Valeria:
@@ -26,7 +25,6 @@ function handleAction(): void {
 
 <template>
   <div class="kordia-fullscreen-landing">
-    <!-- 1. HEADER SUPERIOR: BIENVENIDO A KORDIA ANCHO E IMPONENTE -->
     <header class="landing-top-header">
       <div class="header-title-badge">
         <h1 class="big-header-title">
@@ -35,25 +33,20 @@ function handleAction(): void {
       </div>
     </header>
 
-    <!-- 2. ÁREA CENTRAL: VENTANITA BLANCA TRANSLÚCIDA MOVIDA LIGERAMENTE A LA IZQUIERDA -->
     <main class="landing-main-area">
       <section class="floating-hero-window">
-        <!-- Logo oficial destacado -->
         <div class="logo-center-wrap">
           <img :src="kordiaLogo" alt="Kordia Logo" class="window-logo" />
         </div>
 
-        <!-- Título de presentación todo moradito -->
         <h2 class="hero-window-title purple-gradient">
           Monitorea tus hábitos en equipo
         </h2>
 
-        <!-- Descripción simple y directa -->
         <p class="hero-window-desc">
           Crea tu grupo, mantén tus rachas y alcanza metas juntos. Sin dejar a nadie atrás.
         </p>
 
-        <!-- Funciones explicadas de forma simple y dinámica en cápsulas translúcidas -->
         <div class="clean-features-list">
           <div class="clean-feature-item">
             <span class="feature-dot"></span>
@@ -82,7 +75,6 @@ function handleAction(): void {
       </section>
     </main>
 
-    <!-- 3. ÁREA INFERIOR: BOTÓN MÁS GRANDE REDONDITO DE ACCIÓN -->
     <footer class="bottom-action-container">
       <button type="button" class="cta-pill-button" @click="handleAction">
         <span v-if="!session.isAuthenticated">INGRESAR A KORDIA ↗</span>
@@ -93,9 +85,6 @@ function handleAction(): void {
 </template>
 
 <style scoped>
-/* ================================================= */
-/* FONDO PANTALLA COMPLETA INMERSIVO                 */
-/* ================================================= */
 .kordia-fullscreen-landing {
   position: relative;
   min-height: 100vh;
@@ -104,7 +93,6 @@ function handleAction(): void {
   flex-direction: column;
   justify-content: space-between;
   background-color: #0b0914;
-  /* Imagen centrada como en login/registro */
   background-image:
     linear-gradient(180deg, rgba(11, 9, 20, 0.4) 0%, rgba(11, 9, 20, 0.05) 35%, rgba(11, 9, 20, 0.7) 100%),
     url('@/assets/kordia_landing_bg.png');
@@ -118,9 +106,6 @@ function handleAction(): void {
   user-select: none;
 }
 
-/* ================================================= */
-/* 1. HEADER SUPERIOR ANCHO E IMPONENTE              */
-/* ================================================= */
 .landing-top-header {
   display: flex;
   justify-content: center;
@@ -166,9 +151,6 @@ function handleAction(): void {
   filter: drop-shadow(0 0 14px rgba(249, 115, 22, 0.6));
 }
 
-/* ================================================= */
-/* 2. ÁREA PRINCIPAL: VENTANITA BLANCA TRANSLÚCIDA   */
-/* ================================================= */
 .landing-main-area {
   display: flex;
   justify-content: flex-end;
@@ -186,7 +168,6 @@ function handleAction(): void {
   width: 100%;
   padding: 1.8rem 1.9rem;
   border-radius: 30px;
-  /* Efecto blanco transparente / frosted glass para apreciar el dibujo */
   background: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0.15) 0%,
@@ -219,7 +200,6 @@ function handleAction(): void {
   }
 }
 
-/* Logo Oficial */
 .logo-center-wrap {
   display: flex;
   justify-content: center;
@@ -238,7 +218,6 @@ function handleAction(): void {
   transform: scale(1.06) rotate(3deg);
 }
 
-/* Título de la Ventanita   */
 .hero-window-title {
   margin: 0;
   font-size: 1.45rem;
@@ -256,7 +235,6 @@ function handleAction(): void {
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
 }
 
-/* Descripción */
 .hero-window-desc {
   margin: 0.5rem 0 1.15rem;
   font-size: 0.86rem;
@@ -267,7 +245,6 @@ function handleAction(): void {
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
-/* Lista de funciones limpias sin líneas divisorias ni cajas encerradas */
 .clean-features-list {
   display: flex;
   flex-direction: column;
@@ -312,9 +289,6 @@ function handleAction(): void {
   margin-top: 1px;
 }
 
-/* ================================================= */
-/* 3. BOTÓN INFERIOR MÁS GRANDE                      */
-/* ================================================= */
 .bottom-action-container {
   display: flex;
   justify-content: center;
@@ -351,9 +325,6 @@ function handleAction(): void {
   transform: translateY(0);
 }
 
-/* ================================================= */
-/* RESPONSIVE DESIGN                                 */
-/* ================================================= */
 @media (max-width: 1024px) {
   .big-header-title {
     font-size: 1.85rem;

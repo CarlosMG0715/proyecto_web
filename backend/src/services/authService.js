@@ -1,10 +1,9 @@
-// reglas de autenticacion: contraseñas, tokens cortos y refresh tokens revocables.
 const crypto = require('crypto')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const { prisma } = require('../prisma')
 const { jwtSecret, accessTokenExpiration, refreshTokenDays } = require('../config')
-const { getVerificationEmailConfig, sendVerificationEmail } = require('./verificationEmail')
+const { demoEmail, getVerificationEmailConfig, sendVerificationEmail } = require('./verificationEmail')
 
 const refreshPepper = process.env.REFRESH_TOKEN_PEPPER
 if (!refreshPepper) {
@@ -72,17 +71,7 @@ async function revokeFamily(familyId) {
 
 class AuthService {
   async register({ name, email, password }) {
-    // normaliza el correo y crea una contraseña cifrada con bcrypt.
     const normalizedEmail = email.toLowerCase().trim()
-    let mailConfig = null
-    try {
-      mailConfig = getVerificationEmailConfig()
-    } catch {
-      // Si el correo no está configurado (ej. en Render sin RESEND_API_KEY),
-      // permitimos el registro directo sin bloquear con 503.
-      mailConfig = null
-    }
-
     const existing = await prisma.user.findUnique({
       where: { email: normalizedEmail },
     })
@@ -92,12 +81,13 @@ class AuthService {
 
     const passwordHash = await bcrypt.hash(password, 12)
 
+    const mailConfig = normalizedEmail === demoEmail() ? getVerificationEmailConfig() : null
     const verification = mailConfig ? newEmailVerification() : null
     const verificationFields = verification
-      ? verification.fields
+      ? { ...verification.fields, emailVerificationRequired: true }
       : {
           emailVerificationRequired: false,
-          emailVerifiedAt: new Date(),
+          emailVerifiedAt: null,
           emailVerificationHash: null,
           emailVerificationExpiresAt: null,
           emailVerificationSentAt: null,
@@ -123,28 +113,10 @@ class AuthService {
       throw error
     })
 
-    let verificationSent = false
-    let verificationRequired = Boolean(mailConfig)
-
-    if (mailConfig) {
-      verificationSent = await sendVerificationEmail(mailConfig, user.email, verification.token)
-      if (!verificationSent) {
-        // Si Resend no pudo enviar el correo (por ejemplo un correo de profesor o compañero en la cuenta free de Resend),
-        // auto-verificamos para que puedan ingresar sin quedar bloqueados.
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            emailVerificationRequired: false,
-            emailVerifiedAt: new Date(),
-            emailVerificationHash: null,
-            emailVerificationExpiresAt: null,
-          },
-        })
-        verificationRequired = false
-      }
-    }
-
-    return { user, verificationSent, verificationRequired }
+    const verificationSent = verification
+      ? await sendVerificationEmail(mailConfig, user.email, verification.token)
+      : false
+    return { user, verificationSent, verificationRequired: Boolean(verification) }
   }
 
   async deleteAccount(userId, password) {
@@ -247,10 +219,11 @@ class AuthService {
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw unauthorized('Credenciales inválidas')
     }
-    if (!user.emailVerificationRequired || user.emailVerifiedAt) {
+    if (user.email !== demoEmail() || !user.emailVerificationRequired || user.emailVerifiedAt) {
       throw httpError('Esta cuenta ya puede iniciar sesión.', 409)
     }
     const mailConfig = getVerificationEmailConfig()
+
     const verification = newEmailVerification()
     const result = await prisma.user.updateMany({
       where: {
@@ -265,19 +238,11 @@ class AuthService {
     })
     if (!result.count) throw httpError('Espera un minuto antes de solicitar otro enlace.', 429)
     if (!(await sendVerificationEmail(mailConfig, user.email, verification.token))) {
-      await prisma.user.updateMany({
-        where: { id: user.id, emailVerifiedAt: null, emailVerificationHash: verification.fields.emailVerificationHash },
-        data: {
-          emailVerificationHash: user.emailVerificationHash,
-          emailVerificationExpiresAt: user.emailVerificationExpiresAt,
-        },
-      })
-      throw httpError('No pudimos enviar el correo. Inténtalo en un minuto.', 503)
+      throw httpError('No pudimos reenviar el correo de verificación.', 503)
     }
   }
 
   async login({ email, password, userAgent, ipAddress }) {
-    // revisa credenciales y abre una sesion con refresh token rotativo.
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
     })
@@ -285,7 +250,7 @@ class AuthService {
 
     const isValid = await bcrypt.compare(password, user.passwordHash)
     if (!isValid) throw unauthorized('Credenciales inválidas')
-    if (user.emailVerificationRequired && !user.emailVerifiedAt) {
+    if (user.email === demoEmail() && user.emailVerificationRequired && !user.emailVerifiedAt) {
       throw Object.assign(httpError('Confirma tu correo antes de iniciar sesión.', 403), {
         publicCode: 'EMAIL_VERIFICATION_REQUIRED',
       })
@@ -429,7 +394,6 @@ class AuthService {
 
 
   async logout({ refreshToken }) {
-    // invalida la sesion asociada al refresh recibido.
     if (!refreshToken) return
 
     await prisma.session.updateMany({
@@ -453,7 +417,6 @@ class AuthService {
         })
       : null
 
-    // Busca las sesiones vigentes de esta cuenta.
     const sessions = await prisma.session.findMany({
       where: {
         userId,
@@ -471,7 +434,6 @@ class AuthService {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Envía a la pantalla los datos visibles y marca la sesión actual.
     return sessions.map(({ familyId, ...session }) => ({
       ...session,
       isCurrent: familyId === currentSession?.familyId,

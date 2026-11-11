@@ -1,4 +1,3 @@
-// arranque del proceso: lee variables locales y crea express y prisma.
 require('dotenv').config()
 
 const { createServer } = require('node:http')

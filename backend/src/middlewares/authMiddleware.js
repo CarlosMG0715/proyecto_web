@@ -1,10 +1,8 @@
-// comprueba el token de acceso antes de dejar pasar a una ruta privada.
 const jwt = require('jsonwebtoken')
 const { jwtSecret } = require('../config')
 const { prisma } = require('../prisma')
 
 async function authenticateToken(req, res, next) {
-  // espera el formato authorization: bearer <token>.
   const authHeader = req.headers.authorization
   const token = typeof authHeader === 'string'
     ? /^Bearer\s+(\S+)$/i.exec(authHeader)?.[1]
@@ -19,7 +17,6 @@ async function authenticateToken(req, res, next) {
 
   let user
   try {
-    // verify revisa la firma y la expiracion; el resultado identifica al usuario.
     user = jwt.verify(token, jwtSecret)
   } catch {
     return res.status(401).json({
