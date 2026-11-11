@@ -1073,7 +1073,7 @@ async function handleLeaveGroup() {
                       <div><dt>Miembros del grupo</dt><dd>{{ group.members.length }}</dd></div>
                     </dl>
                   </div>
-                  <template v-else-if="!selectedMember.isFallen">
+                  <template v-else>
                   <header class="participation-heading">
                     <CharacterIcon :character="characters.forMember(selectedMember.id, selectedMember.isCurrentUser, selectedMember.name)" :size="64" />
                     <div>

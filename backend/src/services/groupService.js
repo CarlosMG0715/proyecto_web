@@ -91,7 +91,7 @@ function toGroupDto(group, currentUserId) {
       returnRequests: returns?.count ?? 0,
       revivalCount: returns?.revived ?? 0,
       hasPendingReturn: returns?.pending ?? false,
-      dropoutRiskMissedDays: !group.archivedAt && !m.fallenAt && missedDays >= 3 && !returns?.pending ? missedDays : 0,
+      dropoutRiskMissedDays: !group.archivedAt && missedDays >= 3 && !returns?.pending ? missedDays : 0,
       habit: habits.map((h) => h.name).join(', '),
       daysCompleted,
       daysTotal,
