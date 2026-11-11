@@ -219,7 +219,7 @@ class AuthService {
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw unauthorized('Credenciales inválidas')
     }
-    if (user.email !== demoEmail() || !user.emailVerificationRequired || user.emailVerifiedAt) {
+    if (user.email !== demoEmail() || user.emailVerifiedAt) {
       throw httpError('Esta cuenta ya puede iniciar sesión.', 409)
     }
     const mailConfig = getVerificationEmailConfig()
@@ -234,7 +234,7 @@ class AuthService {
           { emailVerificationSentAt: { lte: new Date(Date.now() - 60_000) } },
         ],
       },
-      data: verification.fields,
+      data: { ...verification.fields, emailVerificationRequired: true },
     })
     if (!result.count) throw httpError('Espera un minuto antes de solicitar otro enlace.', 429)
     if (!(await sendVerificationEmail(mailConfig, user.email, verification.token))) {
@@ -250,7 +250,7 @@ class AuthService {
 
     const isValid = await bcrypt.compare(password, user.passwordHash)
     if (!isValid) throw unauthorized('Credenciales inválidas')
-    if (user.email === demoEmail() && user.emailVerificationRequired && !user.emailVerifiedAt) {
+    if (user.email === demoEmail() && !user.emailVerifiedAt) {
       throw Object.assign(httpError('Confirma tu correo antes de iniciar sesión.', 403), {
         publicCode: 'EMAIL_VERIFICATION_REQUIRED',
       })
