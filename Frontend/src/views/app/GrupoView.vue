@@ -54,13 +54,6 @@ const teamActivity = computed(() => {
     return { date: day.date, label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
       percent: records.length ? Math.round(completed / records.length * 100) : null }
   })
-  if (!current.archivedAt && current.habits?.length && current.members.length) {
-    activity.push({
-      date: 'today',
-      label: 'Hoy',
-      percent: Math.round(todayCheckCount.value / current.members.length * 100),
-    })
-  }
   return activity
 })
 const selectedMember = computed(
@@ -80,17 +73,6 @@ const participationChart = computed(() => (selectedMember.value?.recentActivity 
   label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
   status: day.completed === null ? 'Sin actividad esperada' : day.completed ? 'Check registrado' : 'Sin check',
 })))
-const memberActivity = computed(() => {
-  const current = group.value
-  const member = selectedMember.value
-  if (!current || !member || current.archivedAt || !current.habits?.length) return participationChart.value
-  return [...participationChart.value, {
-    date: 'today',
-    label: 'Hoy',
-    completed: member.checkedInToday,
-    status: member.checkedInToday ? 'Check registrado hoy' : 'Aún sin check hoy',
-  }]
-})
 const riskPercent = computed(() => {
   const expected = participationChart.value.filter(day => day.completed !== null)
   return expected.length ? Math.round(100 * expected.filter(day => !day.completed).length / expected.length) : null
@@ -1068,7 +1050,6 @@ async function handleLeaveGroup() {
                     </button>
                   </nav>
                   <div v-if="showTeamStatistics" class="team-statistics-content">
-                    <header><small>ESTADÍSTICAS GENERALES</small><h3>{{ group.name }}</h3><p>Cumplimiento diario de los miembros actuales. La barra «Hoy» muestra el avance del día en curso cuando el grupo está activo.</p></header>
                     <ul class="participation-chart team-activity-chart" aria-label="Cumplimiento diario del equipo"
                       :style="{ gridTemplateColumns: 'repeat(' + Math.max(1, teamActivity.length) + ', minmax(0, 1fr))' }">
                       <li v-for="day in teamActivity" :key="day.date" :class="{ 'is-today': day.date === 'today' }"
@@ -1107,9 +1088,8 @@ async function handleLeaveGroup() {
                     <small>{{ selectedMember.missedDaysLastWeek }} de {{ participationChart.filter(day => day.completed !== null).length }} días esperados sin check esta semana.</small>
                   </div>
                   <div class="participation-history">
-                  <ul class="participation-chart" aria-label="Actividad de los últimos siete días cerrados y hoy"
-                    :style="{ gridTemplateColumns: 'repeat(' + Math.max(1, memberActivity.length) + ', minmax(0, 1fr))' }">
-                    <li v-for="day in memberActivity" :key="day.date" :class="{ 'is-today': day.date === 'today' }" :aria-label="`${day.date === 'today' ? 'Hoy' : day.date}, ${day.status}`" :title="day.status">
+                  <ul class="participation-chart" aria-label="Actividad de los últimos siete días cerrados">
+                    <li v-for="day in participationChart" :key="day.date" :aria-label="`${day.date}, ${day.status}`" :title="day.status">
                       <span class="participation-bar" :class="{ 'is-done': day.completed === true, 'is-missed': day.completed === false }" aria-hidden="true" />
                       <small>{{ day.label }}</small>
                     </li>
@@ -5493,7 +5473,7 @@ async function handleLeaveGroup() {
 .statistics-avatar { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; background: #ffffff12; }
 .statistics-picker .selected .statistics-avatar { background: color-mix(in srgb, var(--theme-accent) 28%, #241b30); box-shadow: 0 0 0 3px var(--theme-accent); }
 .statistics-picker .selected { color: white; font-weight: 750; }
-.team-statistics-content { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px 24px; }
+.team-statistics-content { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 24px; }
 .team-statistics-content header p { color: #e0d4e5; line-height: 1.6; }
 .team-statistics-content header small { color: var(--theme-accent); }
 .group-columns > .member-participation .team-activity-chart li { grid-template-rows: auto 100px auto; }
