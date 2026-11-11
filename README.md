@@ -1,125 +1,146 @@
-# Monitor de hábitos grupales
+# Kordia · Monitor de hábitos grupales
 
-Aplicación web para seguimiento de hábitos en grupo, detección de incumplimientos y penalizaciones colectivas.
+Kordia es una aplicación web para organizar hábitos en grupo y seguir su cumplimiento. Cada persona puede crear un grupo o solicitar el ingreso con un código de invitación. Una vez dentro, puede participar en hábitos, registrar su cumplimiento y consultar el progreso. El grupo también cuenta con chat, historial y recordatorios.
 
-## Estructura del repositorio
+## Arquitectura
+
+El cliente web está construido con **Vue 3, TypeScript y Vite**. Vue Router organiza la navegación, Pinia mantiene el estado de la aplicación y Axios envía las peticiones a la API. El backend usa **Express** para recibir las peticiones y **Prisma** para leer y escribir en **PostgreSQL**.
+
+```mermaid
+flowchart LR
+    U[Persona usuaria] --> V[Cliente Vue]
+    V -->|HTTP /api| E[API Express]
+    E --> S[Servicios]
+    S --> P[Prisma]
+    P --> D[(PostgreSQL)]
+```
+
+Por ejemplo, al registrar el cumplimiento de un hábito, la vista de grupo envía un check-in a la API. Express comprueba la sesión y valida los datos de la solicitud. El controlador delega la operación al servicio de grupos, donde se verifican los permisos y se guarda el registro con Prisma. La interfaz recibe la respuesta y actualiza el progreso que muestra.
+
+### Estructura del repositorio
 
 ```text
 proyecto_web/
 ├── README.md
-├── backend/                 API Express + Prisma + PostgreSQL
-│   ├── server.js            Arranque HTTP y cierre ordenado
-│   ├── src/
-│   │   ├── app.js           Middlewares, CORS, rutas y errores
-│   │   ├── config.js        Orígenes CORS, JWT y cookies
-│   │   ├── prisma.js        Cliente Prisma compartido
-│   │   ├── controllers/     Adaptan HTTP a servicios
-│   │   ├── middlewares/     Auth, correlation-id y errores
-│   │   ├── routes/          Endpoints `/api`
-│   │   ├── services/        Reglas de negocio
-│   │   └── utils/           Lectura de cookies
-│   └── prisma/              Esquema, migraciones y seed
-└── Frontend/                Cliente Vue 3 + TypeScript + Vite
+├── Dockerfile                 Compila Vue y sirve la aplicación con Express
+├── render.yaml                Configuración del servicio web y PostgreSQL en Render
+├── backend/                   API Express + Prisma + PostgreSQL
+│   ├── server.js              Arranque HTTP, recordatorios y cierre ordenado
+│   ├── docker-compose.yml     PostgreSQL 16 para desarrollo local
+│   ├── prisma/                Esquema, migraciones y datos de prueba
+│   ├── scripts/               Comando para ejecutar el cierre diario
+│   ├── tests/                 Pruebas de autenticación y verificación de correo
+│   └── src/
+│       ├── app.js             Configuración de Express, CORS, rutas y errores
+│       ├── config.js          Orígenes permitidos, JWT y cookies
+│       ├── prisma.js          Cliente Prisma compartido
+│       ├── routes/            Endpoints bajo /api
+│       ├── controllers/       Reciben solicitudes HTTP y preparan respuestas
+│       ├── services/          Lógica de autenticación, grupos y recordatorios
+│       ├── repositories/      Consultas reutilizables de grupos y membresías
+│       ├── middlewares/       Autenticación, validación, errores e ID de solicitud
+│       ├── validators/        Esquemas Zod para validar solicitudes
+│       └── utils/             Lectura de cookies
+└── Frontend/                  Cliente Vue 3 + TypeScript + Vite
+    ├── public/                Archivos estáticos públicos
+    ├── tests/                 Pruebas de personajes y del cliente de autenticación
     └── src/
-        ├── assets/styles/   Estilos globales
-        ├── components/      Piezas reutilizables (Navbar)
-        ├── layouts/         AuthLayout y AppLayout
-        ├── views/           Páginas (inicio, login, grupos)
-        ├── router/          Rutas y guards
-        ├── stores/          Sesión en Pinia (access token en memoria)
-        ├── services/        Cliente Axios
-        └── types/           Contratos TypeScript
+        ├── assets/            Imágenes y hojas de estilo
+        ├── components/        Componentes reutilizables de interfaz y de grupos
+        ├── composables/       Lógica reutilizable, como la cuenta regresiva diaria
+        ├── layouts/           Estructuras de las pantallas públicas y privadas
+        ├── views/             Inicio, acceso, grupos, calendario, perfil y ajustes
+        ├── router/            Rutas y control de acceso a las vistas
+        ├── stores/            Estado de sesión, grupos y personajes con Pinia
+        ├── services/          Cliente Axios y llamadas a la API
+        ├── types/             Tipos TypeScript de autenticación y grupos
+        ├── constants/         Categorías, banners y temas
+        ├── utils/             Funciones de fecha y hora
+        └── mocks/             Datos de demostración
 ```
 
-El directorio del cliente se llama `Frontend` (mayúscula) porque así está versionado. En Windows no conviene renombrarlo a `frontend` sin un `git mv` coordinado.
+Usa `Frontend` con mayúscula en las rutas y los comandos.
+
+## Funciones principales
+
+- **Cuenta y sesión.** Registro, inicio de sesión, consulta y revocación de sesiones. El token de acceso se mantiene en memoria con Pinia. El token de renovación se envía en la cookie `refreshToken`, marcada como `HttpOnly` y limitada a `/api/auth`. Al renovar, la API rota el token de renovación.
+- **Grupos.** Creación de grupos, invitaciones por código, solicitudes de ingreso y gestión de membresías. Cada persona usa su propia cuenta.
+- **Hábitos y progreso.** Participación en hábitos, check-ins, notas, historial y rachas. El backend puede procesar el cierre del día anterior según la zona horaria del grupo y aplicar las penalizaciones correspondientes.
+- **Chat y preferencias.** Los mensajes se guardan en PostgreSQL. El perfil también guarda el personaje y el tema por cuenta, y la configuración permite ajustar las preferencias de notificación.
 
 ## Desarrollo local
 
-Requisitos: Node.js 22.18 o superior, npm y Docker para PostgreSQL.
+Necesitas **Node.js 22.18 o posterior dentro de la rama 22, o Node.js 24.12 o superior**, npm y Docker con Compose. Ejecuta cada bloque en una terminal distinta, empezando desde la raíz del repositorio.
 
 ### Backend
 
 ```powershell
 cd backend
-npm install
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-npm run db:generate
-docker compose up -d db
+npm ci
+docker compose up -d --wait db
 npm run db:deploy
-npm run db:seed
 npm run dev
 ```
 
-El servidor usa el puerto `3000` por defecto. `GET http://localhost:3000/api/health` comprueba que está activo.
+La API usa el puerto `3000` por defecto. Comprueba que responde en `http://localhost:3000/api/health`. Si cambias las credenciales de PostgreSQL, actualiza también `DATABASE_URL` en `backend/.env`.
 
-Si ya tienes un `.env`, conserva sus valores y agrega las variables que falten de `.env.example` (incluido `JWT_SECRET`). El ejemplo configura PostgreSQL local en Docker; cambia la contraseña de desarrollo antes de ejecutar el seed. No uses esas credenciales en producción.
-
-Para cambios posteriores al esquema, usa `npm run db:migrate -- --name nombre_del_cambio` en desarrollo y sube el SQL generado en `prisma/migrations`. En despliegues aplica las migraciones versionadas con `npm run db:deploy`.
+Si necesitas datos de prueba, configura `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` en `backend/.env` y ejecuta `npm run db:seed` desde `backend`. La contraseña debe tener al menos 12 caracteres. El seed prepara una cuenta administradora y el grupo `HABITOS-DEMO`.
 
 ### Frontend
 
 ```powershell
 cd Frontend
-npm install
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+npm ci
 npm run dev
 ```
 
-Vite inicia normalmente en `http://localhost:5173` y reenvía `/api` a Express en `http://localhost:3000`. En despliegues, `VITE_API_URL` puede apuntar a la URL HTTPS de la API.
+Abre `http://localhost:5173`. Vite reenvía las solicitudes de `/api` al backend local. Para probar el recorrido principal, registra dos cuentas, crea un grupo desde una de ellas y solicita el ingreso desde la otra con el código de invitación. Una vez aprobada la solicitud, registra un check-in y consulta el progreso.
 
-## Usar grupos desde otros computadores
+### Comandos de mantenimiento
 
-En desarrollo local, las cuentas y los grupos se guardan en el PostgreSQL de este computador. Para que Carlos y otras personas vean los mismos grupos, todos deben entrar a la misma app publicada y esa app debe conectarse a una sola base de datos PostgreSQL en la nube.
+| Directorio | Comando | Uso |
+| --- | --- | --- |
+| `backend` | `npm test` | Ejecuta las pruebas del servidor. |
+| `backend` | `npm run db:generate` | Regenera el cliente Prisma. La instalación también lo genera. |
+| `backend` | `npm run db:migrate -- --name nombre_del_cambio` | Crea y aplica una migración en desarrollo. |
+| `backend` | `npm run db:deploy` | Aplica las migraciones versionadas. |
+| `backend` | `npm run groups:close-day` | Ejecuta el cierre diario para los grupos activos. |
+| `Frontend` | `npm test` | Ejecuta las pruebas del cliente. |
+| `Frontend` | `npm run build` | Verifica los tipos y genera la compilación de producción. |
 
-La configuración `render.yaml` publica el frontend y Express bajo el mismo dominio, conecta una base PostgreSQL y aplica las migraciones al iniciar. En Render, crea un Blueprint desde la rama que quieras publicar. Está configurado con los planes gratuitos para probarlo sin cobro: Render indica que la base expira después de 30 días y el servidor web se duerme tras 15 minutos sin tráfico; al volver a abrir la app puede tardar alrededor de un minuto en despertar. Antes del vencimiento, exporta la base o cámbiala a un plan pago si necesitas conservar los datos.
+## API
 
-Después del despliegue, cada integrante se registra en la URL compartida. Quien cree el grupo comparte su código de invitación; el resto lo ingresa desde sus propias cuentas. Las cuentas y grupos que existen solo en el PostgreSQL local no aparecen automáticamente en la base publicada.
+Estas son las rutas principales. La implementación completa está en `backend/src/routes/` y las rutas de salud y cierre diario se definen en `backend/src/app.js`.
 
-El cliente usa `/api` en desarrollo y producción. Si más adelante frontend y API se publican en dominios separados, configura `VITE_API_URL` con la URL HTTPS de la API, agrega el dominio del cliente a `CORS_ORIGINS` y ajusta `COOKIE_SAME_SITE=none` para las cookies entre dominios.
-
-## API de autenticación (fase actual)
-
-| Método | Ruta | Auth | Descripción |
+| Método | Ruta | Acceso | Uso |
 | --- | --- | --- | --- |
-| `GET` | `/api/health` | No | Salud del servicio |
-| `POST` | `/api/auth/register` | No | Alta de usuario |
-| `POST` | `/api/auth/login` | No | Access token en JSON + refresh en cookie HttpOnly |
-| `POST` | `/api/auth/refresh` | Cookie | Rota refresh y emite un access token nuevo |
-| `POST` | `/api/auth/logout` | Cookie | Revoca la sesión actual |
-| `POST` | `/api/auth/logout-all` | Bearer | Revoca todas las sesiones del usuario |
-| `GET` | `/api/auth/me` | Bearer | Payload del access token |
+| `GET` | `/api/health` | Público | Comprueba que la API responde. |
+| `POST` | `/api/auth/register` | Público | Registra una cuenta. |
+| `POST` | `/api/auth/login` | Público | Inicia sesión y emite los tokens. |
+| `POST` | `/api/auth/verify-email` | Token de verificación | Confirma el correo de la cuenta configurada para verificación. |
+| `POST` | `/api/auth/resend-verification` | Correo y contraseña | Solicita otro enlace para esa cuenta. |
+| `POST` | `/api/auth/refresh` | Cookie | Renueva la sesión. |
+| `POST` | `/api/auth/logout` | Cookie | Cierra la sesión actual. |
+| `POST` | `/api/auth/logout-all` | Bearer | Revoca todas las sesiones de la cuenta. |
+| `GET` | `/api/auth/me` | Bearer | Devuelve los datos del token de acceso. |
+| `GET`, `PATCH` | `/api/profile/preferences` | Bearer | Consulta o actualiza el personaje y el tema. |
+| `GET`, `POST` | `/api/groups` | Bearer | Lista los grupos de la cuenta o crea uno. |
+| `POST` | `/api/groups/join-requests` | Bearer | Solicita ingreso con un código de invitación. |
+| `PUT` | `/api/groups/:groupId/habits/:habitId/check-in` | Bearer | Registra el cumplimiento de un hábito. |
+| `POST` | `/api/groups/:groupId/messages` | Bearer | Envía un mensaje al grupo. |
 
-El access token no se guarda en `localStorage`; vive en el store de Pinia. El refresh token va en cookie `refreshToken` con `path=/api/auth`.
+### Verificación de correo y cierre diario
 
-## Verificación de correo
+La verificación está habilitada para la cuenta indicada por `DEMO_EMAIL`. El resto de las cuentas puede iniciar sesión sin confirmar el correo. Para probar la verificación local, configura `DEMO_EMAIL` con la dirección de prueba, `VERIFICATION_EMAIL_MODE=console` y `APP_PUBLIC_URL=http://localhost:5173`. Después del registro, abre el enlace que aparece en la terminal del backend. Para enviar correos desde el despliegue, configura `APP_PUBLIC_URL` con la URL pública HTTPS, `RESEND_API_KEY` y `EMAIL_FROM` con un remitente autorizado, por ejemplo `Kordia <cuentas@tu-dominio.com>`.
 
-Para habilitar el registro de cuentas nuevas con verificación de correo, configura estas variables en el backend local y en Render:
+Para programar el cierre diario, un programador externo puede invocar `POST /api/internal/close-group-day` con el encabezado `Authorization: Bearer <secreto>`. El valor debe coincidir con `DAILY_CLOSURE_SECRET` en el backend. El Blueprint de Render define el servidor web y la base de datos. El programador se configura por separado.
 
-- `APP_PUBLIC_URL` con la URL del frontend que abrirá el destinatario, por ejemplo `http://localhost:5173` en local o la URL HTTPS de Kordia en Render.
-- `RESEND_API_KEY` con una clave de envío de Resend. Guárdala como secreto del backend.
-- `EMAIL_FROM` con un remitente autorizado por Resend, por ejemplo `Kordia <cuentas@tu-dominio.com>` tras verificar el dominio.
+## Despliegue y acceso compartido
 
-Para probar el registro en local sin Resend, configura `VERIFICATION_EMAIL_MODE=console` y apunta `APP_PUBLIC_URL` a tu frontend en localhost. Abre el enlace que aparece en la terminal del backend después de registrarte. El modo de consola está deshabilitado en producción.
+El `Dockerfile` compila Vue y Express sirve los archivos resultantes junto con la API bajo el mismo dominio. Al arrancar, el contenedor aplica las migraciones de Prisma antes de iniciar el servidor. El Blueprint de Render conecta el servicio web con una instancia PostgreSQL y comprueba la disponibilidad con `/api/health`.
 
-Regenera el cliente y aplica la migración con `npm run db:generate` y `npm run db:deploy` desde `backend`. Las cuentas existentes mantienen el acceso. Las cuentas nuevas confirman el enlace antes del primer inicio de sesión. Si vence, pueden volver a solicitarlo con su correo y contraseña.
+Para compartir la aplicación, todas las personas deben abrir la misma URL publicada. Cada una crea su propia cuenta y usa el código del grupo para solicitar el ingreso. Las cuentas y los grupos de una base local pertenecen a esa instalación. En el despliegue, los datos se guardan en la base configurada para el servicio publicado.
 
-## Personalización por cuenta
-
-El personaje (`User.characterId`) y el tema (`User.themeId`) se guardan en PostgreSQL para el usuario autenticado. El navegador conserva una caché, pero al iniciar sesión se carga la elección del servidor, también en incógnito. Las cuentas se identifican por su ID, sin mezclar preferencias de personas con el mismo nombre.
-
-- `GET /api/profile/preferences` carga la personalización de la cuenta.
-- `PATCH /api/profile/preferences` guarda `characterId`, `themeId` o ambos. El usuario se obtiene del token, no del cuerpo de la petición.
-- Login y renovación de sesión incluyen el personaje y el tema guardados.
-- La lista de grupos incluye los avatares actuales de sus miembros. La interfaz los actualiza cada 15 segundos mientras está visible y al volver a la ventana.
-
-En Perfil, el estado **Guardado en tu cuenta** aparece después de la confirmación del servidor. Si el guardado falla, se muestra un aviso con **Reintentar**. Tras aplicar por primera vez la migración `20261021120000_profile_preferences_and_group_join_requests`, vuelve a elegir el personaje y el tema que antes estaban guardados solo en el navegador.
-
-La personalización, los check-ins y el chat se guardan en el servidor. Las rachas y los días cumplidos se calculan desde los check-ins guardados, por cuenta y por grupo. Los corazones siguen como indicador visual; todavía falta implementar el cierre diario y las penalizaciones automáticas.
-
-## Base técnica
-
-- Express 5 con CORS configurable, JSON limitado a 1 MB, `x-correlation-id` y errores centralizados.
-- PostgreSQL 16 en Docker Compose y Prisma 6.19.0 (usuarios, grupos, membresías, hábitos, check-ins, penalizaciones, mensajes y sesiones).
-- Seed idempotente: usuario administrador y grupo `HABITOS-DEMO`. Requiere `SEED_ADMIN_EMAIL` y `SEED_ADMIN_PASSWORD` (mínimo 12 caracteres) en `backend/.env`.
-- Vue 3, TypeScript, Vue Router, Pinia y Axios con `withCredentials`.
-- Autenticación, personalización, grupos, solicitudes de ingreso, hábitos, check-ins e historial del chat tienen API. Falta definir y programar el cierre diario que actualiza la salud del grupo y aplica penalizaciones.
+Si el frontend y la API se alojan en orígenes separados, configura `VITE_API_URL` con la URL completa de la API, incluido `/api`, y agrega el origen del cliente a `CORS_ORIGINS`. Cuando el navegador los trata como sitios distintos, las cookies requieren HTTPS y `COOKIE_SAME_SITE=none`.
