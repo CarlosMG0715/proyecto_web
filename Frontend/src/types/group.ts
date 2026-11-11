@@ -18,6 +18,13 @@ export interface GroupMember {
   checkedInToday: boolean
   dailyReport?: DailyCheckReport | null
   isFallen?: boolean
+  dropoutRiskMissedDays?: number
+  missedDaysLastWeek?: number
+  recentActivity?: Array<{ date: string; completed: boolean | null }>
+  bestGroupStreak?: number
+  returnRequests?: number
+  revivalCount?: number
+  hasPendingReturn?: boolean
   fallenAt?: string | null
   isCurrentUser: boolean
   isOnline: boolean

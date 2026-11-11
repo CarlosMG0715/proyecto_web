@@ -14,6 +14,7 @@ const authService = require('../src/services/authService')
 delete require.cache[prismaPath]
 
 const credentials = { email: 'valeria@example.test', password: 'password123' }
+process.env.DEMO_EMAIL = credentials.email
 
 function fakeDatabase(initialUser) {
   let user = initialUser
@@ -95,18 +96,19 @@ test('un enlace vencido requiere reenvío y el enlace nuevo reemplaza el anterio
 })
 
 test('las cuentas anteriores a la migración conservan el acceso', async () => {
+  const legacyCredentials = { ...credentials, email: 'cuenta-anterior@example.test' }
   fakeDatabase({
     id: 'legacy-user',
-    ...credentials,
+    ...legacyCredentials,
     passwordHash: await bcrypt.hash(credentials.password, 4),
     emailVerificationRequired: false,
     emailVerifiedAt: null,
   })
-  const session = await authService.login(credentials)
+  const session = await authService.login(legacyCredentials)
   assert.equal(session.user.id, 'legacy-user')
 })
 
-test('cuando el servicio de correo no está configurado, el usuario se crea verificado sin lanzar 503', async () => {
+test('una cuenta normal puede iniciar sesión sin configurar el servicio de correo', async () => {
   const origKey = process.env.RESEND_API_KEY
   delete process.env.RESEND_API_KEY
   try {
@@ -115,7 +117,7 @@ test('cuando el servicio de correo no está configurado, el usuario se crea veri
     assert.equal(result.verificationRequired, false)
     assert.equal(result.verificationSent, false)
     assert.equal(getUser().emailVerificationRequired, false)
-    assert.ok(getUser().emailVerifiedAt instanceof Date)
+    assert.equal(getUser().emailVerifiedAt, null)
     const session = await authService.login({ email: 'sin-correo@example.test', password: 'password123' })
     assert.ok(session.accessToken)
   } finally {
@@ -123,14 +125,17 @@ test('cuando el servicio de correo no está configurado, el usuario se crea veri
   }
 })
 
-test('si el envío de correo falla por rechazo de Resend, la cuenta se auto-verifica para no bloquear al usuario', async (t) => {
+test('el correo de verificación se envía solo a la cuenta de demostración', async (t) => {
   const getUser = fakeDatabase()
-  captureEmail(t, { ok: false })
+  const fetch = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('No se debe enviar correo a una cuenta normal')
+  })
   const result = await authService.register({ email: 'profesor@universidad.test', password: 'password123', name: 'Profesor' })
   assert.equal(result.verificationSent, false)
   assert.equal(result.verificationRequired, false)
   assert.equal(getUser().emailVerificationRequired, false)
-  assert.ok(getUser().emailVerifiedAt instanceof Date)
+  assert.equal(getUser().emailVerifiedAt, null)
+  assert.equal(fetch.mock.callCount(), 0)
   const session = await authService.login({ email: 'profesor@universidad.test', password: 'password123' })
   assert.ok(session.accessToken)
 })

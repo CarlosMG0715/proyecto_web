@@ -195,11 +195,41 @@ dialog.streak-loss-dialog {
   color: #fff3eb;
 }
 dialog.streak-loss-dialog::backdrop { background: #120d1cbb; }
-.streak-loss-banner { display: block; width: 100%; max-height: 190px; aspect-ratio: 2.3; object-fit: cover; border-radius: 13px; margin-bottom: 16px; }
+dialog.streak-loss-dialog .streak-loss-banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(34vh, 250px);
+  aspect-ratio: auto;
+  object-fit: contain;
+  object-position: center top;
+  border-radius: 15px;
+  margin: 0 auto 18px;
+}
 .streak-loss-dialog h2 { margin: 0; font-size: 1.35rem; }
 .streak-loss-dialog p { line-height: 1.55; }
 .streak-loss-dialog form { display: flex; justify-content: flex-end; }
-.streak-loss-dialog .game-button { background: var(--theme-accent, #c4a6f5); color: #21182b; border: 0; }
+.streak-loss-dialog form { margin-top: 20px; }
+.streak-loss-dialog .game-button {
+  min-height: 48px;
+  padding: 0 24px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent, #c4a6f5) 72%, white);
+  border-bottom: 3px solid color-mix(in srgb, var(--theme-accent, #c4a6f5) 68%, #21182b);
+  border-radius: 14px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent, #c4a6f5) 82%, white), var(--theme-accent, #c4a6f5));
+  color: #21182b;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--theme-accent, #c4a6f5) 24%, transparent);
+  font-size: 14px;
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease;
+}
+.streak-loss-dialog .game-button:hover { transform: translateY(-2px); filter: brightness(1.06); }
+.streak-loss-dialog .game-button:active { transform: translateY(1px); }
+@media (max-width: 520px) {
+  dialog.streak-loss-dialog .streak-loss-banner { max-height: min(29vh, 190px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .streak-loss-dialog .game-button { transition: none; }
+}
 dialog.streak-reminder-dialog {
   width: min(480px, calc(100% - 28px));
   max-height: calc(100dvh - 28px);

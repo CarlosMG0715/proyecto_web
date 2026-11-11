@@ -17,7 +17,8 @@ RUN apt-get update \
 # Prisma necesita el esquema disponible durante npm ci para generar su cliente.
 COPY backend/package.json backend/package-lock.json ./
 COPY backend/prisma/ ./prisma/
-RUN npm ci
+# El arranque usa el CLI de Prisma para aplicar las migraciones.
+RUN npm ci --include=dev
 
 COPY backend/ ./
 COPY ["Frontend/src/assets/Banner Recuperacion Verificacion.png", "/app/Frontend/src/assets/Banner Recuperacion Verificacion.png"]

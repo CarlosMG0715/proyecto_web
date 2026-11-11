@@ -1,5 +1,5 @@
 import { api } from '@/services/api'
-import type { DailyCheckReport } from '@/types/group'
+import type { DailyCheckReport, GroupMember } from '@/types/group'
 
 export interface RemoteGroup {
   targetDays?: 30 | 90 | 120 | null
@@ -18,6 +18,13 @@ export interface RemoteGroup {
     dailyReport?: DailyCheckReport | null
     fallenAt?: string | null
     isFallen?: boolean
+    dropoutRiskMissedDays?: number
+    missedDaysLastWeek?: number
+    recentActivity?: GroupMember['recentActivity']
+    bestGroupStreak?: number
+    returnRequests?: number
+    revivalCount?: number
+    hasPendingReturn?: boolean
     id: string; name: string; role: 'ADMIN' | 'MIEMBRO'; characterId?: string; themeId?: string
     habit?: string; daysCompleted?: number; daysTotal?: number; streak?: number; checkedInToday?: boolean; isCurrentUser?: boolean; isOnline?: boolean
   }>

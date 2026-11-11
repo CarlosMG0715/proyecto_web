@@ -8,11 +8,14 @@ import { CHARACTERS, CHARACTER_THEMES, useCharacterStore } from '@/stores/charac
 import { getThemeBackground } from '@/constants/themeBackgrounds'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
+import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
 import '@/assets/styles/game-views.css'
 
 const store = useGroupsStore()
 const session = useSessionStore()
 const characters = useCharacterStore()
+const { dayKey } = useMidnightCountdown()
+const currentStreak = computed(() => store.currentStreak(dayKey.value))
 
 const name = computed(() => session.currentUser?.name ?? 'Valeria')
 const email = computed(() => session.currentUser?.email ?? '')
@@ -73,8 +76,8 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
         <div class="identity-flame">
           <StreakFlame :size="104" />
           <div>
-            <strong>{{ store.bestStreak }}</strong>
-            <span>mejor racha · días</span>
+            <strong>{{ currentStreak }}</strong>
+            <span>racha actual · {{ currentStreak === 1 ? 'día' : 'días' }}</span>
           </div>
         </div>
       </section>

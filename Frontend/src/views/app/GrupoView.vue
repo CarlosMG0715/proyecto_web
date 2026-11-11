@@ -41,6 +41,17 @@ const countdownUrgency = computed(() => {
 
 const group = computed(() => store.groupById(String(route.params.groupId)))
 const selectedId = ref('')
+const showTeamStatistics = ref(false)
+const teamActivity = computed(() => {
+  const dates = group.value?.members[0]?.recentActivity ?? []
+  return dates.map(day => {
+    const records = (group.value?.members ?? []).flatMap(member =>
+      (member.recentActivity ?? []).filter(entry => entry.date === day.date && entry.completed !== null))
+    const completed = records.filter(entry => entry.completed).length
+    return { date: day.date, label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
+      percent: records.length ? Math.round(completed / records.length * 100) : null }
+  })
+})
 const selectedMember = computed(
   () =>
     group.value?.members.find((m) => m.id === selectedId.value) ??
@@ -48,6 +59,29 @@ const selectedMember = computed(
     group.value?.members[0],
 )
 const me = computed(() => group.value?.members.find((m) => m.isCurrentUser))
+const teamReturns = computed(() => ({
+  revived: group.value?.members.reduce((sum, member) => sum + (member.revivalCount ?? 0), 0) ?? 0,
+  pending: group.value?.members.filter(member => member.hasPendingReturn).length ?? 0,
+  fallen: group.value?.members.filter(member => member.isFallen).length ?? 0,
+}))
+const participationChart = computed(() => (selectedMember.value?.recentActivity ?? []).map(day => ({
+  ...day,
+  label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
+  status: day.completed === null ? 'Sin actividad esperada' : day.completed ? 'Check registrado' : 'Sin check',
+})))
+const riskPercent = computed(() => {
+  const expected = participationChart.value.filter(day => day.completed !== null)
+  return expected.length ? Math.round(100 * expected.filter(day => !day.completed).length / expected.length) : null
+})
+const participationState = computed(() => {
+  if (riskPercent.value === null) return { level: 'empty', label: 'Esperando sus primeros registros', icon: 'users' as const }
+  if (group.value?.archivedAt) return { level: 'empty', label: 'Aventura cerrada', icon: 'users' as const }
+  if (selectedMember.value?.hasPendingReturn) return { level: 'return', label: 'Quiere volver · regreso pendiente', icon: 'users' as const }
+  const missed = selectedMember.value?.dropoutRiskMissedDays ?? 0
+  if (missed >= 5) return { level: 'high', label: 'Riesgo alto de abandono', icon: 'flame' as const }
+  if (missed >= 3) return { level: 'risk', label: 'En riesgo de abandono', icon: 'flame' as const }
+  return { level: 'low', label: 'Riesgo bajo · sigue participando', icon: 'check' as const }
+})
 const teammates = computed(() => group.value?.members.filter(member => !member.isCurrentUser) ?? [])
 const scenePage = ref(0)
 const teammatesPerPage = 2
@@ -90,6 +124,13 @@ const fallenMembers = computed(() => group.value?.members.filter((member) => mem
 const penaltyDialog = ref<HTMLDialogElement | null>(null)
 const penaltyNames = ref<string[]>([])
 const shownPenalties = new Set<string>()
+const replayDemoPenalty = computed(() => import.meta.env.DEV
+  && import.meta.env.VITE_REPLAY_DEMO_PENALTY === 'true'
+  && session.currentUser?.email === import.meta.env.VITE_REPLAY_DEMO_ACCOUNT
+  && group.value?.id === 'demo-valeria-demo-vuel')
+watch(() => route.params.groupId, () => {
+  if (replayDemoPenalty.value) shownPenalties.clear()
+})
 function showGroupPenalty() {
   const dialog = penaltyDialog.value
   const user = session.currentUser
@@ -100,6 +141,7 @@ function showGroupPenalty() {
     key: `kordia:penalty:${user.id}:${current.id}:${member.id}:${member.fallenAt}`,
   })).filter(({ key }) => {
     if (shownPenalties.has(key)) return false
+    if (replayDemoPenalty.value) return true
     try { return !localStorage.getItem(key) } catch { return true }
   })
   if (!notices.length) return
@@ -107,10 +149,12 @@ function showGroupPenalty() {
   dialog.showModal()
   for (const { key } of notices) {
     shownPenalties.add(key)
-    try { localStorage.setItem(key, '1') } catch { /* El aviso ya se mostró en esta pestaña. */ }
+    if (!replayDemoPenalty.value) {
+      try { localStorage.setItem(key, '1') } catch { /* El aviso ya se mostró en esta pestaña. */ }
+    }
   }
 }
-watch([penaltyDialog, fallenMembers, me], showGroupPenalty, { flush: 'post' })
+watch([penaltyDialog, fallenMembers, me, replayDemoPenalty], showGroupPenalty, { flush: 'post' })
 
 async function reviveMember(memberId: string) {
   if (!group.value || !isAdmin.value) return
@@ -228,7 +272,7 @@ const canPoke = computed(() => canPokeMember(selectedMember.value))
 
 async function selectCharacter(memberId: string) {
   selectedId.value = memberId
-  if (me.value?.id === memberId) return
+  showTeamStatistics.value = false
   await nextTick()
   memberPanel.value?.scrollIntoView({ block: 'nearest' })
 }
@@ -564,6 +608,11 @@ async function handleLeaveGroup() {
             <RouterLink :to="{ name: 'inicio' }" class="back">
               <AppIcon name="chevron-left" :size="15" />Inicio
             </RouterLink>
+            <button type="button" class="roster-toggle" :aria-expanded="isRosterOpen"
+              aria-controls="group-roster" @click="isRosterOpen = !isRosterOpen">
+              <AppIcon name="users" :size="15" />
+              {{ isRosterOpen ? 'Ocultar miembros' : 'Ver miembros' }}
+            </button>
           </div>
           <div class="group-brand-row">
             <button type="button" class="group-header-emblem" :class="{ editable: isAdmin }" :style="{ '--emblem-color': group.color }" :title="isAdmin ? 'Editar información del grupo' : group.category" @click="isAdmin && openGroupEditor()">
@@ -782,7 +831,7 @@ async function handleLeaveGroup() {
             :class="{ 'chat-closed': !isChatOpen || isChatExpanded }"
           >
             <div class="game-stack">
-              <section v-if="selectedMember" ref="memberPanel" class="game-panel player-panel">
+              <section v-if="selectedMember" class="game-panel player-panel">
                 <div class="player-detail-heading">
                   <CharacterIcon
                     :character="characters.forMember(selectedMember.id, selectedMember.isCurrentUser, selectedMember.name)"
@@ -829,7 +878,7 @@ async function handleLeaveGroup() {
                   <div>
                     <AppIcon name="flame" :size="16" />
                     <strong>{{ selectedMember.streak }}</strong>
-                    <small>días de racha</small>
+                    <small>días de racha actual</small>
                   </div>
                   <div>
                     <AppIcon name="check" :size="16" />
@@ -847,6 +896,8 @@ async function handleLeaveGroup() {
                     <small>hitos de racha</small>
                   </div>
                 </div>
+
+
 
                 <div v-if="lastMessage" class="last-message">
                   <AppIcon name="message" :size="15" />
@@ -929,7 +980,128 @@ async function handleLeaveGroup() {
                 </article>
               </section>
 
+
+            </div>
+
+            <section v-if="!group.archivedAt && isChatOpen && !isChatExpanded" class="adventure-chat compact-chat">
+              <GroupChat
+                :group="group"
+                :alert="null"
+                :expanded="false"
+                @close="isChatOpen = false"
+                @toggle-expand="isChatExpanded = true"
+                @send="send"
+              />
+            </section>
+          </div>
+        </div>
+
+        <aside class="group-side-panels">
+
+
+          <section v-if="isChatOpen && isChatExpanded" class="adventure-chat expanded-side-chat">
+            <GroupChat
+              :group="group"
+              :alert="null"
+              :expanded="true"
+              @close="isChatOpen = false"
+              @toggle-expand="isChatExpanded = false"
+              @send="send"
+            />
+          </section>
+          <section v-show="isRosterOpen" id="group-roster" class="game-panel team-roster side-roster group-roster">
+            <div class="game-title">
+              <h2><AppIcon name="users" :size="18" />Miembros ({{ group.members.length }}/20)</h2>
+            </div>
+            <div class="roster-list">
+              <button v-for="m in group.members" :key="m.id" type="button" class="roster-member member-stat-link"
+                @click="selectCharacter(m.id)">
+
+                <CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="36" />
+                <span class="roster-member-copy">
+                  <strong>{{ nameOf(m) }}</strong>
+                  <small>{{ m.role === 'ADMIN' ? 'Admin' : 'Miembro' }}</small>
+                  <small :class="{ 'roster-done': m.checkedInToday && !m.isFallen }">
+                    {{ m.isFallen ? 'Caído' : m.checkedInToday ? 'Al día' : 'Pendiente' }}
+                  </small>
+                </span>
+              </button>
+
+            </div>
+          </section>
+        </aside>
+
+      </div>
+    </div>
+    <div v-if="selectedMember" class="adventure-wrap group-columns group-statistics-layout">
+                <section v-if="selectedMember && selectedMember.missedDaysLastWeek !== undefined" ref="memberPanel" class="member-participation" :data-risk="showTeamStatistics ? 'empty' : participationState.level">
+                  <nav class="statistics-picker" aria-label="Estadísticas del grupo y sus miembros">
+                    <button type="button" :class="{ selected: showTeamStatistics }" :aria-pressed="showTeamStatistics" @click="showTeamStatistics = true">
+                      <span class="statistics-avatar"><AppIcon name="users" :size="30" /></span><span>General</span>
+                    </button>
+                    <button v-for="member in group.members" :key="member.id" type="button" :class="{ selected: !showTeamStatistics && selectedMember.id === member.id }"
+                      :aria-pressed="!showTeamStatistics && selectedMember.id === member.id" @click="selectedId = member.id; showTeamStatistics = false">
+                      <span class="statistics-avatar"><CharacterIcon :character="characters.forMember(member.id, member.isCurrentUser, member.name)" :size="48" /></span>
+                      <span>{{ nameOf(member) }}</span>
+                    </button>
+                  </nav>
+                  <div v-if="showTeamStatistics" class="team-statistics-content">
+                    <header><small>ESTADÍSTICAS GENERALES</small><h3>{{ group.name }}</h3><p>Participación de los miembros actuales durante los últimos siete días cerrados.</p></header>
+                    <ul class="participation-chart team-activity-chart" aria-label="Cumplimiento diario del equipo">
+                      <li v-for="day in teamActivity" :key="day.date" :aria-label="day.date + ': ' + (day.percent === null ? 'Sin datos' : day.percent + '% de cumplimiento')">
+                        <strong>{{ day.percent === null ? '—' : day.percent + '%' }}</strong>
+                        <span class="team-activity-track"><span :style="{ height: (day.percent ?? 0) + '%' }" /></span><small>{{ day.label }}</small>
+                      </li>
+                    </ul>
+                    <dl>
+                      <div><dt>Racha del equipo</dt><dd>{{ group.streak }} días</dd></div>
+                      <div><dt>Checks de hoy</dt><dd>{{ group.members.filter(member => member.checkedInToday).length }}/{{ group.members.length }}</dd></div>
+                      <div><dt>Revividas aprobadas</dt><dd>{{ teamReturns.revived }}</dd></div>
+                      <div><dt>Regresos pendientes</dt><dd>{{ teamReturns.pending }}</dd></div>
+                      <div><dt>Personajes caídos</dt><dd>{{ teamReturns.fallen }}</dd></div>
+                      <div><dt>Miembros del grupo</dt><dd>{{ group.members.length }}</dd></div>
+                    </dl>
+                  </div>
+                  <template v-else>
+                  <header class="participation-heading">
+                    <CharacterIcon :character="characters.forMember(selectedMember.id, selectedMember.isCurrentUser, selectedMember.name)" :size="64" />
+                    <div>
+                      <h3>{{ nameOf(selectedMember) }}</h3>
+                      <p>Su camino en <strong>{{ group.name }}</strong></p>
+                    </div>
+                  </header>
+                  <p class="participation-status">
+                    <AppIcon :name="participationState.icon" :size="22" />
+                    {{ participationState.label }}
+                  </p>
+                  <p v-if="selectedMember.dropoutRiskMissedDays" class="participation-help">
+                    Lleva {{ selectedMember.missedDaysLastWeek }} días sin check esta semana y aún no ha pedido volver. Un mensaje del equipo puede ayudarle a retomar.
+                  </p>
+                  <div class="participation-risk">
+                    <strong>{{ riskPercent === null ? 'Sin datos' : riskPercent + '%' }}</strong>
+                    <span>Indicador de riesgo de abandono</span>
+                    <small>{{ selectedMember.missedDaysLastWeek }} de {{ participationChart.filter(day => day.completed !== null).length }} días esperados sin check esta semana.</small>
+                  </div>
+                  <div class="participation-history">
+                  <ul class="participation-chart" aria-label="Actividad de los últimos siete días cerrados">
+                    <li v-for="day in participationChart" :key="day.date" :aria-label="`${day.date}, ${day.status}`" :title="day.status">
+                      <span class="participation-bar" :class="{ 'is-done': day.completed === true, 'is-missed': day.completed === false }" aria-hidden="true" />
+                      <small>{{ day.label }}</small>
+                    </li>
+                  </ul>
+                  <div class="participation-legend"><span>✓ Con check</span><span>× Sin check</span><span>· Sin actividad esperada</span></div>
+                  <dl>
+                    <div><dt>Mejor racha</dt><dd>{{ selectedMember.bestGroupStreak }} días</dd></div>
+                    <div><dt>Días sin check en los últimos 7 días cerrados</dt><dd>{{ selectedMember.missedDaysLastWeek }}</dd></div>
+                    <div><dt>Revividas aprobadas</dt><dd>{{ selectedMember.revivalCount ?? 0 }}</dd></div>
+                    <div><dt>Regreso al equipo</dt><dd class="return-state">{{ selectedMember.hasPendingReturn ? 'Pendiente' : selectedMember.isFallen ? 'Sin solicitar' : 'En la aventura' }}</dd></div>
+                  </dl>
+                  </div>
+                </template>
+                </section>
+                <p v-else class="game-panel">Las estadísticas de este grupo aún no están disponibles.</p>
               <section
+                v-if="!group.archivedAt && !me?.isFallen"
                 class="reminder midnight-countdown-card"
                 :class="pending.length ? 'is-danger' : 'is-complete'"
                 role="status"
@@ -1001,56 +1173,6 @@ async function handleLeaveGroup() {
                   </div>
                 </div>
               </section>
-            </div>
-
-            <section v-if="!group.archivedAt && isChatOpen && !isChatExpanded" class="adventure-chat compact-chat">
-              <GroupChat
-                :group="group"
-                :alert="null"
-                :expanded="false"
-                @close="isChatOpen = false"
-                @toggle-expand="isChatExpanded = true"
-                @send="send"
-              />
-            </section>
-          </div>
-        </div>
-
-        <aside class="group-side-panels">
-          <section v-if="isChatOpen && isChatExpanded" class="adventure-chat expanded-side-chat">  
-            <GroupChat  
-              :group="group"  
-              :alert="null"  
-              :expanded="true"  
-              @close="isChatOpen = false"  
-              @toggle-expand="isChatExpanded = false"  
-              @send="send"  
-            />  
-          </section>
-          <button type="button" class="roster-toggle" :aria-expanded="isRosterOpen"
-            aria-controls="group-roster" @click="isRosterOpen = !isRosterOpen">
-            <AppIcon name="users" :size="15" />
-            {{ isRosterOpen ? 'Ocultar miembros' : 'Ver miembros' }}
-          </button>
-          <section v-show="isRosterOpen" id="group-roster" class="game-panel team-roster side-roster group-roster">  
-            <div class="game-title">  
-              <h2><AppIcon name="users" :size="18" />Miembros ({{ group.members.length }}/20)</h2>  
-            </div>  
-            <div class="roster-list">  
-              <article v-for="m in group.members" :key="m.id" class="roster-member">  
-                <CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="36" />  
-                <span class="roster-member-copy">  
-                  <strong>{{ nameOf(m) }}</strong>  
-                  <small>{{ m.role === 'ADMIN' ? 'Admin' : 'Miembro' }}</small>  
-                  <small :class="{ 'roster-done': m.checkedInToday && !m.isFallen }">  
-                    {{ m.isFallen ? 'Caído' : m.checkedInToday ? 'Al día' : 'Pendiente' }}  
-                  </small>  
-                </span>  
-              </article>  
-            </div>  
-          </section>
-        </aside>
-      </div>
     </div>
 
       <div
@@ -5082,17 +5204,17 @@ async function handleLeaveGroup() {
 }
 .header-identity { min-width: 0; }
 .header-shortcuts { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
-.group-side-panels .roster-toggle {
-  justify-self: end;
+.header-shortcuts .roster-toggle {
   display: inline-flex;
   gap: 6px;
   align-items: center;
   padding: 8px 12px;
   border: 0;
   border-radius: 10px;
-  background: #ffffff08;
+  background: #ffffff16;
   color: #ded3e4;
   font-size: 12px;
+  cursor: pointer;
 }
 .adventure-page .header-actions { gap: 8px; flex-wrap: wrap; justify-content: flex-start; }
 .adventure-page .adventure-header .invite-badge {
@@ -5161,6 +5283,45 @@ async function handleLeaveGroup() {
 }
 .group-columns .adventure-main-col { grid-area: main; min-width: 0; }
 .group-side-panels { grid-area: side; display: grid; gap: 16px; min-width: 0; }
+.member-stat-link { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.member-participation { padding: 1rem; border: 1px solid currentColor; border-radius: 1rem; }
+.member-participation h3 { margin: 0 0 .75rem; }
+.participation-status { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--report-accent) 15%, transparent); color: #f5edff; font-size: .8rem; font-weight: 700; }
+.participation-status.is-risk { background: #edaa8224; color: #ffd2b6; border: 1px solid #edaa8255; }
+.participation-help { color: #dcc8d0; font-size: .78rem; line-height: 1.6; margin: 0 0 18px; }
+.participation-risk { display: grid; gap: .15rem; }
+.participation-risk strong { font-size: 1.75rem; }
+.participation-chart { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .35rem; list-style: none; padding: 0; }
+.participation-chart li { display: grid; grid-template-rows: 2.75rem auto; justify-items: center; align-items: end; gap: .25rem; }
+.participation-bar { width: 100%; height: .55rem; border-radius: .35rem; background: #8a8491; color: #181322; text-align: center; font-weight: 700; line-height: 1; }
+.participation-bar.is-done { height: 100%; background: #79cb9c; }
+.participation-bar.is-missed { height: 55%; background: #eda184; }
+.participation-bar.is-done::before { content: '✓'; }
+.participation-bar.is-missed::before { content: '×'; }
+.participation-legend { display: flex; flex-wrap: wrap; gap: .25rem .75rem; font-size: .75rem; }
+.member-participation dl { display: grid; gap: .4rem; }
+.member-participation dl > div { display: flex; justify-content: space-between; gap: 1rem; }
+.member-participation dd { margin: 0; font-weight: 700; white-space: nowrap; }
+.member-participation { padding: 22px; border: 1px solid color-mix(in srgb, var(--theme-accent) 28%, transparent); border-radius: 24px; background: radial-gradient(ellipse at top right, color-mix(in srgb, var(--theme-accent) 15%, transparent), transparent 70%), #241e32; }
+.member-participation h3 { font-size: 1.1rem; margin-bottom: 18px; }
+.participation-risk { gap: 8px; margin: 20px 0; }
+.participation-risk strong { color: var(--theme-accent); font-size: 2.2rem; }
+.participation-risk > small { color: #c5b7d6; font-size: .73rem; line-height: 1.5; }
+.participation-chart { padding: 18px 10px 12px; border-radius: 16px; background: #130f242e; gap: 8px; margin-bottom: 10px; }
+.participation-chart li { grid-template-rows: 60px auto; gap: 8px; }
+.participation-chart li > small { font-size: .7rem; color: #d3c7e3; }
+.participation-bar { width: min(100%, 34px); border-radius: 8px; display: grid; place-items: center; font-size: .85rem; }
+.participation-bar.is-done { background: linear-gradient(var(--theme-accent), color-mix(in srgb, var(--theme-accent) 65%, #79568e)); }
+.participation-bar.is-missed {
+  background: linear-gradient(color-mix(in srgb, var(--theme-accent) 48%, #172238), color-mix(in srgb, var(--theme-accent) 25%, #172238));
+  color: #f4efff;
+}
+.participation-legend { font-size: .65rem; color: #c5b7d6; gap: 5px 12px; }
+.member-participation dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 20px 0 0; }
+.member-participation dl > div { flex-direction: column-reverse; justify-content: end; gap: 6px; padding: 12px 10px; background: color-mix(in srgb, var(--theme-accent) 9%, #241e32); border-radius: 12px; }
+.member-participation dt { font-size: .65rem; color: #c5b7d6; line-height: 1.4; }
+.member-participation dd { font-size: 1.05rem; color: #f4eaff; }
+@media (max-width: 400px) { .member-participation { padding: 14px; } }
 .group-columns .group-roster {
   align-content: start;
   min-width: 0;
@@ -5256,6 +5417,70 @@ async function handleLeaveGroup() {
 .countdown-poke{min-height:28px;gap:4px;padding:3px 7px;border-radius:8px;font-size:11px;box-shadow:none;white-space:nowrap}
 .countdown-poke :deep(svg){width:16px;height:16px;flex:none}
 .streak-reminder-actions .streak-reminder-primary{gap:7px;background:color-mix(in srgb,var(--poke-accent) 57%,#fff2fb)}
+
+.group-statistics-layout { display: grid; grid-template-columns: minmax(0, 1fr); margin: 16px auto 0; }
+.group-columns > .member-participation, .group-columns > .midnight-countdown-card { grid-column: 1 / -1; }
+.group-columns > .member-participation {
+  display: grid; grid-template-columns: minmax(200px, .9fr) minmax(0, 1.5fr); column-gap: clamp(24px, 5vw, 64px); row-gap: 12px;
+  --risk-color: #bcb2cc;
+  padding: clamp(22px, 3vw, 36px); margin: 0 0 14px; border: 0; border-radius: 22px; box-shadow: none;
+  background: linear-gradient(100deg, #201829ed, #201829b8), var(--group-section-banner) center 48px / cover no-repeat #201829;
+}
+.participation-heading { display: flex; align-items: center; gap: 14px; grid-column: 1; }
+.participation-heading h3 { margin: 0; font-size: 1.6rem; }
+.participation-heading p { margin: 4px 0 0; color: #e2d4e8; font-size: .9rem; line-height: 1.4; }
+.participation-heading p strong { color: #fff5ff; }
+.member-participation[data-risk="low"] { --risk-color: #9ce7b8; }
+.member-participation[data-risk="risk"] { --risk-color: #ffd28c; }
+.member-participation[data-risk="high"] { --risk-color: #ff9eae; }
+.member-participation[data-risk="return"] { --risk-color: #acd9ff; }
+.group-columns > .member-participation .participation-status { grid-column: 1; grid-row: 3; align-self: start; margin: 0; color: var(--risk-color); background: color-mix(in srgb, var(--risk-color) 10%, transparent); font-size: 1rem; line-height: 1.4; }
+.group-columns > .member-participation .participation-help { grid-column: 1; grid-row: 5; margin: 0; font-size: .9rem; line-height: 1.55; }
+.group-columns > .member-participation .participation-risk { grid-column: 1; grid-row: 4; margin: 0; gap: 8px; align-self: start; }
+.group-columns > .member-participation .participation-risk strong { font-size: clamp(2.8rem, 4vw, 3.8rem); color: var(--risk-color); line-height: 1; font-weight: 800; }
+.group-columns > .member-participation .participation-risk > span { font-size: 1.1rem; font-weight: 650; color: #fff5ff; }
+.group-columns > .member-participation .participation-risk > small { font-size: .95rem; line-height: 1.5; color: #e2d4e8; }
+.group-columns > .member-participation .participation-legend { font-size: .8rem; }
+.group-columns > .member-participation dt { font-size: .8rem; }
+.participation-history {
+  grid-column: 2;
+  grid-row: 2 / 6;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.group-columns > .member-participation .participation-chart { margin: 0; background: #17102040; padding: 18px 18px 14px; }
+.group-columns > .member-participation .participation-chart li { grid-template-rows: 96px auto; }
+.group-columns > .member-participation .participation-legend { grid-column: 2; }
+.group-columns > .member-participation dl { grid-column: 2; margin: 0; }
+.group-columns > .member-participation dl > div { background: #21192c70; }
+.group-columns > .member-participation dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.member-participation dd.return-state { white-space: normal; font-size: .95rem; }
+@media (max-width: 650px) {
+ .group-columns > .member-participation { grid-template-columns: minmax(0, 1fr); }
+ .group-columns > .member-participation > * { grid-column: 1 !important; grid-row: auto !important; }
+}
+
+.statistics-picker { grid-column: 1 / -1; display: flex; gap: 16px; overflow-x: auto; padding: 0 0 18px; }
+.statistics-picker button { display: flex; flex-direction: column; align-items: center; gap: 7px; flex: 0 0 auto; background: transparent; border: 0; color: #e7dcec; font: inherit; font-size: .8rem; cursor: pointer; padding: 5px; }
+.statistics-avatar { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; background: #ffffff12; }
+.statistics-picker .selected .statistics-avatar { background: color-mix(in srgb, var(--theme-accent) 28%, #241b30); box-shadow: 0 0 0 3px var(--theme-accent); }
+.statistics-picker .selected { color: white; font-weight: 750; }
+.team-statistics-content { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px 24px; }
+.team-statistics-content header p { color: #e0d4e5; line-height: 1.6; }
+.team-statistics-content header small { color: var(--theme-accent); }
+.group-columns > .member-participation .team-activity-chart li { grid-template-rows: auto 100px auto; }
+.team-activity-chart strong { font-size: .85rem; }
+.team-activity-track { display: flex; align-items: end; width: min(100%, 36px); height: 100px; border-radius: 8px; overflow: hidden; background: #ffffff12; }
+.team-activity-track > span { width: 100%; background: linear-gradient(var(--theme-accent), color-mix(in srgb, var(--theme-accent) 45%, #241b30)); border-radius: 8px; }
+.group-columns > .member-participation .team-statistics-content dl { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 650px) {
+ .team-statistics-content { grid-template-columns: minmax(0, 1fr); }
+ .group-columns > .member-participation .team-statistics-content .participation-chart { grid-column: 1; }
+ .group-columns > .member-participation .team-statistics-content dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>
 
 <style src="@/assets/styles/group-dialogs.css"></style>
