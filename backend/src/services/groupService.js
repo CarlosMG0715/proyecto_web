@@ -60,13 +60,21 @@ function toGroupDto(group, currentUserId) {
     const daysTotal = eligibleDates.length
     const daysCompleted = eligibleDates.filter((date) => didCheck(m.user.id, date)).length
     const memberStreak = consecutiveDays(today, (date) => didCheck(m.user.id, date))
-    const recentActivity = dateKeys.slice(1, 8).reverse().map(date => ({
+    const closedActivity = dateKeys.slice(1, 8).reverse().map(date => ({
       date,
       completed: firstActiveHabitDay && date >= joinedDay && date >= firstActiveHabitDay && (!archivedDay || date < archivedDay)
         ? didCheck(m.user.id, date)
         : null,
     }))
-    const missedDays = recentActivity.filter(day => day.completed === false).length
+    const todayIsExpected = !group.archivedAt && firstActiveHabitDay && today >= joinedDay && today >= firstActiveHabitDay
+    const todayActivity = todayIsExpected ? { date: 'today', completed: todayCheck ? true : null } : null
+    const recentActivity = [...closedActivity, ...(todayActivity ? [todayActivity] : [])]
+    // Mientras el día sigue abierto, solo un check cuenta como actividad de hoy.
+    // Si se completó, la ventana móvil usa hoy + los seis días cerrados previos.
+    const riskWindow = todayCheck && todayActivity
+      ? [...closedActivity.slice(-6), todayActivity]
+      : closedActivity
+    const missedDays = riskWindow.filter(day => day.completed === false).length
     const returns = returnsByMember.get(m.user.id)
     return {
       id: m.user.id,
@@ -83,7 +91,7 @@ function toGroupDto(group, currentUserId) {
       returnRequests: returns?.count ?? 0,
       revivalCount: returns?.revived ?? 0,
       hasPendingReturn: returns?.pending ?? false,
-      dropoutRiskMissedDays: !group.archivedAt && missedDays >= 3 && !returns?.pending ? missedDays : 0,
+      dropoutRiskMissedDays: !group.archivedAt && !m.fallenAt && missedDays >= 3 && !returns?.pending ? missedDays : 0,
       habit: habits.map((h) => h.name).join(', '),
       daysCompleted,
       daysTotal,

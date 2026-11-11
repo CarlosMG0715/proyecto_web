@@ -447,6 +447,23 @@ export const useGroupsStore = defineStore('groups', () => {
       return result
     }
 
+    if (!rawGroup.archivedAt && !me.isFallen && rawGroup.habits?.length) {
+      me.recentActivity ??= []
+      let todayActivity = me.recentActivity.find((day) => day.date === 'today')
+      if (!todayActivity) {
+        todayActivity = { date: 'today', completed: null }
+        me.recentActivity.push(todayActivity)
+      }
+      todayActivity.completed = result.done ? true : null
+      const closedDays = me.recentActivity.filter((day) => day.date !== 'today')
+      const riskWindow = result.done
+        ? [...closedDays.slice(-6), todayActivity]
+        : closedDays.slice(-7)
+      const missedDays = riskWindow.filter((day) => day.completed === false).length
+      me.missedDaysLastWeek = missedDays
+      me.dropoutRiskMissedDays = missedDays >= 3 && !me.hasPendingReturn ? missedDays : 0
+    }
+
     const myData = ensureMyData()
     const todayKey = toDateKey(new Date())
 

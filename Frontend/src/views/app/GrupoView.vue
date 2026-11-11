@@ -42,13 +42,18 @@ const countdownUrgency = computed(() => {
 const group = computed(() => store.groupById(String(route.params.groupId)))
 const selectedId = ref('')
 const showTeamStatistics = ref(false)
+const activeMembers = computed(() => group.value?.members.filter(member => !member.isFallen) ?? [])
+const todayCheckCount = computed(() => activeMembers.value.filter(member => member.checkedInToday).length)
 const teamActivity = computed(() => {
-  const dates = group.value?.members[0]?.recentActivity ?? []
-  return dates.map(day => {
-    const records = (group.value?.members ?? []).flatMap(member =>
-      (member.recentActivity ?? []).filter(entry => entry.date === day.date && entry.completed !== null))
+  const current = group.value
+  if (!current) return []
+  const dates = [...new Set(activeMembers.value.flatMap(member => member.recentActivity?.map(day => day.date) ?? []))].sort()
+  return dates.map(date => {
+    const entries = activeMembers.value.flatMap(member =>
+      (member.recentActivity ?? []).filter(entry => entry.date === date))
+    const records = date === 'today' ? entries : entries.filter(entry => entry.completed !== null)
     const completed = records.filter(entry => entry.completed).length
-    return { date: day.date, label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
+    return { date, label: date === 'today' ? 'Hoy' : new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(date)),
       percent: records.length ? Math.round(completed / records.length * 100) : null }
   })
 })
@@ -66,11 +71,16 @@ const teamReturns = computed(() => ({
 }))
 const participationChart = computed(() => (selectedMember.value?.recentActivity ?? []).map(day => ({
   ...day,
-  label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
-  status: day.completed === null ? 'Sin actividad esperada' : day.completed ? 'Check registrado' : 'Sin check',
+  label: day.date === 'today' ? 'Hoy' : new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
+  status: day.date === 'today' && day.completed === null ? 'Hoy sigue en curso' : day.completed === null ? 'Sin actividad esperada' : day.completed ? 'Check registrado' : 'Sin check',
 })))
+const riskActivity = computed(() => {
+  const closedDays = participationChart.value.filter(day => day.date !== 'today')
+  const today = participationChart.value.find(day => day.date === 'today')
+  return today?.completed === true ? [...closedDays.slice(-6), today] : closedDays.slice(-7)
+})
 const riskPercent = computed(() => {
-  const expected = participationChart.value.filter(day => day.completed !== null)
+  const expected = riskActivity.value.filter(day => day.completed !== null)
   return expected.length ? Math.round(100 * expected.filter(day => !day.completed).length / expected.length) : null
 })
 const participationState = computed(() => {
@@ -1033,7 +1043,7 @@ async function handleLeaveGroup() {
 
       </div>
     </div>
-    <div v-if="selectedMember" class="adventure-wrap group-columns group-statistics-layout">
+    <div v-if="selectedMember && !group.archivedAt && !me?.isFallen" class="adventure-wrap group-columns group-statistics-layout">
                 <section v-if="selectedMember && selectedMember.missedDaysLastWeek !== undefined" ref="memberPanel" class="member-participation" :data-risk="showTeamStatistics ? 'empty' : participationState.level">
                   <nav class="statistics-picker" aria-label="Estadísticas del grupo y sus miembros">
                     <button type="button" :class="{ selected: showTeamStatistics }" :aria-pressed="showTeamStatistics" @click="showTeamStatistics = true">
@@ -1046,23 +1056,24 @@ async function handleLeaveGroup() {
                     </button>
                   </nav>
                   <div v-if="showTeamStatistics" class="team-statistics-content">
-                    <header><small>ESTADÍSTICAS GENERALES</small><h3>{{ group.name }}</h3><p>Participación de los miembros actuales durante los últimos siete días cerrados.</p></header>
-                    <ul class="participation-chart team-activity-chart" aria-label="Cumplimiento diario del equipo">
-                      <li v-for="day in teamActivity" :key="day.date" :aria-label="day.date + ': ' + (day.percent === null ? 'Sin datos' : day.percent + '% de cumplimiento')">
+                    <ul class="participation-chart team-activity-chart" aria-label="Cumplimiento diario del equipo"
+                      :style="{ gridTemplateColumns: 'repeat(' + Math.max(1, teamActivity.length) + ', minmax(0, 1fr))' }">
+                      <li v-for="day in teamActivity" :key="day.date" :class="{ 'is-today': day.date === 'today' }"
+                        :aria-label="(day.date === 'today' ? 'Hoy' : day.date) + ': ' + (day.percent === null ? 'Sin datos' : day.percent + '% de cumplimiento')">
                         <strong>{{ day.percent === null ? '—' : day.percent + '%' }}</strong>
                         <span class="team-activity-track"><span :style="{ height: (day.percent ?? 0) + '%' }" /></span><small>{{ day.label }}</small>
                       </li>
                     </ul>
                     <dl>
                       <div><dt>Racha del equipo</dt><dd>{{ group.streak }} días</dd></div>
-                      <div><dt>Checks de hoy</dt><dd>{{ group.members.filter(member => member.checkedInToday).length }}/{{ group.members.length }}</dd></div>
+                      <div><dt>Checks de hoy</dt><dd>{{ todayCheckCount }}/{{ activeMembers.length }}</dd></div>
                       <div><dt>Revividas aprobadas</dt><dd>{{ teamReturns.revived }}</dd></div>
                       <div><dt>Regresos pendientes</dt><dd>{{ teamReturns.pending }}</dd></div>
                       <div><dt>Personajes caídos</dt><dd>{{ teamReturns.fallen }}</dd></div>
                       <div><dt>Miembros del grupo</dt><dd>{{ group.members.length }}</dd></div>
                     </dl>
                   </div>
-                  <template v-else>
+                  <template v-else-if="!selectedMember.isFallen">
                   <header class="participation-heading">
                     <CharacterIcon :character="characters.forMember(selectedMember.id, selectedMember.isCurrentUser, selectedMember.name)" :size="64" />
                     <div>
@@ -1080,11 +1091,12 @@ async function handleLeaveGroup() {
                   <div class="participation-risk">
                     <strong>{{ riskPercent === null ? 'Sin datos' : riskPercent + '%' }}</strong>
                     <span>Indicador de riesgo de abandono</span>
-                    <small>{{ selectedMember.missedDaysLastWeek }} de {{ participationChart.filter(day => day.completed !== null).length }} días esperados sin check esta semana.</small>
+                    <small>{{ selectedMember.missedDaysLastWeek }} de {{ riskActivity.filter(day => day.completed !== null).length }} días evaluados sin check en los últimos siete días.</small>
                   </div>
                   <div class="participation-history">
-                  <ul class="participation-chart" aria-label="Actividad de los últimos siete días cerrados">
-                    <li v-for="day in participationChart" :key="day.date" :aria-label="`${day.date}, ${day.status}`" :title="day.status">
+                  <ul class="participation-chart" aria-label="Actividad de los últimos siete días y hoy"
+                    :style="{ gridTemplateColumns: 'repeat(' + Math.max(1, participationChart.length) + ', minmax(0, 1fr))' }">
+                    <li v-for="day in participationChart" :key="day.date" :class="{ 'is-today': day.date === 'today' }" :aria-label="`${day.label}, ${day.status}`" :title="day.status">
                       <span class="participation-bar" :class="{ 'is-done': day.completed === true, 'is-missed': day.completed === false }" aria-hidden="true" />
                       <small>{{ day.label }}</small>
                     </li>
@@ -1092,7 +1104,7 @@ async function handleLeaveGroup() {
                   <div class="participation-legend"><span>✓ Con check</span><span>× Sin check</span><span>· Sin actividad esperada</span></div>
                   <dl>
                     <div><dt>Mejor racha</dt><dd>{{ selectedMember.bestGroupStreak }} días</dd></div>
-                    <div><dt>Días sin check en los últimos 7 días cerrados</dt><dd>{{ selectedMember.missedDaysLastWeek }}</dd></div>
+                    <div><dt>Días sin check en los últimos 7 días</dt><dd>{{ selectedMember.missedDaysLastWeek }}</dd></div>
                     <div><dt>Revividas aprobadas</dt><dd>{{ selectedMember.revivalCount ?? 0 }}</dd></div>
                     <div><dt>Regreso al equipo</dt><dd class="return-state">{{ selectedMember.hasPendingReturn ? 'Pendiente' : selectedMember.isFallen ? 'Sin solicitar' : 'En la aventura' }}</dd></div>
                   </dl>
@@ -5468,11 +5480,13 @@ async function handleLeaveGroup() {
 .statistics-avatar { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; background: #ffffff12; }
 .statistics-picker .selected .statistics-avatar { background: color-mix(in srgb, var(--theme-accent) 28%, #241b30); box-shadow: 0 0 0 3px var(--theme-accent); }
 .statistics-picker .selected { color: white; font-weight: 750; }
-.team-statistics-content { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px 24px; }
+.team-statistics-content { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 24px; }
 .team-statistics-content header p { color: #e0d4e5; line-height: 1.6; }
 .team-statistics-content header small { color: var(--theme-accent); }
 .group-columns > .member-participation .team-activity-chart li { grid-template-rows: auto 100px auto; }
 .team-activity-chart strong { font-size: .85rem; }
+.team-activity-chart .is-today strong, .team-activity-chart .is-today small { color: var(--theme-accent); font-weight: 800; }
+.group-columns > .member-participation .participation-chart li.is-today > small { color: var(--theme-accent); font-weight: 800; }
 .team-activity-track { display: flex; align-items: end; width: min(100%, 36px); height: 100px; border-radius: 8px; overflow: hidden; background: #ffffff12; }
 .team-activity-track > span { width: 100%; background: linear-gradient(var(--theme-accent), color-mix(in srgb, var(--theme-accent) 45%, #241b30)); border-radius: 8px; }
 .group-columns > .member-participation .team-statistics-content dl { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
