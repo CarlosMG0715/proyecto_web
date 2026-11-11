@@ -30,6 +30,7 @@ const checkImages = {
 const store = useGroupsStore()
 const modal = useCreateGroupModal()
 const { hours, minutes, dayKey } = useMidnightCountdown()
+const currentStreak = computed(() => store.currentStreak(dayKey.value))
 const name = computed(() => session.currentUser?.name ?? 'Valeria')
 const date = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
 const habits = computed(() => store.groups.flatMap(group => {
@@ -88,8 +89,8 @@ function categoryIcon(category?: string) {
         <div class="celebration-fire"><StreakFlame :size="130" /></div>
         <h2 id="celebration-title">¡Lo lograste!</h2>
         <p>Completaste tus aportes de hoy.</p>
-        <div class="celebration-streak"><strong>{{ store.bestStreak }}</strong><span>{{ store.bestStreak === 1 ? 'día de racha' : 'días de racha' }}</span></div>
-        <small>Tu mejor racha entre tus equipos</small>
+        <div class="celebration-streak"><strong>{{ currentStreak }}</strong><span>{{ currentStreak === 1 ? 'día de racha' : 'días de racha' }}</span></div>
+        <small>Tu racha personal actual</small>
         <form method="dialog"><button class="celebration-continue">¡A seguir así!</button></form>
       </dialog>
     </Teleport>
@@ -101,8 +102,8 @@ function categoryIcon(category?: string) {
           <div class="camp-streak">
             <StreakFlame :size="48" />
             <div>
-              <span class="camp-label">Tu mejor racha</span>
-              <h2>{{ store.bestStreak }} {{ store.bestStreak === 1 ? 'día' : 'días' }}</h2>
+              <span class="camp-label">Tu racha actual</span>
+              <h2>{{ currentStreak }} {{ currentStreak === 1 ? 'día' : 'días' }}</h2>
             </div>
           </div>
           <div class="camp-progress-label"><strong>{{ store.doneToday }} de {{ total }}</strong><span>aportes de hoy</span></div>
@@ -132,8 +133,8 @@ function categoryIcon(category?: string) {
       <section><div class="section-title"><h2>En comunidad</h2><small class="live"><i class="dot"></i>Actividad de tus equipos</small></div><div class="surface feed"><article v-for="a in activity" :key="a.id" class="feed-row"><span class="feed-icon" :class="a.kind"><AppIcon :name="a.kind === 'check-in' ? 'check' : a.kind === 'streak' ? 'flame' : a.kind === 'join' ? 'users' : 'bell'" :size="19" /></span><div><RouterLink :to="{ name: 'grupo', params: { groupId: a.groupId } }" class="feed-group">{{ store.groupById(a.groupId)?.name ?? 'Kordia' }}</RouterLink><p>{{ a.text }}</p><time :datetime="a.at">{{ time(a.at) }}</time></div><AppIcon name="activity" :size="17" class="feed-mark" /></article><p v-if="!activity.length" class="empty">Los avances de tus equipos aparecerán aquí.</p></div></section>
     </div>
     <aside class="right-column">
-      <section class="profile surface" :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color, '--profile-bg': `url('${getThemeBackground(characters.theme.id)}')` }"><div class="cover"><span class="cover-shape first"></span><span class="cover-shape second"></span><AppIcon name="target" :size="58" /></div><div class="profile-body"><div class="character"><CharacterIcon :character="characters.current" :size="96" /></div><h2>{{ name }}</h2><RouterLink :to="{ name: 'perfil' }">Ver mi perfil<AppIcon name="arrow-right" :size="14" /></RouterLink></div><div class="profile-stats"><div><strong>{{ store.groups.length }}</strong><span>equipos</span></div><div><strong>{{ store.doneToday }}</strong><span>checks hoy</span></div><div><strong>{{ store.bestStreak }}</strong><span>mejor racha</span></div></div></section>
-      <section class="streak surface"><div class="section-title"><h2>Racha personal</h2><StreakFlame :size="32" /></div><div class="streak-score"><strong>{{ store.bestStreak }}</strong><div><b>días</b><small>mejor racha</small></div><StreakFlame :size="90" /></div><div class="week"><div v-for="d in store.weekProgress" :key="d.key" :class="{ today: d.isToday, full: d.value === 100 }"><small>{{ d.label }}</small><span :title="`${d.value}% de cumplimiento del equipo`"><AppIcon v-if="d.value === 100" name="check" :size="15" /><i v-else></i></span></div></div></section>
+      <section class="profile surface" :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color, '--profile-bg': `url('${getThemeBackground(characters.theme.id)}')` }"><div class="cover"><span class="cover-shape first"></span><span class="cover-shape second"></span><AppIcon name="target" :size="58" /></div><div class="profile-body"><div class="character"><CharacterIcon :character="characters.current" :size="96" /></div><h2>{{ name }}</h2><RouterLink :to="{ name: 'perfil' }">Ver mi perfil<AppIcon name="arrow-right" :size="14" /></RouterLink></div><div class="profile-stats"><div><strong>{{ store.groups.length }}</strong><span>equipos</span></div><div><strong>{{ store.doneToday }}</strong><span>checks hoy</span></div><div><strong>{{ currentStreak }}</strong><span>racha actual</span></div></div></section>
+      <section class="streak surface"><div class="section-title"><h2>Racha personal</h2><StreakFlame :size="32" /></div><div class="streak-score"><strong>{{ currentStreak }}</strong><div><b>días</b><small>racha actual</small></div><StreakFlame :size="90" /></div><div class="week"><div v-for="d in store.weekProgress" :key="d.key" :class="{ today: d.isToday, full: d.value === 100 }"><small>{{ d.label }}</small><span :title="`${d.value}% de cumplimiento del equipo`"><AppIcon v-if="d.value === 100" name="check" :size="15" /><i v-else></i></span></div></div></section>
       <section class="weekly surface"><div class="section-title"><h2>El ritmo del equipo</h2><AppIcon name="activity" :size="18" /></div><div class="weekly-score"><strong>{{ average }}<span>%</span></strong><p>cumplimiento promedio<br />en los últimos 7 días</p></div><div class="chart" role="img" aria-label="Cumplimiento grupal de los últimos siete días"><div v-for="d in store.weekProgress" :key="d.key" :class="{ today: d.isToday }"><div class="bar"><span :style="{ height: `${Math.max(d.value, 3)}%` }" :title="`${d.label}: ${d.value}%`"></span></div><small>{{ d.label }}</small></div></div><div class="monthly"><span>Tu constancia · últimos 30 días</span><strong>{{ store.completionRate30 }}%</strong></div></section>
 
     </aside></div>

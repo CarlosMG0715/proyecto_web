@@ -136,6 +136,13 @@ export const useGroupsStore = defineStore('groups', () => {
           dailyReport: current?.dailyReport ?? null,
           fallenAt: current?.fallenAt ?? null,
           isFallen: current?.isFallen ?? false,
+          dropoutRiskMissedDays: current?.dropoutRiskMissedDays ?? 0,
+          missedDaysLastWeek: current?.missedDaysLastWeek,
+          recentActivity: current?.recentActivity,
+          bestGroupStreak: current?.bestGroupStreak,
+          returnRequests: current?.returnRequests,
+          revivalCount: current?.revivalCount,
+          hasPendingReturn: current?.hasPendingReturn,
           isCurrentUser: membership.user.id === session.currentUser?.id,
           isOnline: current?.isOnline ?? old?.isOnline ?? false,
           characterId: membership.user.characterId,
@@ -318,6 +325,19 @@ export const useGroupsStore = defineStore('groups', () => {
 
   function myMembership(group: Group): GroupMember | undefined {
     return group.members.find((m) => matchesCurrentUser(m))
+  }
+
+  function currentStreak(today: string): number {
+    const dates = new Set(checkInHistory.value.map(date => date.slice(0, 10)))
+    const day = new Date(`${today}T00:00:00Z`)
+    if (!dates.has(today)) day.setUTCDate(day.getUTCDate() - 1)
+
+    let streak = 0
+    while (dates.has(day.toISOString().slice(0, 10))) {
+      streak++
+      day.setUTCDate(day.getUTCDate() - 1)
+    }
+    return streak
   }
 
   const bestStreak = computed<number>(() => {
@@ -643,6 +663,7 @@ export const useGroupsStore = defineStore('groups', () => {
     groupByInviteCode,
     isInviteCodeTaken,
     myMembership,
+    currentStreak,
     bestStreak,
     pendingToday,
     doneToday,

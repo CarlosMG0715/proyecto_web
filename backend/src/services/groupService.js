@@ -22,7 +22,8 @@ const newInviteCode = (groupName) => {
 
 // Convierte la fila de Prisma en el contrato `Group` del frontend (types/group.ts)
 function toGroupDto(group, currentUserId) {
-  const today = localDateKey(group.timeZone || 'America/Bogota')
+  const timeZone = group.timeZone || 'America/Bogota'
+  const today = localDateKey(timeZone)
   const activeHabits = (group.habits || []).filter((habit) => habit.isActive)
   const habits = activeHabits.map((habit) => ({
     id: habit.id,
@@ -35,7 +36,17 @@ function toGroupDto(group, currentUserId) {
       done: true, note: check.note || '',
     }])),
   }))
-  const dateKeys = recentDateKeys(group.timeZone || 'America/Bogota', 30)
+  const dateKeys = recentDateKeys(timeZone, 30)
+  const firstActiveHabitDay = activeHabits.map(habit => localDateKey(timeZone, habit.createdAt)).sort()[0]
+  const archivedDay = group.archivedAt ? localDateKey(timeZone, group.archivedAt) : null
+  const returnsByMember = new Map()
+  for (const request of group.joinRequests || []) {
+    const stats = returnsByMember.get(request.requesterId) ?? { count: 0, revived: 0, pending: false }
+    stats.count++
+    if (request.status === 'ACCEPTED') stats.revived++
+    stats.pending ||= request.status === 'PENDING'
+    returnsByMember.set(request.requesterId, stats)
+  }
   const checksByMember = new Map()
   for (const check of group.dailyChecks || []) {
     if (!checksByMember.has(check.userId)) checksByMember.set(check.userId, new Map())
@@ -44,10 +55,19 @@ function toGroupDto(group, currentUserId) {
   const didCheck = (userId, date) => checksByMember.get(userId)?.has(date) ?? false
   const members = group.memberships.map((m) => {
     const todayCheck = checksByMember.get(m.user.id)?.get(today)
-    const eligibleDates = dateKeys.filter((date) => date >= localDateKey(group.timeZone || 'America/Bogota', m.joinedAt))
+    const joinedDay = localDateKey(timeZone, m.joinedAt)
+    const eligibleDates = dateKeys.filter((date) => date >= joinedDay)
     const daysTotal = eligibleDates.length
     const daysCompleted = eligibleDates.filter((date) => didCheck(m.user.id, date)).length
     const memberStreak = consecutiveDays(today, (date) => didCheck(m.user.id, date))
+    const recentActivity = dateKeys.slice(1, 8).reverse().map(date => ({
+      date,
+      completed: firstActiveHabitDay && date >= joinedDay && date >= firstActiveHabitDay && (!archivedDay || date < archivedDay)
+        ? didCheck(m.user.id, date)
+        : null,
+    }))
+    const missedDays = recentActivity.filter(day => day.completed === false).length
+    const returns = returnsByMember.get(m.user.id)
     return {
       id: m.user.id,
       name: m.user.name,
@@ -57,6 +77,13 @@ function toGroupDto(group, currentUserId) {
       role: m.role,
       isFallen: Boolean(m.fallenAt),
       fallenAt: m.fallenAt,
+      missedDaysLastWeek: missedDays,
+      recentActivity,
+      bestGroupStreak: longestStreak(checksByMember.get(m.user.id)),
+      returnRequests: returns?.count ?? 0,
+      revivalCount: returns?.revived ?? 0,
+      hasPendingReturn: returns?.pending ?? false,
+      dropoutRiskMissedDays: !group.archivedAt && missedDays >= 3 && !returns?.pending ? missedDays : 0,
       habit: habits.map((h) => h.name).join(', '),
       daysCompleted,
       daysTotal,
@@ -135,10 +162,24 @@ function consecutiveDays(today, didCheck) {
   return streak
 }
 
+function longestStreak(checks) {
+  let longest = 0
+  let streak = 0
+  let previous
+  for (const date of [...(checks?.keys() ?? [])].sort()) {
+    const day = Date.parse(date)
+    streak = day - previous === 86_400_000 ? streak + 1 : 1
+    longest = Math.max(longest, streak)
+    previous = day
+  }
+  return longest
+}
+
 const groupInclude = () => ({
   memberships: { include: { user: { select: { id: true, name: true, characterId: true, themeId: true } } }, orderBy: { joinedAt: 'asc' } },
   habits: { include: { participants: { select: { userId: true } } } },
   dailyChecks: { select: { userId: true, localDate: true, completedHabitIds: true, note: true } },
+  joinRequests: { where: { isReturn: true }, select: { requesterId: true, status: true } },
   closures: { where: { penaltyApplied: true }, orderBy: { localDate: 'desc' }, take: 1 },
   messages: { orderBy: { createdAt: 'desc' }, take: 100 },
 })
@@ -272,10 +313,15 @@ class GroupService {
       })
       if (!restored.count) throw httpError('Esa persona no está caída', 409)
       await tx.penalty.updateMany({ where: { groupId, userId: memberId, status: 'PENDING' }, data: { status: 'RESOLVED' } })
-      await tx.groupJoinRequest.updateMany({
+      const accepted = await tx.groupJoinRequest.updateMany({
         where: { groupId, requesterId: memberId, isReturn: true, status: 'PENDING' },
         data: { status: 'ACCEPTED', decidedById: userId, decidedAt: new Date() },
       })
+      if (!accepted.count) {
+        await tx.groupJoinRequest.create({
+          data: { groupId, requesterId: memberId, isReturn: true, status: 'ACCEPTED', decidedById: userId, decidedAt: new Date() },
+        })
+      }
     })
     return this.getForMember({ userId, groupId })
   }
