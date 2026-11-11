@@ -80,6 +80,17 @@ const participationChart = computed(() => (selectedMember.value?.recentActivity 
   label: new Intl.DateTimeFormat('es-CO', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day.date)),
   status: day.completed === null ? 'Sin actividad esperada' : day.completed ? 'Check registrado' : 'Sin check',
 })))
+const memberActivity = computed(() => {
+  const current = group.value
+  const member = selectedMember.value
+  if (!current || !member || current.archivedAt || !current.habits?.length) return participationChart.value
+  return [...participationChart.value, {
+    date: 'today',
+    label: 'Hoy',
+    completed: member.checkedInToday,
+    status: member.checkedInToday ? 'Check registrado hoy' : 'Aún sin check hoy',
+  }]
+})
 const riskPercent = computed(() => {
   const expected = participationChart.value.filter(day => day.completed !== null)
   return expected.length ? Math.round(100 * expected.filter(day => !day.completed).length / expected.length) : null
@@ -1096,8 +1107,9 @@ async function handleLeaveGroup() {
                     <small>{{ selectedMember.missedDaysLastWeek }} de {{ participationChart.filter(day => day.completed !== null).length }} días esperados sin check esta semana.</small>
                   </div>
                   <div class="participation-history">
-                  <ul class="participation-chart" aria-label="Actividad de los últimos siete días cerrados">
-                    <li v-for="day in participationChart" :key="day.date" :aria-label="`${day.date}, ${day.status}`" :title="day.status">
+                  <ul class="participation-chart" aria-label="Actividad de los últimos siete días cerrados y hoy"
+                    :style="{ gridTemplateColumns: 'repeat(' + Math.max(1, memberActivity.length) + ', minmax(0, 1fr))' }">
+                    <li v-for="day in memberActivity" :key="day.date" :class="{ 'is-today': day.date === 'today' }" :aria-label="`${day.date === 'today' ? 'Hoy' : day.date}, ${day.status}`" :title="day.status">
                       <span class="participation-bar" :class="{ 'is-done': day.completed === true, 'is-missed': day.completed === false }" aria-hidden="true" />
                       <small>{{ day.label }}</small>
                     </li>
