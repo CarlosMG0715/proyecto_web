@@ -20,7 +20,7 @@ const pendingVerificationEmail = ref('')
 const resending = ref(false)
 
 const isRegister = computed(() => mode.value === 'register')
-const canResend = computed(() => !isRegister.value && !!email.value.trim() && !!password.value)
+const canResend = computed(() => !isRegister.value && !!pendingVerificationEmail.value && pendingVerificationEmail.value === email.value.trim() && !!password.value)
 
 watch(email, () => { pendingVerificationEmail.value = '' })
 
@@ -75,9 +75,9 @@ async function onSubmit(): Promise<void> {
     const message = session.error ?? (error instanceof Error ? error.message : '')
     if (isRegister.value && /correo electrónico ya está registrado/i.test(message)) {
       mode.value = 'login'
-      pendingVerificationEmail.value = credentials.email
+      pendingVerificationEmail.value = ''
       session.setError(null)
-      success.value = 'Esta cuenta ya existe. Ingresa tu contraseña y pulsa “Reenviar verificación” para recibir otro enlace.'
+      success.value = 'Esta cuenta ya está registrada. Ingresa tu contraseña para iniciar sesión.'
     }
   }
 }

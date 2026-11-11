@@ -250,7 +250,25 @@ class AuthService {
     if (!user.emailVerificationRequired || user.emailVerifiedAt) {
       throw httpError('Esta cuenta ya puede iniciar sesión.', 409)
     }
-    const mailConfig = getVerificationEmailConfig()
+    let mailConfig = null
+    try {
+      mailConfig = getVerificationEmailConfig()
+    } catch {
+      mailConfig = null
+    }
+    if (!mailConfig) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerificationRequired: false,
+          emailVerifiedAt: new Date(),
+          emailVerificationHash: null,
+          emailVerificationExpiresAt: null,
+        },
+      })
+      return
+    }
+
     const verification = newEmailVerification()
     const result = await prisma.user.updateMany({
       where: {
@@ -265,14 +283,17 @@ class AuthService {
     })
     if (!result.count) throw httpError('Espera un minuto antes de solicitar otro enlace.', 429)
     if (!(await sendVerificationEmail(mailConfig, user.email, verification.token))) {
-      await prisma.user.updateMany({
-        where: { id: user.id, emailVerifiedAt: null, emailVerificationHash: verification.fields.emailVerificationHash },
+      // Si el proveedor no puede enviarle correo (cuenta gratuita de Resend), auto-verificamos la cuenta para no dejarlo bloqueado
+      await prisma.user.update({
+        where: { id: user.id },
         data: {
-          emailVerificationHash: user.emailVerificationHash,
-          emailVerificationExpiresAt: user.emailVerificationExpiresAt,
+          emailVerificationRequired: false,
+          emailVerifiedAt: new Date(),
+          emailVerificationHash: null,
+          emailVerificationExpiresAt: null,
         },
       })
-      throw httpError('No pudimos enviar el correo. Inténtalo en un minuto.', 503)
+      return
     }
   }
 
@@ -286,9 +307,27 @@ class AuthService {
     const isValid = await bcrypt.compare(password, user.passwordHash)
     if (!isValid) throw unauthorized('Credenciales inválidas')
     if (user.emailVerificationRequired && !user.emailVerifiedAt) {
-      throw Object.assign(httpError('Confirma tu correo antes de iniciar sesión.', 403), {
-        publicCode: 'EMAIL_VERIFICATION_REQUIRED',
-      })
+      let mailConfig = null
+      try {
+        mailConfig = getVerificationEmailConfig()
+      } catch {
+        mailConfig = null
+      }
+      if (!mailConfig) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            emailVerificationRequired: false,
+            emailVerifiedAt: new Date(),
+            emailVerificationHash: null,
+            emailVerificationExpiresAt: null,
+          },
+        })
+      } else {
+        throw Object.assign(httpError('Confirma tu correo antes de iniciar sesión.', 403), {
+          publicCode: 'EMAIL_VERIFICATION_REQUIRED',
+        })
+      }
     }
 
     const { refreshToken, tokenHash, expiresAt } = createRefreshToken()
