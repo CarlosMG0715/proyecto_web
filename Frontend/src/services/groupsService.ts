@@ -1,6 +1,6 @@
 // capa http de grupos: cada funcion conoce una url y el tipo de respuesta esperado.
 import { api } from '@/services/api'
-import type { CreateGroupPayload, Group, GroupHabit, ChatMessage } from '@/types/group'
+import type { CreateGroupPayload, Group, GroupHabit, ChatMessage, DailyCheckReport } from '@/types/group'
 
 export async function fetchMyGroups(): Promise<Group[]> {
   // trae los grupos donde la persona tiene membresia.
@@ -52,13 +52,13 @@ export async function leaveGroupRequest(groupId: string): Promise<{ groupId: str
   return data
 }
 
-export async function createHabitRequest(groupId: string, name: string, icon: string, targetDays: 30 | 90 | 120): Promise<GroupHabit> {
+export async function createHabitRequest(groupId: string, name: string, icon: string, description: string): Promise<GroupHabit> {
   // solicita crear un habito; el backend verifica que quien lo pide sea admin.
-  const { data } = await api.post<{ habit: GroupHabit }>(`/groups/${groupId}/habits`, { name, icon, targetDays })
+  const { data } = await api.post<{ habit: GroupHabit }>(`/groups/${groupId}/habits`, { name, icon, description })
   return data.habit
 }
 
-export async function updateHabitRequest(groupId: string, habitId: string, updates: { name: string; icon: string; targetDays: 30 | 90 | 120 }): Promise<GroupHabit> {
+export async function updateHabitRequest(groupId: string, habitId: string, updates: { name: string; icon: string; description: string }): Promise<GroupHabit> {
   // envia los cambios del habito; el servidor limita esta operacion a administradores.
   const { data } = await api.patch<{ habit: GroupHabit }>(`/groups/${groupId}/habits/${habitId}`, updates)
   return data.habit
@@ -72,6 +72,17 @@ export async function toggleCheckInRequest(groupId: string, habitId: string, not
   // alterna el check-in de hoy y devuelve el estado que quedo guardado.
   const { data } = await api.put<{ done: boolean; note: string }>(`/groups/${groupId}/habits/${habitId}/check-in`, { note })
   return data
+}
+
+export async function setDailyCheckRequest(groupId: string, done: boolean, habitIds: string[], note: string) {
+  const { data } = await api.put<{ done: boolean; report: DailyCheckReport | null }>(
+    `/groups/${groupId}/daily-check`, { done, habitIds, note },
+  )
+  return data
+}
+
+export async function joinHabitRequest(groupId: string, habitId: string): Promise<void> {
+  await api.put(`/groups/${groupId}/habits/${habitId}/participation`)
 }
 
 export async function saveCheckInNoteRequest(groupId: string, habitId: string, note: string): Promise<void> {

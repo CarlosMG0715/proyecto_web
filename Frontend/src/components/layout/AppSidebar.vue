@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Menú lateral: marca, navegación principal, lista de grupos, botón "Crear grupo"
- * y la tarjeta de tu cuenta con el botón de cerrar sesión.
+ * Menú lateral: marca, navegación principal, lista de grupos con sus banners temáticos,
+ * botón "Crear grupo" y la tarjeta de tu cuenta con el botón de cerrar sesión.
  */
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -9,6 +9,7 @@ import AppIcon, { type IconName } from '@/components/ui/AppIcon.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import { useCharacterStore } from '@/stores/characters'
 import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
+import { getGroupBannerTheme } from '@/constants/groupBanners'
 import { logout } from '@/services/authService'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
@@ -23,8 +24,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { name: 'inicio', label: 'Inicio', icon: 'home' },
-  { name: 'calendario', label: 'Calendario', icon: 'calendar' },
   { name: 'perfil', label: 'Perfil', icon: 'user' },
+  { name: 'calendario', label: 'Calendario', icon: 'calendar' },
   { name: 'configuracion', label: 'Configuración', icon: 'settings' },
 ]
 
@@ -39,18 +40,18 @@ const userName = computed(() => session.currentUser?.name ?? 'Usuario')
 const userEmail = computed(() => session.currentUser?.email ?? '')
 const activeGroupId = computed(() => (route.name === 'grupo' ? String(route.params.groupId) : null))
 
-function groupInitials(name: string): string {
-  return name
-    .split(' ')
-    .filter((p) => p.length > 0)
-    .slice(0, 2)
-    .map((p) => p.charAt(0).toUpperCase())
-    .join('')
-}
-
 function myPending(groupId: string): boolean {
   const group = groupsStore.groupById(groupId)
   return Boolean(group?.members.some((m) => m.isCurrentUser && !m.checkedInToday))
+}
+
+function bannerStyle(color?: string): Record<string, string> {
+  const theme = getGroupBannerTheme(color)
+  return {
+    '--group-banner': `url("${theme.bannerUrl}")`,
+    '--group-banner-filter': theme.filter ?? 'none',
+    '--group-accent': theme.color,
+  }
 }
 
 async function handleLogout(): Promise<void> {
@@ -82,7 +83,7 @@ async function handleLogout(): Promise<void> {
           <AppIcon :name="item.icon" :size="17" />
           <span>{{ item.label }}</span>
         </RouterLink>
-        <JoinRequestInbox v-if="item.name === 'perfil'" />
+        <JoinRequestInbox v-if="item.name === 'calendario'" />
       </template>
     </nav>
 
@@ -99,18 +100,26 @@ async function handleLogout(): Promise<void> {
           :key="group.id"
           :to="{ name: 'grupo', params: { groupId: group.id } }"
           class="group-link"
-          :class="{ active: activeGroupId === group.id }"
+          :class="{ active: activeGroupId === group.id, 'group-archived': group.archivedAt }"
+          :style="bannerStyle(group.color)"
         >
-          <span class="group-badge" :style="{ background: group.color }">
-            {{ groupInitials(group.name) }}
-          </span>
-          <span class="group-info">
-            <span class="group-name">{{ group.name }}</span>
-            <span class="group-meta">{{ group.members.length }} miembros</span>
-          </span>
-          <span v-if="myPending(group.id)" class="pending-dot" title="Tienes el check-in pendiente"></span>
-          <span v-else class="group-streak">
-            <AppIcon name="flame" :size="13" />{{ group.streak }}
+          <div class="group-banner-card">
+            <span class="group-banner-art" aria-hidden="true"></span>
+            <span class="group-banner-shade" aria-hidden="true"></span>
+            <span class="group-info">
+              <span class="group-name">{{ group.name }}</span>
+              <span class="group-meta">
+                <AppIcon name="users" :size="11" />
+                {{ group.archivedAt ? 'Aventura cerrada' : `${group.members.length} ${group.members.length === 1 ? 'miembro' : 'miembros'}` }}
+              </span>
+            </span>
+          </div>
+
+          <span v-if="!group.archivedAt" class="group-side-stat">
+            <span v-if="myPending(group.id)" class="pending-dot" title="Tienes el check-in pendiente"></span>
+            <span class="group-streak">
+              <AppIcon name="flame" :size="13" />{{ group.streak }}
+            </span>
           </span>
         </RouterLink>
       </div>
@@ -243,89 +252,144 @@ async function handleLogout(): Promise<void> {
   color: #c4b5fd;
 }
 
-/* Grupos */
+/* Grupos con Banner */
 .groups {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.4rem;
 }
 
 .group-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.55rem;
 }
 
 .group-link {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-sm);
-  transition: background 0.15s;
+  gap: 0.5rem;
+  padding: 3px 0.55rem 3px 3px;
+  border-radius: 15px;
+  background: rgba(20, 15, 31, 0.92);
+  border: 0;
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
+.group-link.group-archived { filter: grayscale(1); }
+
 .group-link:hover {
-  background: var(--surface);
+  transform: translateY(-1px);
+  background: rgba(28, 21, 44, 0.96);
+  box-shadow: 0 8px 18px -6px rgba(0, 0, 0, 0.55);
 }
 
 .group-link.active {
-  background: var(--surface-2);
-  box-shadow: inset 2px 0 0 var(--primary);
+  background: rgba(34, 25, 52, 0.98);
+  box-shadow: 0 10px 22px -8px rgba(0, 0, 0, 0.75);
 }
 
-.group-badge {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: #fff;
-  flex-shrink: 0;
+.group-banner-card {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 58px;
+  padding: 0.6rem 0.8rem;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  isolation: isolate;
+}
+
+.group-banner-art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--group-banner);
+  background-size: cover;
+  background-position: center;
+  filter: var(--group-banner-filter, none);
+  transition: transform 0.28s ease;
+}
+
+.group-link:hover .group-banner-art {
+  transform: scale(1.05);
+}
+
+.group-banner-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    90deg,
+    rgba(16, 11, 26, 0.78) 0%,
+    rgba(16, 11, 26, 0.52) 58%,
+    rgba(16, 11, 26, 0.18) 100%
+  );
 }
 
 .group-info {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
   flex: 1;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .group-name {
-  font-size: 0.86rem;
-  font-weight: 600;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .group-meta {
-  font-size: 0.72rem;
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(15, 11, 24, 0.58);
+  backdrop-filter: blur(4px);
+  font-size: 0.69rem;
+  font-weight: 600;
+  color: rgba(244, 238, 255, 0.92);
+}
+
+.group-side-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 2px;
+  flex-shrink: 0;
 }
 
 .group-streak {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 800;
   color: var(--flame);
 }
 
 .pending-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--warning);
   box-shadow: 0 0 0 3px var(--warning-soft);
 }
 
 .create-btn {
-  margin-top: 0.6rem;
+  margin-top: 0.45rem;
   display: flex;
   align-items: center;
   justify-content: center;

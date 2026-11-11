@@ -27,6 +27,11 @@ export const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      path: '/verificar-correo',
+      name: 'verify-email',
+      component: () => import('@/views/VerifyEmailView.vue'),
+    },
+    {
       path: '/groups',
       redirect: '/app/inicio',
     },

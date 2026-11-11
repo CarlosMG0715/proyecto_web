@@ -3,10 +3,12 @@ const cors = require('cors')
 const express = require('express')
 const fs = require('node:fs')
 const path = require('node:path')
+const { timingSafeEqual } = require('node:crypto')
 const { allowedOrigins } = require('./config')
 const { correlationId } = require('./middlewares/correlation')
 const { notFound, errorHandler } = require('./middlewares/errorHandler')
 const apiRoutes = require('./routes')
+const groupService = require('./services/groupService')
 
 const app = express()
 
@@ -22,6 +24,22 @@ app.get('/api/health', (_req, res) => {
     service: 'habitos-api',
     timestamp: new Date().toISOString(),
   })
+})
+
+let dailyClosureRun
+app.post('/api/internal/close-group-day', async (req, res) => {
+  const secret = process.env.DAILY_CLOSURE_SECRET
+  if (!secret) return res.sendStatus(404)
+
+  const expected = Buffer.from(`Bearer ${secret}`)
+  const received = Buffer.from(req.get('authorization') || '')
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+    return res.sendStatus(401)
+  }
+
+  dailyClosureRun ??= groupService.closeDailyGroups().finally(() => { dailyClosureRun = undefined })
+  const processed = await dailyClosureRun
+  res.json({ processed })
 })
 
 app.use('/api', apiRoutes)

@@ -1,5 +1,11 @@
 export type MemberRole = 'ADMIN' | 'MIEMBRO'
 
+export interface DailyCheckReport {
+  habitIds: string[]
+  note: string
+  energy: number
+}
+
 export interface GroupMember {
   id: string
   name: string
@@ -10,6 +16,9 @@ export interface GroupMember {
   daysTotal: number
   streak: number
   checkedInToday: boolean
+  dailyReport?: DailyCheckReport | null
+  isFallen?: boolean
+  fallenAt?: string | null
   isCurrentUser: boolean
   isOnline: boolean
   characterId?: string
@@ -24,6 +33,7 @@ export interface ChatMessage {
   authorId: string | null
   text: string
   sentAt: string
+  habitId?: string
 }
 
 export type ActivityKind = 'check-in' | 'join' | 'streak' | 'alert'
@@ -37,6 +47,7 @@ export interface ActivityItem {
 }
 
 export interface GroupHabit {
+  joined?: boolean
   id: string
   name: string
   icon?: string
@@ -59,6 +70,8 @@ export interface Group {
   messages: ChatMessage[]
   habits?: GroupHabit[]
   timeZone?: string
+  targetDays?: 30 | 90 | 120 | null
+  archivedAt?: string | null
 }
 
 export interface CreateGroupPayload {
