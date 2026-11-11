@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const { prisma } = require('../prisma')
 const { jwtSecret, accessTokenExpiration, refreshTokenDays } = require('../config')
+const { getVerificationEmailConfig, sendVerificationEmail } = require('./verificationEmail')
 
 const refreshPepper = process.env.REFRESH_TOKEN_PEPPER
 if (!refreshPepper) {
@@ -17,6 +18,20 @@ function httpError(message, status) {
 }
 
 const unauthorized = (message = 'Sesión inválida o expirada') => httpError(message, 401)
+const verificationHash = (token) => crypto.createHash('sha256').update(token).digest('hex')
+
+function newEmailVerification() {
+  const token = crypto.randomBytes(32).toString('hex')
+  const now = new Date()
+  return {
+    token,
+    fields: {
+      emailVerificationHash: verificationHash(token),
+      emailVerificationExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      emailVerificationSentAt: now,
+    },
+  }
+}
 
 function hashToken(token) {
   // guarda una huella del refresh en la base, no el secreto del navegador.
@@ -59,6 +74,7 @@ class AuthService {
   async register({ name, email, password }) {
     // normaliza el correo y crea una contraseña cifrada con bcrypt.
     const normalizedEmail = email.toLowerCase().trim()
+    const mailConfig = getVerificationEmailConfig()
 
     const existing = await prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -69,11 +85,13 @@ class AuthService {
 
     const passwordHash = await bcrypt.hash(password, 12)
 
-    return prisma.user.create({
+    const verification = newEmailVerification()
+    const user = await prisma.user.create({
       data: {
         name: name.trim(),
         email: normalizedEmail,
         passwordHash,
+        ...verification.fields,
       },
       select: {
         id: true,
@@ -83,7 +101,141 @@ class AuthService {
         themeId: true,
         createdAt: true,
       },
+    }).catch((error) => {
+      if (error.code === 'P2002') throw httpError('El correo electrónico ya está registrado', 400)
+      throw error
     })
+    const verificationSent = await sendVerificationEmail(mailConfig, user.email, verification.token)
+    return { user, verificationSent }
+  }
+
+  async deleteAccount(userId, password) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } })
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw httpError('La contraseña no es correcta.', 403)
+    }
+
+    try {
+      await prisma.$transaction(async tx => {
+        const groups = await tx.group.findMany({
+          where: { OR: [{ createdById: userId }, { memberships: { some: { userId } } }, { habits: { some: { createdById: userId } } }] },
+          select: {
+            id: true, createdById: true,
+            memberships: { orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }] },
+          },
+        })
+
+        for (const group of groups) {
+          const departing = group.memberships.find(member => member.userId === userId)
+          const members = group.memberships.filter(member => member.userId !== userId)
+          if (!members.length) {
+            await tx.group.delete({ where: { id: group.id } })
+            continue
+          }
+          const admin = members.find(member => member.role === 'ADMIN' && !member.fallenAt)
+          const successor = admin ?? members.find(member => !member.fallenAt)
+            ?? members.find(member => member.role === 'ADMIN') ?? members[0]
+          if (successor.role !== 'ADMIN' && (departing?.role === 'ADMIN' || !members.some(member => member.role === 'ADMIN'))) {
+            await tx.groupMembership.update({ where: { id: successor.id }, data: { role: 'ADMIN' } })
+          }
+          if (group.createdById === userId) {
+            await tx.group.update({ where: { id: group.id }, data: { createdById: successor.userId } })
+          }
+          await tx.habit.updateMany({
+            where: { groupId: group.id, createdById: userId }, data: { createdById: successor.userId },
+          })
+        }
+
+        await tx.message.deleteMany({ where: { userId } })
+        const deleted = await tx.user.deleteMany({ where: { id: userId, passwordHash: user.passwordHash } })
+        if (!deleted.count) throw httpError('La cuenta cambió. Confirma tu contraseña actual e inténtalo de nuevo.', 409)
+      }, { isolationLevel: 'Serializable' })
+    } catch (error) {
+      if (error.code === 'P2034') throw httpError('Hubo un cambio simultáneo. Intenta borrar tu cuenta otra vez.', 409)
+      throw error
+    }
+  }
+
+  async updateAccount({ userId, familyId }, input) {
+    if (input.action === 'name') {
+      return { user: await prisma.user.update({
+        where: { id: userId }, data: { name: input.name },
+        select: { id: true, name: true, email: true, characterId: true, themeId: true },
+      }) }
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user || !(await bcrypt.compare(input.password, user.passwordHash))) {
+      throw httpError('La contraseña actual no es correcta.', 403)
+    }
+    if (input.action === 'password') {
+      const passwordHash = await bcrypt.hash(input.newPassword, 12)
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.updateMany({
+          where: { id: userId, passwordHash: user.passwordHash },
+          data: { passwordHash },
+        })
+        if (!updated.count) throw httpError('La cuenta cambió. Inténtalo de nuevo.', 409)
+        await tx.session.updateMany({
+          where: { userId, familyId: { not: familyId }, isRevoked: false },
+          data: { isRevoked: true, revokedAt: new Date() },
+        })
+      })
+      return {}
+    }
+
+    throw httpError('Acción de cuenta no válida.', 400)
+  }
+
+  async verifyEmail(token) {
+    const now = new Date()
+    const result = await prisma.user.updateMany({
+      where: {
+        emailVerificationRequired: true,
+        emailVerifiedAt: null,
+        emailVerificationHash: verificationHash(token),
+        emailVerificationExpiresAt: { gt: now },
+      },
+      data: {
+        emailVerifiedAt: now,
+        emailVerificationHash: null,
+        emailVerificationExpiresAt: null,
+      },
+    })
+    if (!result.count) throw httpError('El enlace venció o ya se usó. Intenta iniciar sesión o solicita otro enlace.', 400)
+  }
+
+  async resendVerification({ email, password }) {
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw unauthorized('Credenciales inválidas')
+    }
+    if (!user.emailVerificationRequired || user.emailVerifiedAt) {
+      throw httpError('Esta cuenta ya puede iniciar sesión.', 409)
+    }
+    const mailConfig = getVerificationEmailConfig()
+    const verification = newEmailVerification()
+    const result = await prisma.user.updateMany({
+      where: {
+        id: user.id,
+        emailVerifiedAt: null,
+        OR: [
+          { emailVerificationSentAt: null },
+          { emailVerificationSentAt: { lte: new Date(Date.now() - 60_000) } },
+        ],
+      },
+      data: verification.fields,
+    })
+    if (!result.count) throw httpError('Espera un minuto antes de solicitar otro enlace.', 429)
+    if (!(await sendVerificationEmail(mailConfig, user.email, verification.token))) {
+      await prisma.user.updateMany({
+        where: { id: user.id, emailVerifiedAt: null, emailVerificationHash: verification.fields.emailVerificationHash },
+        data: {
+          emailVerificationHash: user.emailVerificationHash,
+          emailVerificationExpiresAt: user.emailVerificationExpiresAt,
+        },
+      })
+      throw httpError('No pudimos enviar el correo. Inténtalo en un minuto.', 503)
+    }
   }
 
   async login({ email, password, userAgent, ipAddress }) {
@@ -95,6 +247,11 @@ class AuthService {
 
     const isValid = await bcrypt.compare(password, user.passwordHash)
     if (!isValid) throw unauthorized('Credenciales inválidas')
+    if (user.emailVerificationRequired && !user.emailVerifiedAt) {
+      throw Object.assign(httpError('Confirma tu correo antes de iniciar sesión.', 403), {
+        publicCode: 'EMAIL_VERIFICATION_REQUIRED',
+      })
+    }
 
     const { refreshToken, tokenHash, expiresAt } = createRefreshToken()
 

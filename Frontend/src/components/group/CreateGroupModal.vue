@@ -5,8 +5,9 @@ import AppIcon from '@/components/ui/AppIcon.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
 import { useCharacterStore } from '@/stores/characters'
-import { GROUP_COLORS, useGroupsStore } from '@/stores/groups'
+import { useGroupsStore } from '@/stores/groups'
 import { GROUP_CATEGORIES } from '@/constants/groupCategories'
+import { GROUP_BANNER_THEMES, JOIN_GROUP_BANNER_URL, getGroupBannerTheme } from '@/constants/groupBanners'
 import { useSessionStore } from '@/stores/session'
 import { groupService } from '@/services/groupService'
 import type { Group } from '@/types/group'
@@ -15,12 +16,19 @@ const router = useRouter()
 const session = useSessionStore()
 const characters = useCharacterStore()
 const groupsStore = useGroupsStore()
-const { isOpen, activeTab, close } = useCreateGroupModal()
+const { isOpen, activeTab, close, replaceArchivedGroupId } = useCreateGroupModal()
 
 const mode = ref<'create' | 'join'>('create')
 const name = ref('')
+const description = ref('')
+const goal = ref<30 | 90 | 120>(30)
+const habitStep = ref(false)
+const habitName = ref('')
+const habitDescription = ref('')
+const habitIcons = ['target', 'flame', 'globe', 'heart', 'activity', 'moon', 'code', 'monitor', 'shield', 'trophy', 'flag', 'message'] as const
+const habitIcon = ref<(typeof habitIcons)[number]>('target')
 const category = ref('Programación')
-const selectedColor = ref(GROUP_COLORS[0] ?? '#8b5cf6')
+const selectedColor = ref(GROUP_BANNER_THEMES[0]!.color)
 const codeSuffix = ref('')
 const copied = ref(false)
 const error = ref<string | null>(null)
@@ -45,6 +53,9 @@ watch(joinCode, (value) => {
 const currentCategory = computed(
   () => GROUP_CATEGORIES.find((c) => c.label === category.value) ?? GROUP_CATEGORIES[0]!,
 )
+
+const selectedBannerTheme = computed(() => getGroupBannerTheme(selectedColor.value))
+const createdBannerTheme = computed(() => getGroupBannerTheme(createdGroup.value?.color))
 
 function normalizeInvitePrefix(groupName: string): string {
   const clean = groupName
@@ -101,10 +112,16 @@ watch(isOpen, (open) => {
   if (open) {
     mode.value = activeTab.value
     name.value = ''
+    description.value = ''
+    goal.value = 30
+    habitStep.value = false
+    habitName.value = ''
+    habitDescription.value = ''
+    habitIcon.value = 'target'
     codeSuffix.value = generateUniqueSuffix('KORD')
     category.value = 'Programación'
     selectedColor.value =
-      GROUP_COLORS[groupsStore.groups.length % GROUP_COLORS.length] ?? '#8b5cf6'
+      GROUP_BANNER_THEMES[groupsStore.groups.length % GROUP_BANNER_THEMES.length]?.color ?? '#ec4899'
     copied.value = false
     error.value = null
     joinSuccess.value = ''
@@ -127,20 +144,35 @@ async function handleCreate(): Promise<void> {
     return
   }
   error.value = null
+  if (!habitStep.value) {
+    habitStep.value = true
+    return
+  }
+  if (!habitName.value.trim() || isSubmitting.value) return
   isSubmitting.value = true
+  const replacing = replaceArchivedGroupId.value
   try {
     const persisted = await groupService.create({
+      replaceArchivedGroupId: replacing,
       name: name.value.trim(),
       category: category.value,
       color: selectedColor.value,
       inviteCode: previewInviteCode.value,
-      initialHabit: { name: currentCategory.value.defaultHabit, icon: '🎯' },
+      description: description.value.trim(),
+      targetDays: goal.value,
+      initialHabit: { name: habitName.value.trim(), icon: habitIcon.value, description: habitDescription.value.trim() },
     })
     const group = groupsStore.createGroup(
-      { name: name.value, category: category.value, habit: currentCategory.value.defaultHabit, color: selectedColor.value },
+      { name: name.value, category: category.value, habit: habitName.value.trim(), color: selectedColor.value },
       session.currentUser?.name ?? 'Usuario',
-      { id: persisted.id, inviteCode: persisted.inviteCode },
+      { id: persisted.id, inviteCode: persisted.inviteCode, replacedGroupId: replacing },
     )
+    if (replacing) {
+      close()
+      await router.push({ name: 'grupo', params: { groupId: persisted.id } })
+      await groupsStore.refreshRemoteGroups()
+      return
+    }
     await groupsStore.refreshRemoteGroups()
     createdGroup.value = groupsStore.groupById(persisted.id) ?? group
   } catch (cause) {
@@ -179,7 +211,11 @@ async function handleJoin(): Promise<void> {
       <section
         v-if="createdGroup"
         class="guild-modal success-modal"
-        :style="{ '--team-color': createdGroup.color }"
+        :style="{
+          '--team-color': createdGroup.color,
+          '--banner-img': `url(&quot;${createdBannerTheme.bannerUrl}&quot;)`,
+          '--banner-filter': createdBannerTheme.filter ?? 'none',
+        }"
         role="dialog"
         aria-modal="true"
         aria-labelledby="created-title"
@@ -188,12 +224,21 @@ async function handleJoin(): Promise<void> {
           <AppIcon name="x" :size="18" />
         </button>
 
-        <div class="success-badge">
-          <AppIcon name="shield" :size="36" />
+        <div class="banner-preview success-banner">
+          <span class="banner-preview-art" aria-hidden="true"></span>
+          <span class="banner-preview-shade" aria-hidden="true"></span>
+          <span class="banner-emblem">
+            <AppIcon name="shield" :size="26" />
+          </span>
+          <div class="banner-info">
+            <small>¡GRUPO CREADO CON ÉXITO!</small>
+            <strong id="created-title">{{ createdGroup.name }}</strong>
+          </div>
+          <div class="banner-leader" title="Tu personaje">
+            <CharacterIcon :character="characters.current" :size="48" />
+          </div>
         </div>
 
-        <span class="kicker">¡GRUPO CREADO CON ÉXITO!</span>
-        <h2 id="created-title">{{ createdGroup.name }}</h2>
         <p class="subtitle">
           Este es el código único oficial de tu grupo. Quedó guardado para que tus amigos puedan unirse.
         </p>
@@ -224,17 +269,54 @@ async function handleJoin(): Promise<void> {
         </footer>
       </section>
 
+      <section v-else-if="habitStep" class="guild-modal create-flow" role="dialog" aria-modal="true" aria-labelledby="first-habit-title"
+        :style="{ '--team-color': selectedColor, '--habit-banner': 'url(' + JOIN_GROUP_BANNER_URL + ')' }">
+        <header class="first-habit-banner">
+          <div class="create-steps" aria-label="Paso 2 de 2">
+            <span aria-hidden="true">1/2</span>
+            <span class="current" aria-current="step">2/2</span>
+          </div>
+          <h2 id="first-habit-title">¡Crea el hábito de tu grupo!</h2>
+        </header>
+        <form class="modal-body" @submit.prevent="handleCreate">
+          <label class="field"><span>Nombre del hábito</span><input v-model="habitName" maxlength="80" required placeholder="Ej. Leer 20 minutos" /></label>
+          <label class="field"><span>Descripción del hábito (opcional)</span><textarea v-model="habitDescription" maxlength="300" rows="3" /></label>
+          <div class="field"><span>Insignia</span>
+            <div class="habit-picker" role="group" aria-label="Insignia del hábito">
+              <button v-for="icon in habitIcons" :key="icon" type="button" :aria-label="icon" :aria-pressed="habitIcon === icon" @click="habitIcon = icon"><AppIcon :name="icon" :size="21" /></button>
+            </div>
+          </div>
+          <p v-if="error" class="error" role="alert">{{ error }}</p>
+          <footer class="modal-foot">
+            <button type="button" class="game-btn ghost" :disabled="isSubmitting" @click="habitStep = false; error = null">Volver</button>
+            <button type="submit" class="game-btn primary" :disabled="!habitName.trim() || isSubmitting">
+              {{ isSubmitting ? 'Creando…' : 'Crear grupo' }}
+              <AppIcon v-if="!isSubmitting" name="arrow-right" :size="16" />
+            </button>
+          </footer>
+        </form>
+      </section>
+
       <!-- VENTANA PRINCIPAL: CREAR GRUPO O UNIRSE A UN GRUPO -->
       <section
         v-else
         class="guild-modal"
-        :style="{ '--team-color': selectedColor }"
+        :class="{ 'create-flow': mode === 'create' }"
+        :style="{
+          '--team-color': selectedColor,
+          '--banner-img': `url(&quot;${selectedBannerTheme.bannerUrl}&quot;)`,
+          '--banner-filter': selectedBannerTheme.filter ?? 'none',
+        }"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
         <header class="modal-head">
           <div>
+            <div v-if="mode === 'create'" class="create-steps" aria-label="Paso 1 de 2">
+              <span class="current" aria-current="step">1/2</span>
+              <span aria-hidden="true">2/2</span>
+            </div>
             <span class="kicker">EQUIPOS KORDIA</span>
             <h2 id="modal-title">
               {{ mode === 'create' ? 'Crear nuevo grupo' : 'Unirme a un grupo' }}
@@ -246,7 +328,7 @@ async function handleJoin(): Promise<void> {
         </header>
 
         <!-- Pestañas intercambiables -->
-        <div class="mode-tabs" role="tablist">
+        <div v-if="!replaceArchivedGroupId" class="mode-tabs" role="tablist">
           <button
             type="button"
             role="tab"
@@ -271,13 +353,15 @@ async function handleJoin(): Promise<void> {
 
         <!-- MODO 1: CREAR GRUPO (SIMPLE Y CON CÓDIGO ÚNICO DESTACADO) -->
         <form v-if="mode === 'create'" class="modal-body" @submit.prevent="handleCreate">
-          <!-- Vista previa del grupo -->
+          <!-- Vista previa del grupo con el banner elegido -->
           <div class="banner-preview">
+            <span class="banner-preview-art" aria-hidden="true"></span>
+            <span class="banner-preview-shade" aria-hidden="true"></span>
             <span class="banner-emblem">
               <AppIcon :name="currentCategory.icon" :size="26" />
             </span>
             <div class="banner-info">
-              <small>{{ category.toUpperCase() }}</small>
+              <small>{{ category.toUpperCase() }} · {{ selectedBannerTheme.name.toUpperCase() }}</small>
               <strong>{{ name.trim() || 'Nombre de tu grupo' }}</strong>
             </div>
             <div class="banner-leader" title="Tu personaje">
@@ -296,23 +380,52 @@ async function handleJoin(): Promise<void> {
             />
           </label>
 
-          <!-- Categoría y Color -->
+          <label class="field"><span>Descripción del grupo (opcional)</span><textarea v-model="description" maxlength="200" rows="3" /></label>
+          <fieldset class="group-goal">
+            <legend>Meta del grupo</legend>
+            <label v-for="days in ([30, 90, 120] as const)" :key="days">
+              <input v-model="goal" type="radio" name="group-goal" :value="days" />
+              <span class="goal-flag"><AppIcon name="flag" :size="19" /></span>
+              <span class="goal-duration"><strong>{{ days }}</strong> días</span>
+              <small>{{ days === 30 ? 'Primer camino' : days === 90 ? 'Travesía' : 'Expedición' }}</small>
+            </label>
+          </fieldset>
+
+          <!-- Tema de Banner del Grupo -->
           <div class="field">
             <div class="field-header">
-              <span>Categoría y color</span>
-              <div class="color-swatches" aria-label="Color del grupo">
-                <button
-                  v-for="color in GROUP_COLORS"
-                  :key="color"
-                  type="button"
-                  class="color-dot"
-                  :class="{ active: selectedColor === color }"
-                  :style="{ '--dot': color }"
-                  :aria-label="`Elegir color ${color}`"
-                  @click="selectedColor = color"
-                />
-              </div>
+              <span>Banner y tema del grupo</span>
+              <small class="theme-picked-label">{{ selectedBannerTheme.name }}</small>
             </div>
+            <div class="banner-theme-grid" role="radiogroup" aria-label="Banner del grupo">
+              <button
+                v-for="theme in GROUP_BANNER_THEMES"
+                :key="theme.id"
+                type="button"
+                class="banner-swatch-card"
+                :class="{ active: selectedColor.toLowerCase() === theme.color.toLowerCase() }"
+                :style="{
+                  '--swatch-img': `url(&quot;${theme.bannerUrl}&quot;)`,
+                  '--swatch-filter': theme.filter ?? 'none',
+                  '--swatch-color': theme.color,
+                }"
+                :aria-label="`Elegir tema ${theme.name}`"
+                :aria-pressed="selectedColor.toLowerCase() === theme.color.toLowerCase()"
+                @click="selectedColor = theme.color"
+              >
+                <span class="swatch-art" aria-hidden="true"></span>
+                <span class="swatch-overlay" aria-hidden="true"></span>
+                <span class="swatch-label">
+                  <span class="swatch-dot"></span>
+                  <strong>{{ theme.name }}</strong>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Categoría -->
+          <div class="field">
+            <span>Categoría</span>
             <div class="chips">
               <button
                 v-for="c in GROUP_CATEGORIES"
@@ -354,32 +467,48 @@ async function handleJoin(): Promise<void> {
           <footer class="modal-foot">
             <button type="button" class="game-btn ghost" @click="close">Cancelar</button>
             <button type="submit" class="game-btn primary" :disabled="!canSubmitCreate || isSubmitting">
-              <AppIcon name="plus" :size="16" />
-              {{ isSubmitting ? 'Creando…' : 'Crear grupo' }}
+              Continuar
+              <AppIcon name="arrow-right" :size="16" />
             </button>
           </footer>
         </form>
 
-        <!-- MODO 2: UNIRSE A UN GRUPO (GRANDE Y LLAMATIVO) -->
+        <!-- MODO 2: UNIRSE A UN GRUPO (GRANDE Y LLAMATIVO CON BANNER ILUSTRADO) -->
         <form v-else class="modal-body join-body" @submit.prevent="handleJoin">
           <div class="join-showcase">
-            <div class="join-badge-icon">
-              <AppIcon name="users" :size="32" />
+            <div
+              class="join-banner-hero"
+              :style="{ '--join-banner': `url(&quot;${JOIN_GROUP_BANNER_URL}&quot;)` }"
+            >
+              <span class="join-banner-art" aria-hidden="true"></span>
+              <span class="join-banner-shade" aria-hidden="true"></span>
+              <div class="join-banner-copy">
+                <span class="join-banner-kicker">
+                  <AppIcon name="users" :size="12" />
+                  AVENTURA EN EQUIPO
+                </span>
+                <h3>¡Únete a un grupo!</h3>
+                <p>Comparte metas y rachas con tus amigos.</p>
+              </div>
             </div>
-            <h3>Únete a un equipo con su código</h3>
-            <p>Escribe el código de invitación único que te compartió el creador del grupo.</p>
 
-            <div class="join-input-wrap">
-              <input
-                v-model="joinCode"
-                type="text"
-                maxlength="9"
-                class="big-code-input"
-                placeholder="KORD-FHJ4"
-                autofocus
-              />
+            <div class="join-showcase-body">
+              <label class="join-code-label" for="join-code-input">
+                Escribe el código de invitación único que te compartió el creador del grupo
+              </label>
+
+              <div class="join-input-wrap">
+                <input
+                  id="join-code-input"
+                  v-model="joinCode"
+                  type="text"
+                  maxlength="9"
+                  class="big-code-input"
+                  placeholder="KORD-FHJ4"
+                  autofocus
+                />
+              </div>
             </div>
-
           </div>
 
           <p v-if="joinSuccess" class="join-success" role="status">{{ joinSuccess }}</p>
@@ -413,19 +542,19 @@ async function handleJoin(): Promise<void> {
 
 .guild-modal {
   --team-color: #8b5cf6;
-  width: min(590px, 100%);
+  width: min(720px, 100%);
   max-height: 92vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 30px;
-  border-radius: 22px;
+  gap: 18px;
+  padding: 28px;
+  border-radius: 24px;
   background: #211c2d;
   color: #f3edf9;
-  border: 2px solid color-mix(in srgb, var(--team-color) 60%, #433554);
+  border: 0;
   border-bottom: 6px solid #100b18;
-  box-shadow: 0 32px 70px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 32px 70px rgba(0, 0, 0, 0.78);
   position: relative;
 }
 
@@ -506,35 +635,59 @@ async function handleJoin(): Promise<void> {
 .modal-body {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
-/* Vista previa del estandarte */
+/* Vista previa del estandarte con el Banner Ilustrado */
 .banner-preview {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
-  border-radius: 15px;
+  gap: 18px;
+  min-height: 138px;
+  padding: 24px 26px;
+  border-radius: 20px;
+  border: 0;
+  border-bottom: 5px solid #120d1a;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+}
+
+.banner-preview-art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--banner-img);
+  background-size: cover;
+  background-position: center;
+  filter: var(--banner-filter, none);
+  transition: transform 0.35s ease, filter 0.25s ease;
+}
+
+.banner-preview-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: linear-gradient(
-    125deg,
-    color-mix(in srgb, var(--team-color) 26%, #2b2138),
-    #1a1524
+    90deg,
+    rgba(17, 11, 28, 0.74) 0%,
+    rgba(17, 11, 28, 0.38) 52%,
+    rgba(17, 11, 28, 0.1) 100%
   );
-  border: 1px solid color-mix(in srgb, var(--team-color) 55%, #473759);
-  border-bottom: 4px solid #120d1a;
 }
 
 .banner-emblem {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--team-color) 28%, #1d1628);
-  border: 1px solid var(--team-color);
-  border-bottom: 3px solid #120c1a;
-  color: var(--team-color);
+  background: color-mix(in srgb, var(--team-color) 48%, rgba(20, 14, 32, 0.9));
+  border: 0;
+  border-bottom: 4px solid #120c1a;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
   transform: rotate(-4deg);
   flex-shrink: 0;
 }
@@ -542,20 +695,27 @@ async function handleJoin(): Promise<void> {
 .banner-info {
   flex: 1;
   min-width: 0;
+  text-align: left;
 }
 
 .banner-info small {
-  display: block;
-  font-size: 10px;
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(15, 10, 24, 0.62);
+  backdrop-filter: blur(4px);
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.14em;
-  color: #d2bceb;
+  letter-spacing: 0.13em;
+  color: #f3e8ff;
 }
 
 .banner-info strong {
   display: block;
-  font-size: 20px;
-  margin-top: 3px;
+  font-size: 21px;
+  margin-top: 5px;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -563,6 +723,102 @@ async function handleJoin(): Promise<void> {
 
 .banner-leader {
   flex-shrink: 0;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+}
+
+.success-banner {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* Selector de Banners Temáticos */
+.theme-picked-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--team-color);
+}
+
+.banner-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.banner-swatch-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  height: 54px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 4px solid #110b19;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.banner-swatch-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.banner-swatch-card.active {
+  transform: translateY(-2px);
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 2px var(--swatch-color),
+    0 8px 18px rgba(0, 0, 0, 0.5);
+}
+
+.swatch-art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: var(--swatch-img);
+  background-size: cover;
+  background-position: center;
+  filter: var(--swatch-filter, none);
+  transition: transform 0.25s ease;
+}
+
+.banner-swatch-card:hover .swatch-art {
+  transform: scale(1.07);
+}
+
+.swatch-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(14, 9, 22, 0.12) 0%, rgba(14, 9, 22, 0.78) 100%);
+}
+
+.swatch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.swatch-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  border: 1.5px solid #fff;
+  flex-shrink: 0;
+}
+
+.swatch-label strong {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Campos */
@@ -580,28 +836,6 @@ async function handleJoin(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-}
-
-.color-swatches {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.color-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--dot);
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  cursor: pointer;
-  transition: transform 0.15s;
-}
-
-.color-dot.active {
-  transform: scale(1.22);
-  border-color: #fff;
-  box-shadow: 0 0 0 2px #211c2d, 0 0 10px var(--dot);
 }
 
 .field input {
@@ -694,17 +928,6 @@ async function handleJoin(): Promise<void> {
   box-shadow: 0 0 8px #b9d89c;
 }
 
-.unique-pill {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--team-color) 30%, #241b33);
-  border: 1px solid var(--team-color);
-  color: #f6efff;
-}
-
 .code-showcase-main {
   display: flex;
   align-items: center;
@@ -751,12 +974,6 @@ async function handleJoin(): Promise<void> {
   background: #382b48;
 }
 
-.ticket-action.copy {
-  background: color-mix(in srgb, var(--team-color) 35%, #2c2239);
-  border-color: var(--team-color);
-  color: #fff;
-}
-
 .copy-big-btn {
   display: inline-flex;
   align-items: center;
@@ -775,52 +992,120 @@ async function handleJoin(): Promise<void> {
   cursor: pointer;
 }
 
-/* MODO UNIRSE A UN GRUPO (GRANDE Y LLAMATIVO) */
+/* MODO UNIRSE A UN GRUPO (GRANDE Y LLAMATIVO CON BANNER ILUSTRADO) */
 .join-showcase {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   text-align: center;
-  gap: 12px;
-  padding: 26px 22px;
-  border-radius: 18px;
-  background: linear-gradient(145deg, #2b213b, #191424);
-  border: 2px solid #7c5bb0;
-  border-bottom: 5px solid #110c19;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #251c35, #171222);
+  border: 0;
+  border-bottom: 5px solid #0f0a17;
+  box-shadow: 0 16px 36px rgba(7, 4, 15, 0.6);
 }
 
-.join-badge-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, #9f7aea, #6d489c);
-  border: 2px solid #e2ccff;
-  border-bottom: 4px solid #3c2559;
-  color: #fff;
-  box-shadow: 0 10px 24px rgba(124, 58, 237, 0.45);
+.join-banner-hero {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1024 / 341;
+  min-height: 235px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 24px 36px 24px 52%;
+  overflow: hidden;
+  border-bottom: 0;
 }
 
-.join-showcase h3 {
-  margin: 4px 0 0;
-  font-size: 22px;
-  letter-spacing: -0.03em;
+.join-banner-art {
+  position: absolute;
+  inset: 0;
+  background-image: var(--join-banner);
+  background-size: cover;
+  background-position: left center;
+  z-index: 0;
 }
 
-.join-showcase p {
+.join-banner-shade {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 73% 48%,
+    rgba(20, 12, 36, 0.35) 0%,
+    rgba(16, 10, 28, 0.1) 55%,
+    transparent 100%
+  );
+  z-index: 0;
+}
+
+.join-banner-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 6px;
+  max-width: 270px;
+}
+
+.join-banner-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(168, 121, 245, 0.25);
+  border: 0;
+  color: #f3e4ff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  backdrop-filter: blur(4px);
+}
+
+.join-banner-copy h3 {
+  margin: 2px 0 0;
+  font-size: 27px;
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  text-shadow: 0 2px 12px rgba(8, 4, 18, 0.9);
+}
+
+.join-banner-copy p {
   margin: 0;
   font-size: 13px;
-  color: #c5b4d8;
-  max-width: 400px;
-  line-height: 1.5;
+  color: #e4d4f7;
+  line-height: 1.4;
+  text-shadow: 0 1px 6px rgba(8, 4, 18, 0.9);
+}
+
+.join-showcase-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 22px 24px;
+}
+
+.join-code-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d7c7ea;
+  max-width: 420px;
+  line-height: 1.45;
 }
 
 .join-input-wrap {
   width: 100%;
   max-width: 380px;
-  margin-top: 6px;
 }
 
 .big-code-input {
@@ -851,90 +1136,6 @@ async function handleJoin(): Promise<void> {
   color: #534368;
 }
 
-.matched-group {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 16px;
-  margin-top: 6px;
-  border-radius: 12px;
-  background: #233327;
-  border: 1px solid #6fa166;
-  text-align: left;
-}
-
-.matched-badge {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: #b5d68c;
-  color: #20311d;
-  flex-shrink: 0;
-}
-
-.matched-group small {
-  display: block;
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  color: #c2e5a0;
-  font-weight: 800;
-}
-
-.matched-group strong {
-  display: block;
-  font-size: 16px;
-  margin: 2px 0;
-}
-
-.matched-group span {
-  font-size: 11px;
-  color: #d2e7c3;
-}
-
-.quick-codes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.quick-codes small {
-  font-size: 11px;
-  color: #b4a2c8;
-}
-
-.quick-code-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.code-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 12px;
-  border-radius: 9px;
-  background: #181322;
-  border: 1px solid #4b395d;
-  color: #dfd0f2;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.code-chip:hover {
-  border-color: #c6a5f3;
-  background: #241c31;
-}
-
-.code-chip strong {
-  font-family: monospace;
-  font-size: 12px;
-  color: #d7bcf8;
-}
-
 /* Vista de éxito */
 .success-modal {
   text-align: center;
@@ -945,18 +1146,7 @@ async function handleJoin(): Promise<void> {
   position: absolute;
   top: 20px;
   right: 20px;
-}
-
-.success-badge {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--team-color) 28%, #2a2038);
-  border: 2px solid var(--team-color);
-  border-bottom: 4px solid #120c1a;
-  color: var(--team-color);
+  z-index: 3;
 }
 
 .subtitle {
@@ -1060,6 +1250,7 @@ async function handleJoin(): Promise<void> {
   .guild-modal {
     padding: 20px 16px;
   }
+  .banner-theme-grid,
   .chips {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1069,5 +1260,35 @@ async function handleJoin(): Promise<void> {
   .big-code-input {
     font-size: 22px;
   }
+  .join-banner-hero {
+    padding: 14px 16px 14px 48%;
+    min-height: 148px;
+  }
+  .join-banner-copy h3 {
+    font-size: 18px;
+  }
+  .join-banner-copy p {
+    font-size: 11px;
+  }
 }
+.guild-modal.create-flow { width: min(660px, 100%); }
+.create-steps { display: flex; gap: 7px; margin-bottom: 8px; }
+.create-steps span { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 50%; background: #221a2deb; color: #ded2e7; font-size: .7rem; font-weight: 800; }
+.create-steps .current { background: color-mix(in srgb, var(--team-color) 50%, #fff0ca); color: #251a2d; }
+.first-habit-banner { min-height: 148px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px; border-radius: 17px; background: linear-gradient(transparent, #151021df), var(--habit-banner) center / cover; }
+.first-habit-banner h2 { margin: 0; font-size: clamp(1.5rem, 4vw, 2.4rem); }
+.create-flow textarea { width: 100%; padding: 12px; border: 0; border-radius: 10px; background: #191522; color: inherit; font: inherit; resize: vertical; }
+.group-goal { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border: 0; padding: 0; min-width: 0; }
+.group-goal legend { margin-bottom: 8px; font-weight: 700; }
+.habit-picker button { padding: 10px; border: 0; border-radius: 10px; background: color-mix(in srgb, var(--team-color) 20%, #251e30); color: inherit; }
+.group-goal label { position: relative; display: grid; justify-items: center; align-content: center; gap: 5px; min-height: 116px; padding: 10px 4px; border-radius: 14px; text-align: center; background: color-mix(in srgb, var(--team-color) 16%, #282135); cursor: pointer; }
+.group-goal input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.group-goal label:has(input:focus-visible) { outline: 2px solid var(--team-color); outline-offset: 3px; }
+.group-goal label:has(input:checked) { background: color-mix(in srgb, var(--team-color) 38%, #f6dfac); color: #261c30; }
+.goal-flag { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: color-mix(in srgb, var(--team-color) 33%, transparent); }
+.goal-duration { font-size: .78rem; }
+.goal-duration strong { font-size: 1.65rem; line-height: 1; }
+.group-goal small { font-size: .69rem; }
+.habit-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.habit-picker button[aria-pressed="true"] { background: color-mix(in srgb, var(--team-color) 34%, #ffe3a0); color: #24192a; }
 </style>

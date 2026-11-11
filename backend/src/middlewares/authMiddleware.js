@@ -6,7 +6,9 @@ const { prisma } = require('../prisma')
 async function authenticateToken(req, res, next) {
   // espera el formato authorization: bearer <token>.
   const authHeader = req.headers.authorization
-  const token = authHeader && authHeader.split(' ')[1]
+  const token = typeof authHeader === 'string'
+    ? /^Bearer\s+(\S+)$/i.exec(authHeader)?.[1]
+    : undefined
 
   if (!token) {
     return res.status(401).json({
@@ -20,7 +22,7 @@ async function authenticateToken(req, res, next) {
     // verify revisa la firma y la expiracion; el resultado identifica al usuario.
     user = jwt.verify(token, jwtSecret)
   } catch {
-    return res.status(403).json({
+    return res.status(401).json({
       error: 'Token inválido o expirado',
       correlationId: req.correlationId,
     })
@@ -28,8 +30,15 @@ async function authenticateToken(req, res, next) {
 
   req.user = user
 
+  if (!user || typeof user !== 'object' || typeof user.userId !== 'string') {
+    return res.status(401).json({
+      error: 'Token inválido',
+      correlationId: req.correlationId,
+    })
+  }
+
   // El access token tambien debe pertenecer a una sesion que siga activa.
-  if (!req.user.familyId) {
+  if (typeof req.user.familyId !== 'string' || !req.user.familyId) {
     return res.status(401).json({
       error: 'La sesión debe renovarse',
       correlationId: req.correlationId,

@@ -9,9 +9,11 @@ export type GroupModalTab = 'create' | 'join'
  */
 const isOpen = ref(false)
 const activeTab = ref<GroupModalTab>('create')
+const replaceArchivedGroupId = ref<string>()
 
 export function useCreateGroupModal() {
   function open(tabOrEvent?: GroupModalTab | Event): void {
+    replaceArchivedGroupId.value = undefined
     if (tabOrEvent === 'join' || tabOrEvent === 'create') {
       activeTab.value = tabOrEvent
     } else {
@@ -24,12 +26,18 @@ export function useCreateGroupModal() {
     open('create')
   }
 
+  function openReplacement(groupId: string): void {
+    open('create')
+    replaceArchivedGroupId.value = groupId
+  }
+
   function openJoin(): void {
     open('join')
   }
 
   function close(): void {
     isOpen.value = false
+    replaceArchivedGroupId.value = undefined
   }
 
   return {
@@ -37,6 +45,8 @@ export function useCreateGroupModal() {
     activeTab,
     open,
     openCreate,
+    openReplacement,
+    replaceArchivedGroupId,
     openJoin,
     close,
   }

@@ -1,25 +1,43 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import AdventureCharacter from '@/components/ui/AdventureCharacter.vue'
+import AdventureTombstone from '@/components/ui/AdventureTombstone.vue'
+import streakLostBanner from '@/assets/Racha perdida.png'
 import StreakFlame from '@/components/ui/StreakFlame.vue'
+import StreakReminderHeading from '@/components/ui/StreakReminderHeading.vue'
+import PokePaw from '@/components/ui/PokePaw.vue'
 import GroupChat from '@/components/group/GroupChat.vue'
+import { groupService } from '@/services/groupService'
+import { api } from '@/services/api'
+import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
 import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
-import { GROUP_COLORS, useGroupsStore } from '@/stores/groups'
+import { useGroupsStore } from '@/stores/groups'
 import { GROUP_CATEGORIES } from '@/constants/groupCategories'
+import { GROUP_BANNER_THEMES, getGroupBannerTheme } from '@/constants/groupBanners'
+import { getThemeBackground } from '@/constants/themeBackgrounds'
 import { useCharacterStore } from '@/stores/characters'
 import { useSessionStore } from '@/stores/session'
-import type { GroupHabit } from '@/types/group'
+import type { GroupHabit, GroupMember } from '@/types/group'
 import '@/assets/styles/game-views.css'
 
 const route = useRoute()
 const router = useRouter()
+const createGroup = useCreateGroupModal()
 const store = useGroupsStore()
 const characters = useCharacterStore()
 const session = useSessionStore()
-const { hours, minutes } = useMidnightCountdown()
+const { hours, minutes, seconds, dayKey } = useMidnightCountdown()
+const countdownMinutes = computed(() => hours.value * 60 + minutes.value)
+const countdownUrgency = computed(() => {
+  if (me.value?.isFallen || !me.value) return 'calm'
+  if (me.value.checkedInToday) return 'complete'
+  if (countdownMinutes.value <= 60) return 'urgent'
+  if (countdownMinutes.value <= 180) return 'warning'
+  return 'calm'
+})
 
 const group = computed(() => store.groupById(String(route.params.groupId)))
 const selectedId = ref('')
@@ -30,46 +48,271 @@ const selectedMember = computed(
     group.value?.members[0],
 )
 const me = computed(() => group.value?.members.find((m) => m.isCurrentUser))
-const isAdmin = computed(() => me.value?.role === 'ADMIN')
+const teammates = computed(() => group.value?.members.filter(member => !member.isCurrentUser) ?? [])
+const scenePage = ref(0)
+const teammatesPerPage = 2
+const lastScenePage = computed(() => Math.max(0, Math.ceil(teammates.value.length / teammatesPerPage) - 1))
+const sceneMembers = computed(() => {
+  const start = scenePage.value * teammatesPerPage
+  const page = teammates.value.slice(start, start + teammatesPerPage)
+  return me.value ? [me.value, ...page] : page
+})
+watch(() => group.value?.id, () => { scenePage.value = 0 })
+watch(lastScenePage, last => { scenePage.value = Math.min(last, scenePage.value) })
+
+const celebrationMembers = computed(() => [
+  ...(me.value ? [me.value] : []),
+  ...teammates.value.filter(member => !member.isFallen),
+].slice(0, 5))
+
+const isAdmin = computed(() => !group.value?.archivedAt && me.value?.role === 'ADMIN' && !me.value.isFallen)
+const adminCandidates = computed(() => me.value?.isFallen && me.value.role === 'ADMIN'
+  ? group.value?.members.filter(member => !member.isFallen && member.role !== 'ADMIN') ?? []
+  : [])
+const promotingAdmin = ref(false)
+const promotionNotice = ref('')
+
+async function promoteFromTomb(memberId: string) {
+  const current = group.value
+  if (!current || promotingAdmin.value || !adminCandidates.value.some(member => member.id === memberId)) return
+  promotingAdmin.value = true
+  promotionNotice.value = ''
+  try {
+    await store.setGroupMemberRole(current.id, memberId, 'ADMIN')
+    promotionNotice.value = 'Ya hay otro admin que puede aprobar tu regreso.'
+  } catch {
+    promotionNotice.value = 'No pudimos nombrar al admin. Intenta de nuevo.'
+  } finally {
+    promotingAdmin.value = false
+  }
+}
+const fallenMembers = computed(() => group.value?.members.filter((member) => member.isFallen) ?? [])
+const penaltyDialog = ref<HTMLDialogElement | null>(null)
+const penaltyNames = ref<string[]>([])
+const shownPenalties = new Set<string>()
+function showGroupPenalty() {
+  const dialog = penaltyDialog.value
+  const user = session.currentUser
+  const current = group.value
+  if (!dialog || dialog.open || !user || !current || !me.value || me.value.isFallen || current.archivedAt) return
+  const notices = fallenMembers.value.map(member => ({
+    name: nameOf(member),
+    key: `kordia:penalty:${user.id}:${current.id}:${member.id}:${member.fallenAt}`,
+  })).filter(({ key }) => {
+    if (shownPenalties.has(key)) return false
+    try { return !localStorage.getItem(key) } catch { return true }
+  })
+  if (!notices.length) return
+  penaltyNames.value = notices.map(notice => notice.name)
+  dialog.showModal()
+  for (const { key } of notices) {
+    shownPenalties.add(key)
+    try { localStorage.setItem(key, '1') } catch { /* El aviso ya se mostró en esta pestaña. */ }
+  }
+}
+watch([penaltyDialog, fallenMembers, me], showGroupPenalty, { flush: 'post' })
+
+async function reviveMember(memberId: string) {
+  if (!group.value || !isAdmin.value) return
+  try {
+    await api.post(`/groups/${group.value.id}/members/${memberId}/revive`)
+    await store.refreshRemoteGroups()
+    notice.value = 'El personaje volvió a la aventura.'
+  } catch {
+    notice.value = 'No pudimos revivir al personaje. Actualiza el grupo e inténtalo de nuevo.'
+  }
+}
 const nameOf = (m: { name: string; isCurrentUser: boolean }) =>
   m.isCurrentUser ? session.currentUser?.name ?? m.name : m.name
 const done = computed(() => group.value?.members.filter((m) => m.checkedInToday).length ?? 0)
+const teamCelebration = ref<HTMLDialogElement | null>(null)
+const celebratedGoal = ref<number | null>(null)
+const celebrationKeys = new Set<string>()
+watch([group, teamCelebration], ([current, dialog]) => {
+  if (!current || !dialog || current.archivedAt || dialog.open) return
+  if (!current.members.some((member) => member.isCurrentUser && !member.isFallen)) return
+  const goal = missionDays.value
+  const goalKey = `kordia:group-goal:${session.currentUser?.id}:${current.id}:${goal}`
+  if (current.streak >= goal && !celebrationKeys.has(goalKey)) {
+    let alreadyShown = false
+    try { alreadyShown = localStorage.getItem(goalKey) === '1' } catch { /* Usa el estado de la vista. */ }
+    celebrationKeys.add(goalKey)
+    if (!alreadyShown) {
+      celebratedGoal.value = goal
+      dialog.showModal()
+      try { localStorage.setItem(goalKey, '1') } catch { /* El aviso ya se mostró. */ }
+      return
+    }
+  }
+  if (current.members.length < 2 || current.streak === goal) return
+  if (!current.members.every((member) => member.checkedInToday && !member.isFallen)) return
+  const day = new Intl.DateTimeFormat('es-CO', { timeZone: current.timeZone ?? 'America/Bogota', dateStyle: 'short' }).format()
+  const key = `kordia:team-check:${session.currentUser?.id}:${current.id}:${day}`
+  if (celebrationKeys.has(key) || dialog.open) return
+  try {
+    if (sessionStorage.getItem(key)) return
+    sessionStorage.setItem(key, '1')
+  } catch {
+    // La celebración también funciona cuando el navegador bloquea el almacenamiento.
+  }
+  celebrationKeys.add(key)
+  celebratedGoal.value = null
+  dialog.showModal()
+}, { flush: 'post' })
+const energy = computed(() => group.value?.members.reduce((total, member) =>
+  total + (member.checkedInToday ? member.dailyReport?.energy ?? 1 : 0), 0) ?? 0)
+const habitIds = ref<string[]>([])
+const dailyNote = ref('')
+const missionHabits = computed(() => group.value?.habits ?? [])
+const selectedHabits = computed(() => missionHabits.value.filter((habit) => habitIds.value.includes(habit.id)))
+watch(() => group.value?.id, () => {
+  habitIds.value = []
+  dailyNote.value = ''
+})
+const missionDays = computed<30 | 90 | 120>(() => {
+  if (group.value?.targetDays) return group.value.targetDays
+  const days = Math.max(...(group.value?.habits ?? []).map((habit) => habit.targetDays), 30)
+  return days >= 120 ? 120 : days >= 90 ? 90 : 30
+})
+const missionRank = computed(() => ({
+  30: { name: 'Expedición', icon: 'flag' as const, copy: 'Una ruta corta para fortalecer al equipo.' },
+  90: { name: 'Gran travesía', icon: 'globe' as const, copy: 'Un recorrido largo que exige constancia.' },
+  120: { name: 'Aventura legendaria', icon: 'trophy' as const, copy: 'La campaña más difícil del valle.' },
+}[missionDays.value]))
 
-const isChatOpen = ref(true)
+const isChatOpen = ref(false)
+const isRosterOpen = ref(false)
+watch(() => route.params.groupId, () => {
+  isRosterOpen.value = false
+  isChatOpen.value = false
+})
 /** true = Chat grande slideado al lado derecho; false = Chat minimizado como estaba abajo */
 const isChatExpanded = ref(true)
 const editing = ref(false)
 const editingGroup = ref(false)
 const confirmingLeave = ref(false)
 const draft = ref('')
-const habitIconDraft = ref('🎯')
-const targetDaysDraft = ref<30 | 90 | 120>(30)
+const habitIconDraft = ref('target')
+const habitDescriptionDraft = ref('')
 const editingHabitId = ref<string | null>(null)
 const groupNameDraft = ref('')
 const groupCategoryDraft = ref('')
 const groupDescriptionDraft = ref('')
-const groupColorDraft = ref('#8b5cf6')
+const groupColorDraft = ref('#ec4899')
+const activeBannerTheme = computed(() => getGroupBannerTheme(group.value?.color))
+const draftBannerTheme = computed(() => getGroupBannerTheme(groupColorDraft.value))
+const lifeTokenKind = computed<'mushroom' | 'star' | 'sun' | 'flame' | 'heart'>(() => {
+  const bannerId = activeBannerTheme.value.id
+  if (bannerId === 'green') return 'mushroom'
+  if (bannerId === 'blue' || bannerId === 'purple') return 'star'
+  if (bannerId === 'amber') return 'sun'
+  if (bannerId === 'red') return 'flame'
+  return 'heart'
+})
+const activeGroupIcon = computed(() => GROUP_CATEGORIES.find((category) => category.label === group.value?.category)?.icon ?? 'target')
 const groupCategoryIcon = computed(
   () => GROUP_CATEGORIES.find((category) => category.label === groupCategoryDraft.value)?.icon ?? 'target',
 )
 const saving = ref(false)
 const notice = ref('')
+const pokeFeedback = ref('')
+const pokeSending = ref(false)
+const sentPokes = ref(new Set<string>())
+const pokeDialog = ref<HTMLDialogElement>()
+const memberPanel = ref<HTMLElement>()
+const pokeTarget = ref<{ id: string; name: string }>()
+function canPokeMember(member: GroupMember | undefined) {
+  return !!(group.value?.habits?.length && !group.value.archivedAt && me.value && !me.value.isFallen
+    && member && !member.isCurrentUser && !member.isFallen && !member.checkedInToday)
+}
+const canPoke = computed(() => canPokeMember(selectedMember.value))
+
+async function selectCharacter(memberId: string) {
+  selectedId.value = memberId
+  if (me.value?.id === memberId) return
+  await nextTick()
+  memberPanel.value?.scrollIntoView({ block: 'nearest' })
+}
+
+function openPokeDialog(member: GroupMember | undefined) {
+  if (!member || !canPokeMember(member) || sentPokes.value.has(pokeKey(member.id))) return
+  pokeFeedback.value = ''
+  pokeTarget.value = { id: member.id, name: nameOf(member) }
+  pokeDialog.value?.showModal()
+}
+
+watch(() => group.value?.id, () => pokeDialog.value?.close())
+
+function pokeKey(memberId: string) {
+  return dayKey.value + ':' + group.value?.id + ':' + memberId
+}
+
+async function givePoke(memberId: string) {
+  if (!group.value || pokeSending.value) return
+  const key = pokeKey(memberId)
+  pokeSending.value = true
+  pokeFeedback.value = ''
+  try {
+    await api.post('/groups/' + group.value.id + '/members/' + memberId + '/streak-poke')
+    sentPokes.value.add(key)
+    pokeFeedback.value = '¡Toque enviado!'
+  } catch (error) {
+    pokeFeedback.value = (error as { response?: { data?: { error?: string } } }).response?.data?.error
+      ?? 'No pudimos enviar el toque.'
+  } finally {
+    pokeSending.value = false
+  }
+}
 const codeCopied = ref(false)
+const copyError = ref(false)
+let copyReset: number | undefined
 
 async function copyGroupCode() {
   if (!group.value) return
+  window.clearTimeout(copyReset)
+  codeCopied.value = false
+  copyError.value = false
   try {
     await navigator.clipboard.writeText(group.value.inviteCode)
+    codeCopied.value = true
+    copyReset = window.setTimeout(() => { codeCopied.value = false }, 2000)
   } catch {
-    /* ok */
+    copyError.value = true
   }
-  codeCopied.value = true
-  setTimeout(() => {
-    codeCopied.value = false
-  }, 2000)
+}
+onUnmounted(() => window.clearTimeout(copyReset))
+
+const pending = computed(() => group.value?.members.filter((m) => !m.isFallen && !m.checkedInToday) ?? [])
+const returnNotice = ref('')
+const requestingReturn = ref(false)
+
+async function requestReturn() {
+  if (!group.value || requestingReturn.value) return
+  requestingReturn.value = true
+  try {
+    await groupService.requestJoin(group.value.inviteCode)
+    returnNotice.value = 'Tu solicitud está pendiente de aprobación.'
+  } catch (error) {
+    returnNotice.value = (error as { response?: { data?: { error?: string } } })
+      .response?.data?.error ?? 'No pudimos enviar la solicitud. Intenta de nuevo.'
+  } finally {
+    requestingReturn.value = false
+  }
 }
 
-const pending = computed(() => group.value?.members.filter((m) => !m.checkedInToday) ?? [])
+watch(() => group.value?.id, () => { returnNotice.value = '' })
+watch(countdownMinutes, (current, previous) => {
+  if (current > previous) void store.refreshRemoteGroups()
+})
+
+let returnRefreshTimer: number | undefined
+onMounted(() => {
+  void store.refreshRemoteGroups()
+  returnRefreshTimer = window.setInterval(() => {
+    if (!document.hidden) void store.refreshRemoteGroups()
+  }, 30000)
+})
+onUnmounted(() => window.clearInterval(returnRefreshTimer))
 const healthHearts = computed(() => {
   const health = group.value?.health ?? 0
   const alive = Math.ceil(health / 20)
@@ -87,9 +330,20 @@ const alert = computed(() =>
 const lastMessage = computed(() =>
   group.value?.messages.filter((m) => m.authorId === selectedMember.value?.id).at(-1),
 )
-const milestones = [1, 3, 7, 14, 30]
-const missionLengths = [30, 90, 120] as const
-const habitIcons = ['🎯', '🔥', '📚', '💧', '🏃', '🧘', '🌱', '🎨', '💤', '💪', '🎵', '✨']
+const milestones = computed(() => {
+  if (missionDays.value === 120) return [1, 14, 30, 60, 120]
+  if (missionDays.value === 90) return [1, 7, 30, 60, 90]
+  return [1, 3, 7, 14, 30]
+})
+const habitIcons = ['target', 'flame', 'globe', 'heart', 'activity', 'moon', 'code', 'monitor', 'shield', 'trophy', 'flag', 'message'] as const
+const habitIconMap: Record<string, (typeof habitIcons)[number]> = {
+  '🎯': 'target', '🔥': 'flame', '📚': 'globe', '💧': 'heart', '🏃': 'activity', '🧘': 'moon',
+  '🌱': 'globe', '🎨': 'target', '💤': 'moon', '💪': 'activity', '🎵': 'message', '✨': 'trophy',
+}
+function habitIconName(icon?: string) {
+  if (habitIcons.includes(icon as (typeof habitIcons)[number])) return icon as (typeof habitIcons)[number]
+  return habitIconMap[icon ?? ''] ?? 'target'
+}
 
 watch(
   () => group.value?.id,
@@ -101,20 +355,30 @@ watch(
   },
 )
 
+const isCheckingIn = ref(false)
 async function toggle() {
-  if (!group.value || !me.value) return
+  if (!group.value || !me.value || isCheckingIn.value) return
+  const groupId = group.value.id
+  isCheckingIn.value = true
+  notice.value = ''
   try {
-    await store.toggleMyCheckIn(group.value.id)
-    notice.value = me.value.checkedInToday ? 'Check-in completado' : 'Check-in pendiente'
-  } catch {
-    notice.value = store.error ?? 'No se pudo guardar el check-in.'
+    const result = await store.toggleMyCheckIn(groupId, selectedHabits.value.map((habit) => habit.id), dailyNote.value)
+    if (group.value?.id !== groupId) return
+    notice.value = result.done ? `¡Sumaste ${result.report?.energy ?? 1} de energía al equipo!` : 'Aporte diario retirado'
+  } catch (error) {
+    if (group.value?.id === groupId) {
+      notice.value = error instanceof Error ? error.message : 'No se pudo guardar el aporte.'
+    }
+  } finally {
+    isCheckingIn.value = false
   }
 }
 
 function openEditor(habit?: GroupHabit) {
+  notice.value = ''
   draft.value = habit?.name ?? ''
-  habitIconDraft.value = habit?.icon ?? '🎯'
-  targetDaysDraft.value = habit?.targetDays ?? 30
+  habitIconDraft.value = habitIconName(habit?.icon)
+  habitDescriptionDraft.value = habit?.description ?? ''
   editingHabitId.value = habit?.id ?? null
   editing.value = true
 }
@@ -128,7 +392,7 @@ async function saveHabit() {
         group.value.id,
         editingHabitId.value,
         draft.value.trim(),
-        targetDaysDraft.value,
+        habitDescriptionDraft.value.trim(),
         habitIconDraft.value,
       )
     } else {
@@ -136,7 +400,7 @@ async function saveHabit() {
         group.value.id,
         draft.value.trim(),
         habitIconDraft.value,
-        targetDaysDraft.value,
+        habitDescriptionDraft.value.trim(),
       )
     }
     editing.value = false
@@ -181,6 +445,7 @@ async function removeMember(member: NonNullable<typeof selectedMember.value>) {
 }
 
 function openGroupEditor() {
+  notice.value = ''
   if (!group.value) return
   selectedId.value = me.value?.id ?? ''
   groupNameDraft.value = group.value.name
@@ -231,30 +496,108 @@ async function handleLeaveGroup() {
 </script>
 
 <template>
-  <div v-if="group" class="adventure-page">
-    <div class="adventure-wrap" :class="{ 'with-side-chat': isChatOpen && isChatExpanded }">
-      <header class="adventure-header">
-        <div>
-          <RouterLink :to="{ name: 'inicio' }" class="back">
-            <AppIcon name="chevron-left" :size="15" />Inicio
-          </RouterLink>
-          <h1>{{ group.name }}</h1>
+  <div v-if="group" class="adventure-page" :style="{ '--group-accent': activeBannerTheme.color, '--group-section-banner': `url('${activeBannerTheme.sectionBannerUrl}')`, '--group-window-banner': `url('${activeBannerTheme.windowBannerUrl}')`, '--theme-accent': activeBannerTheme.color }">
+    <dialog ref="pokeDialog" class="streak-reminder-dialog" aria-labelledby="send-poke-title" @cancel="pokeSending && $event.preventDefault()">
+      <StreakReminderHeading title="Recordatorio de racha" title-id="send-poke-title" />
+      <template v-if="pokeTarget">
+        <p>Recuérdale a <strong>{{ pokeTarget.name }}</strong> que aún puede registrar su aporte de hoy.</p>
+        <p v-if="pokeFeedback" role="status">{{ pokeFeedback }}</p>
+        <div class="streak-reminder-actions">
+          <button type="button" class="streak-reminder-secondary" :disabled="pokeSending" @click="pokeDialog?.close()">
+            {{ sentPokes.has(pokeKey(pokeTarget.id)) ? 'Listo' : 'Cancelar' }}
+          </button>
+          <button v-if="!sentPokes.has(pokeKey(pokeTarget.id))" type="button" class="streak-reminder-primary" :disabled="pokeSending" @click="givePoke(pokeTarget.id)">
+            <PokePaw />{{ pokeSending ? 'Enviando…' : 'Dar toque' }}
+          </button>
+        </div>
+      </template>
+    </dialog>
+    <dialog v-if="!group.archivedAt && me && !me.isFallen" ref="penaltyDialog" class="penalty-dialog streak-loss-dialog" aria-labelledby="penalty-title" @close="showGroupPenalty">
+      <img class="streak-loss-banner" :src="streakLostBanner" alt="" />
+      <h2 id="penalty-title">Racha del grupo perdida</h2>
+      <p>{{ penaltyNames.join(', ') }} {{ penaltyNames.length === 1 ? 'no registró' : 'no registraron' }} el aporte a tiempo.</p>
+      <p>La racha del equipo volvió a cero. El admin puede revivir o expulsar a los personajes caídos.</p>
+      <form method="dialog"><button class="game-button">Entendido</button></form>
+    </dialog>
+    <dialog v-if="!group.archivedAt" ref="teamCelebration" class="penalty-dialog team-celebration" aria-labelledby="team-celebration-title">
+      <div class="team-celebration-characters">
+        <div v-for="member in celebrationMembers" :key="member.id" class="team-celebration-member">
+          <AdventureCharacter :character="characters.forMember(member.id, member.isCurrentUser, member.name)" :size="58" complete />
+          <span v-if="member.isCurrentUser" class="own-avatar-label">Tú</span>
+        </div>
+      </div>
+      <h2 id="team-celebration-title">{{ celebratedGoal ? '¡Meta alcanzada!' : '¡Lo lograron, equipo!' }}</h2>
+      <p v-if="celebratedGoal">¡Felicidades por {{ celebratedGoal }} días de racha! La aventura continúa.</p>
+      <p v-else>Todos registraron su aporte de hoy.</p>
+      <form method="dialog"><button class="game-button">¡A seguir así!</button></form>
+    </dialog>
+    <section v-if="group.archivedAt" class="archived-adventure" aria-labelledby="archived-title">
+      <div class="archived-scene">
+        <AdventureTombstone :size="200" />
+        <span>{{ me ? nameOf(me) : group.name }}</span>
+      </div>
+      <div class="archived-copy">
+        <h1 id="archived-title">Aventura cerrada</h1>
+        <p>Todo el equipo cayó en <strong>{{ group.name }}</strong>. Crea un grupo nuevo para volver a jugar.</p>
+        <button type="button" class="game-button" @click="createGroup.openReplacement(group.id)">Crear un grupo nuevo</button>
+      </div>
+    </section>
+    <section v-else-if="me?.isFallen" class="archived-adventure" aria-labelledby="fallen-title">
+      <div class="archived-scene"><AdventureTombstone :size="160" /><span>{{ nameOf(me) }}</span></div>
+      <div class="archived-copy">
+        <h1 id="fallen-title">Tu personaje cayó</h1>
+        <p>Un admin puede aprobar tu regreso a {{ group.name }}.</p>
+        <div v-if="adminCandidates.length" class="fallen-actions">
+          <button v-for="member in adminCandidates" :key="member.id" type="button" class="game-button"
+            :disabled="promotingAdmin" @click="promoteFromTomb(member.id)">Nombrar admin a {{ member.name }}</button>
+        </div>
+        <p v-if="promotionNotice" role="status">{{ promotionNotice }}</p>
+        <button type="button" class="game-button" :disabled="requestingReturn" @click="requestReturn">
+          {{ requestingReturn ? 'Enviando…' : 'Solicitar volver' }}
+        </button>
+        <p v-if="returnNotice" role="status">{{ returnNotice }}</p>
+      </div>
+    </section>
+    <div v-else class="adventure-wrap" :class="{ 'with-side-chat': isChatOpen && isChatExpanded }">
+      <header class="adventure-header" :style="{ '--header-banner': `url('${activeBannerTheme.bannerUrl}')`, '--header-banner-filter': activeBannerTheme.filter ?? 'none', '--header-accent': activeBannerTheme.color }">
+        <div class="header-identity">
+          <div class="header-shortcuts">
+            <RouterLink :to="{ name: 'inicio' }" class="back">
+              <AppIcon name="chevron-left" :size="15" />Inicio
+            </RouterLink>
+          </div>
+          <div class="group-brand-row">
+            <button type="button" class="group-header-emblem" :class="{ editable: isAdmin }" :style="{ '--emblem-color': group.color }" :title="isAdmin ? 'Editar información del grupo' : group.category" @click="isAdmin && openGroupEditor()">
+              <AppIcon :name="activeGroupIcon" :size="24" />
+            </button>
+            <div class="group-brand-copy">
+              <div class="group-brand-meta">
+                <span class="group-category-tag">{{ group.category || 'General' }}</span>
+              </div>
+              <h1>{{ group.name }}</h1>
+              <p v-if="group.description" class="group-brand-desc">{{ group.description }}</p>
+            </div>
+          </div>
         </div>
         <div class="header-actions">
           <button
+            v-if="!group.archivedAt"
             type="button"
             class="invite-badge"
-            title="Copiar código de invitación"
+            :aria-label="`Copiar código de invitación ${group.inviteCode}`"
             @click="copyGroupCode"
           >
-            <span class="invite-label">
-              <AppIcon :name="codeCopied ? 'check' : 'copy'" :size="12" />
-              {{ codeCopied ? '¡Copiado!' : 'Código' }}
+            <span class="invite-copy-icon"><AppIcon :name="codeCopied ? 'check' : 'copy'" :size="20" /></span>
+            <span class="invite-copy-text">
+              <span class="invite-label" aria-live="polite">{{ codeCopied ? '¡Copiado!' : 'Copiar invitación' }}</span>
+              <strong>{{ group.inviteCode }}</strong>
             </span>
-            <strong>{{ group.inviteCode }}</strong>
           </button>
+          <input v-if="copyError" class="invite-fallback" :value="group.inviteCode" readonly
+            aria-label="Código de invitación para copiar manualmente" @focus="($event.target as HTMLInputElement).select()" />
 
           <button
+            v-if="!group.archivedAt"
             type="button"
             class="game-button secondary chat-toggle"
             :aria-expanded="isChatOpen"
@@ -272,7 +615,7 @@ async function handleLeaveGroup() {
             type="button"
             class="leave-btn"
             title="Salir de este grupo"
-            @click="confirmingLeave = true"
+            @click="notice = ''; confirmingLeave = true"
           >
             <AppIcon name="logout" :size="15" />
             <span>Salir del grupo</span>
@@ -281,7 +624,7 @@ async function handleLeaveGroup() {
       </header>
 
       <!-- Cuerpo principal: si el chat está en modo Grande Lateral, divide pantalla completa -->
-      <div class="adventure-body" :class="{ 'side-chat-active': isChatOpen && isChatExpanded }">
+      <div class="adventure-body group-columns" :class="{ 'side-chat-active': isChatOpen && isChatExpanded, 'roster-open': isRosterOpen }">
         <div class="adventure-main-col">
           <section
             class="world"
@@ -289,14 +632,14 @@ async function handleLeaveGroup() {
               '--sky': characters.theme.sky,
               '--mountain': characters.theme.mountain,
               '--grass': characters.theme.grass,
+              '--world-bg': `url('${getThemeBackground(characters.theme.id)}')`,
             }"
             aria-label="Escenario de aventura del equipo"
           >
             <div class="world-hud">
-              <span class="world-title"><span class="world-pip"></span>VALLE DEL EQUIPO</span>
-              <span class="world-streak"><StreakFlame :size="31" />{{ group.streak }} días</span>
-              <span class="world-time">
-                <AppIcon name="clock" :size="14" />{{ hours }}:{{ String(minutes).padStart(2, '0') }}
+              <span class="world-streak">
+                <StreakFlame :size="49" />
+                <span><strong>{{ group.streak }} {{ group.streak === 1 ? 'día' : 'días' }}</strong><small>de racha</small></span>
               </span>
             </div>
 
@@ -333,57 +676,104 @@ async function handleLeaveGroup() {
               </div>
             </div>
 
-            <div class="players" :style="{ '--players': group.members.length }">
+            <nav v-if="lastScenePage > 0" class="scene-pages" aria-label="Personajes del equipo">
+              <button type="button" :disabled="scenePage === 0" aria-label="Personajes anteriores" @click="scenePage--">‹</button>
+              <span aria-live="polite">{{ scenePage + 1 }} / {{ lastScenePage + 1 }}</span>
+              <button type="button" :disabled="scenePage === lastScenePage" aria-label="Personajes siguientes" @click="scenePage++">›</button>
+            </nav>
+            <div class="players" :style="{ '--players': sceneMembers.length }">
               <button
-                v-for="(m, index) in group.members"
+                v-for="(m, index) in sceneMembers"
                 :key="m.id"
                 class="player"
-                :class="{ selected: selectedMember?.id === m.id, completed: m.checkedInToday }"
+                :class="{ selected: selectedMember?.id === m.id, completed: m.checkedInToday, 'own-player': m.isCurrentUser }"
                 :style="{ '--index': index }"
-                :aria-label="`Ver a ${nameOf(m)}${m.checkedInToday ? ', hábito completado' : ', hábito pendiente'}`"
+                :aria-label="`Ver a ${nameOf(m)}${m.isFallen ? ', personaje caído' : m.checkedInToday ? ', hábito completado' : ', hábito pendiente'}`"
                 :aria-pressed="selectedMember?.id === m.id"
-                @click="selectedId = m.id"
+                @click="selectCharacter(m.id)"
               >
-                <span class="player-bubble">
-                  <AppIcon :name="m.checkedInToday ? 'check' : 'clock'" :size="12" />
-                  {{ m.checkedInToday ? '¡Listo!' : 'Pendiente' }}
+                <span class="player-bubble" :class="{ 'has-note': !m.isFallen && m.checkedInToday && m.dailyReport?.note }">
+                  <span v-if="!m.isFallen && m.checkedInToday && m.dailyReport?.note" class="player-daily-note" :title="m.dailyReport.note">{{ m.dailyReport.note }}</span>
+                  <span class="player-bubble-meta">{{ m.isFallen ? 'Caído' : m.checkedInToday ? `+${m.dailyReport?.energy ?? 1} energía` : 'Pendiente' }}</span>
+
                 </span>
                 <AdventureCharacter
+                  v-if="!m.isFallen"
                   :character="characters.forMember(m.id, m.isCurrentUser, m.name)"
                   :complete="m.checkedInToday"
                   :size="88"
                 />
+                <AdventureTombstone v-else class="fallen-stone" />
                 <span class="player-name">
-                  {{ nameOf(m) }}<b v-if="m.isCurrentUser">TÚ</b>
+                  {{ m.isCurrentUser ? 'Tú' : nameOf(m) }}
                 </span>
               </button>
             </div>
 
             <div class="world-bottom">
-              <span>
-                <AppIcon name="users" :size="15" />{{ done }}/{{ group.members.length }} checks hoy
-              </span>
-              <div class="world-progress">
-                <span
-                  :style="{
-                    width: `${group.members.length ? (done / group.members.length) * 100 : 0}%`,
-                  }"
-                ></span>
+              <div class="hud-energy-cluster">
+                <span class="hud-energy-label">
+                  <AppIcon name="flame" :size="15" />
+                  <strong>{{ energy }} de energía</strong>
+                  <small>· {{ done }}/{{ group.members.length }} aportaron</small>
+                </span>
+                <div class="world-progress" role="progressbar" :aria-valuenow="group.members.length ? Math.round((done / group.members.length) * 100) : 0" aria-valuemin="0" aria-valuemax="100">
+                  <span
+                    :style="{
+                      width: `${group.members.length ? (done / group.members.length) * 100 : 0}%`,
+                    }"
+                  ></span>
+                </div>
               </div>
-              <div class="team-lives" :class="{ 'lives-at-risk': pending.length }" :aria-label="`${Math.ceil(group.health / 20)} de 5 corazones del equipo`">
-                <span class="lives-label">SALUD DEL EQUIPO</span>
-                <span class="heart-row">
-                  <AppIcon
+
+              <div
+                class="team-lives"
+                :class="{ 'lives-at-risk': pending.length }"
+                :title="pending.length ? `${pending.length} ${pending.length === 1 ? 'misión pendiente' : 'misiones pendientes'} · vida en riesgo` : 'El equipo está a salvo hoy'"
+                :aria-label="`${Math.ceil(group.health / 20)} de 5 de vida del grupo`"
+              >
+                <div class="lives-meta">
+                  <span class="lives-label">VIDA DEL GRUPO</span>
+                  <span class="lives-caption">
+                    <template v-if="pending.length">{{ pending.length }} {{ pending.length === 1 ? 'pendiente' : 'pendientes' }}</template>
+                    <template v-else>A salvo</template>
+                  </span>
+                </div>
+                <span class="heart-row" :data-kind="lifeTokenKind" :data-theme="activeBannerTheme.id">
+                  <svg
                     v-for="heart in healthHearts"
                     :key="heart.index"
-                    name="heart"
-                    :size="19"
-                    :class="{ alive: heart.alive, threatened: heart.threatened }"
-                  />
-                </span>
-                <span class="lives-caption">
-                  <template v-if="pending.length">{{ pending.length }} {{ pending.length === 1 ? 'misión pendiente' : 'misiones pendientes' }} · corazones en riesgo</template>
-                  <template v-else>El equipo está a salvo hoy</template>
+                    viewBox="0 0 24 24"
+                    width="25"
+                    height="25"
+                    class="life-token"
+                    :class="[`kind-${lifeTokenKind}`, { alive: heart.alive, threatened: heart.threatened }]"
+                    aria-hidden="true"
+                  >
+                    <template v-if="lifeTokenKind === 'mushroom'">
+                      <path class="token-stem" d="M8.5 14h7v5a2.5 2.5 0 0 1-2.5 2.5h-2A2.5 2.5 0 0 1 8.5 19v-5Z" />
+                      <path class="token-main" d="M3.5 13C3.5 7.2 7.3 3.5 12 3.5S20.5 7.2 20.5 13c0 1.2-.8 2-2 2h-13c-1.2 0-2-.8-2-2Z" />
+                      <circle class="token-spot" cx="8.2" cy="9.6" r="1.7" />
+                      <circle class="token-spot" cx="14.6" cy="8.5" r="2" />
+                      <circle class="token-spot" cx="12.2" cy="12.1" r="1.2" />
+                    </template>
+                    <template v-else-if="lifeTokenKind === 'star'">
+                      <path class="token-main" d="M12 2.2l2.9 5.8 6.4.9-4.6 4.5 1.1 6.4L12 16.8l-5.8 3 1.1-6.4-4.6-4.5 6.4-.9L12 2.2Z" />
+                      <circle class="token-spot" cx="10" cy="9.5" r="1.3" />
+                    </template>
+                    <template v-else-if="lifeTokenKind === 'sun'">
+                      <path class="token-main" d="M12 2l2.3 3.4 4-.8-.8 4L21 11l-3.5 2.4.8 4-4-.8L12 20l-2.3-3.4-4 .8.8-4L3 11l3.5-2.4-.8-4 4 .8L12 2Z" />
+                      <circle class="token-spot" cx="12" cy="11" r="4.2" />
+                    </template>
+                    <template v-else-if="lifeTokenKind === 'flame'">
+                      <path class="token-main" d="M12.5 2.2c2.4 3.5 6.3 6.5 6.3 11a6.8 6.8 0 0 1-13.6 0c0-3.3 1.8-6.1 3.7-8.2.4 1.8 1.4 2.7 2.4 3.1-.3-2.1.3-4.2 1.2-5.9Z" />
+                      <path class="token-spot" d="M12 11.2c1.2 1.5 2.6 2.9 2.6 4.8a2.6 2.6 0 0 1-5.2 0c0-1.6.9-3.1 2.6-4.8Z" />
+                    </template>
+                    <template v-else>
+                      <path class="token-main" d="M12 20.6s-7.4-4.5-9.2-8.9C1.4 8.1 3.6 4.2 7.4 4.2c2.1 0 3.6 1.1 4.6 2.6 1-1.5 2.5-2.6 4.6-2.6 3.8 0 6 3.9 4.6 7.5-1.8 4.4-9.2 8.9-9.2 8.9Z" />
+                      <circle class="token-spot" cx="7.6" cy="8.4" r="1.4" />
+                    </template>
+                  </svg>
                 </span>
               </div>
             </div>
@@ -394,7 +784,7 @@ async function handleLeaveGroup() {
             :class="{ 'chat-closed': !isChatOpen || isChatExpanded }"
           >
             <div class="game-stack">
-              <section v-if="selectedMember" class="game-panel player-panel">
+              <section v-if="selectedMember" ref="memberPanel" class="game-panel player-panel">
                 <div class="player-detail-heading">
                   <CharacterIcon
                     :character="characters.forMember(selectedMember.id, selectedMember.isCurrentUser, selectedMember.name)"
@@ -413,12 +803,28 @@ async function handleLeaveGroup() {
                   </RouterLink>
                 </div>
 
-                <div class="current-habit">
-                  <AppIcon name="target" :size="21" />
-                  <strong>{{ selectedMember.habit }}</strong>
-                  <span :class="{ complete: selectedMember.checkedInToday }">
-                    {{ selectedMember.checkedInToday ? 'Completado' : 'Pendiente' }}
-                  </span>
+                <button v-if="canPoke" type="button" class="streak-poke-button" :disabled="sentPokes.has(pokeKey(selectedMember.id))" @click="openPokeDialog(selectedMember)">
+                  <span class="streak-poke-hand"><PokePaw /></span>
+                  {{ sentPokes.has(pokeKey(selectedMember.id)) ? 'Toque enviado' : 'Dar toque' }}
+                </button>
+                <p v-else-if="!selectedMember.isCurrentUser && selectedMember.checkedInToday" class="check-notice">
+                  {{ nameOf(selectedMember) }} ya registró su aporte de hoy.
+                </p>
+                <div class="current-habit mission-habits">
+                  <strong>Hábitos de hoy</strong>
+                  <ul>
+                    <li v-for="habit in missionHabits" :key="habit.id">
+                      <label v-if="selectedMember.isCurrentUser && !selectedMember.checkedInToday && !selectedMember.isFallen">
+                        <input v-model="habitIds" type="checkbox" :value="habit.id" :disabled="isCheckingIn" />
+                        {{ habit.name }}
+                      </label>
+                      <span v-else>
+                        <AppIcon :name="selectedMember.dailyReport?.habitIds.includes(habit.id) ? 'check' : 'target'" :size="16" />
+                        {{ habit.name }}
+                      </span>
+                    </li>
+                  </ul>
+                  <p v-if="selectedMember.checkedInToday && selectedMember.dailyReport?.note" class="member-note-cloud">{{ selectedMember.dailyReport.note }}</p>
                 </div>
 
                 <div class="player-metrics">
@@ -449,15 +855,41 @@ async function handleLeaveGroup() {
                   <p>{{ lastMessage.text }}</p>
                 </div>
 
-                <div v-if="selectedMember.isCurrentUser" class="player-controls">
+                <div v-if="group.archivedAt" class="daily-quest">El registro de aportes está cerrado.</div>
+                <div v-else-if="selectedMember.isCurrentUser && selectedMember.isFallen" class="daily-quest">
+                  <strong>Tu personaje cayó</strong>
+                  <p>Un admin puede aprobar tu regreso a la aventura.</p>
+                  <button type="button" class="game-button" :disabled="requestingReturn" @click="requestReturn">
+                    {{ requestingReturn ? 'Enviando…' : 'Solicitar volver' }}
+                  </button>
+                  <p v-if="returnNotice" role="status">{{ returnNotice }}</p>
+                </div>
+                <div v-else-if="selectedMember.isCurrentUser" class="daily-quest" :class="`quest-${missionDays}`">
+                  <div class="daily-quest-heading">
+                    <span class="quest-rank-icon"><AppIcon :name="missionRank.icon" :size="25" /></span>
+                    <div>
+                      <small>MISIÓN DIARIA</small>
+                      <strong>{{ selectedMember.checkedInToday ? 'Aporte registrado' : 'Registra tus hábitos' }}</strong>
+                      <span>{{ selectedMember.checkedInToday ? `+${selectedMember.dailyReport?.energy ?? 1} de energía` : `${selectedHabits.length} / ${missionHabits.length} hábitos · +${selectedHabits.length} de energía` }}</span>
+                    </div>
+                  </div>
+                  <div class="quest-energy-track" aria-hidden="true">
+                    <span :style="{ width: `${Math.min(100, (selectedMember.checkedInToday ? selectedMember.dailyReport?.energy ?? 1 : selectedHabits.length) / Math.max(1, missionHabits.length) * 100)}%` }"></span>
+                  </div>
+                  <label v-if="!selectedMember.checkedInToday" class="mission-note">
+                    Mensaje de tu personaje (opcional)
+                    <input v-model="dailyNote" maxlength="140" :disabled="isCheckingIn" />
+                  </label>
                   <button
                     class="game-button checkin-button"
+                    :disabled="isCheckingIn || (!selectedMember.checkedInToday && !selectedHabits.length)"
                     :class="{ completed: selectedMember.checkedInToday }"
                     :aria-pressed="selectedMember.checkedInToday"
                     @click="toggle"
                   >
-                    <AppIcon :name="selectedMember.checkedInToday ? 'check' : 'flame'" :size="19" />
-                    {{ selectedMember.checkedInToday ? 'Check-in completado · Deshacer' : '¡Hacer check de hoy!' }}
+                    <span class="check-emblem"><AppIcon name="check" :size="26" /></span>
+                    <span class="check-button-copy"><strong>{{ isCheckingIn ? 'Guardando…' : selectedMember.checkedInToday ? 'Retirar check grupal' : 'Check grupal' }}</strong></span>
+                    <AppIcon v-if="!selectedMember.checkedInToday && !isCheckingIn" name="arrow-right" :size="22" />
                   </button>
                 </div>
 
@@ -466,23 +898,28 @@ async function handleLeaveGroup() {
                 </p>
               </section>
 
-              <section class="game-panel team-habits">
+              <section class="game-panel team-habits" :class="`mission-board-${missionDays}`">
                 <div class="game-title">
-                  <h2>Hábitos del grupo</h2>
+                  <div class="mission-board-title">
+                    <span><AppIcon :name="missionRank.icon" :size="23" /></span>
+                    <div>
+                      <small>CAMPAÑA DE {{ missionDays }} DÍAS</small>
+                      <h2>{{ missionRank.name }}</h2>
+                    </div>
+                  </div>
                   <button v-if="isAdmin" class="game-button secondary add-habit-button" @click="openEditor()">
                     <AppIcon name="plus" :size="19" />Crear hábito
                   </button>
                 </div>
-                <p v-if="!group.habits?.length" class="habit-empty">Aún no hay hábitos activos en esta aventura.</p>
+                <p class="mission-board-copy">Súmate a las misiones que quieras desde el chat.</p>
+                <p v-if="!group.habits?.length" class="habit-empty">Aún no hay objetivos activos en esta aventura.</p>
                 <article v-for="habit in group.habits ?? []" :key="habit.id" class="team-habit-row">
-                  <span class="team-habit-icon">{{ habit.icon || '🎯' }}</span>
+                  <span class="team-habit-icon"><AppIcon :name="habitIconName(habit.icon)" :size="19" /></span>
                   <div class="team-habit-copy">
                     <strong>{{ habit.name }}</strong>
-                    <small>{{ habit.description || 'Misión diaria del equipo' }} · Meta: {{ habit.targetDays }} días</small>
+                    <small>{{ habit.description || 'Hábito del equipo' }}</small>
                   </div>
-                  <span class="habit-check-state" :class="{ complete: habit.checks[me?.id ?? '']?.done }">
-                    {{ habit.checks[me?.id ?? '']?.done ? 'Hecho' : 'Pendiente' }}
-                  </span>
+                  <span v-if="habit.joined" class="habit-check-state complete">En tu aventura</span>
                   <div v-if="isAdmin" class="habit-actions">
                     <button class="edit-habit" @click="openEditor(habit)">
                       <AppIcon name="settings" :size="14" />Editar
@@ -494,45 +931,82 @@ async function handleLeaveGroup() {
                 </article>
               </section>
 
-              <section class="game-panel team-roster">
-                <div class="game-title">
-                  <h2>Equipo</h2>
-                  <small>{{ group.members.length }} miembros</small>
-                </div>
-                <article
-                  v-for="m in group.members"
-                  :key="m.id"
-                  class="roster-member"
-                >
-                  <CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="35" />
-                  <span class="roster-member-copy">
-                    {{ nameOf(m) }}
-                    <small>{{ m.habit }}</small>
-                    <small class="roster-role" :class="{ leader: m.role === 'ADMIN' }">
-                      {{ m.role === 'ADMIN' ? 'Admin' : 'Miembro' }}
-                    </small>
-                  </span>
-                  <span class="roster-member-progress">
-                    <span class="roster-member-check" :class="{ complete: m.checkedInToday }">
-                      <AppIcon :name="m.checkedInToday ? 'check' : 'clock'" :size="13" />
-                      {{ m.checkedInToday ? 'Completado' : 'Pendiente' }}
+              <section
+                class="reminder midnight-countdown-card"
+                :class="pending.length ? 'is-danger' : 'is-complete'"
+                role="status"
+                aria-live="polite"
+              >
+                <div class="midnight-countdown-info">
+                  <div class="midnight-countdown-head">
+                    <span class="midnight-countdown-badge">
+                      <AppIcon :name="pending.length ? 'clock' : 'check'" :size="22" />
                     </span>
-                    <span class="roster-member-streak">
-                      <AppIcon name="flame" :size="13" />
-                      {{ m.streak }} {{ m.streak === 1 ? 'día' : 'días' }} de racha
-                    </span>
-                  </span>
-                </article>
-              </section>
+                    <div>
+                      <small class="midnight-countdown-kicker">
+                        {{ pending.length ? 'CIERRE DIARIO · 12:00 A. M. · VIDA EN RIESGO' : 'EQUIPO COMPLETO · REINICIO A LAS 12:00 A. M.' }}
+                      </small>
+                      <h3>
+                        {{
+                          pending.length
+                            ? pending.length === 1
+                              ? 'Falta 1 miembro por registrar su hábito hoy'
+                              : `Faltan ${pending.length} miembros por registrar su hábito hoy`
+                            : '¡Todos registraron su hábito hoy!'
+                        }}
+                      </h3>
+                    </div>
+                  </div>
 
-              <div class="reminder">
-                <AppIcon :name="pending.length ? 'clock' : 'shield'" :size="20" />
-                <span>{{ alert }}</span>
-              </div>
+                  <div v-if="pending.length" class="midnight-pending-list">
+                    <span class="midnight-pending-label">Pendientes antes de las 12:00 a. m.:</span>
+                    <div class="midnight-pending-chips">
+                      <span v-for="m in pending" :key="m.id" class="midnight-pending-chip">
+                        <CharacterIcon
+                          :character="characters.forMember(m.id, m.isCurrentUser, m.name)"
+                          :size="24"
+                        />
+                        <strong>{{ nameOf(m) }}</strong>
+                        <button v-if="canPokeMember(m)" type="button" class="streak-poke-button countdown-poke"
+                          :disabled="sentPokes.has(pokeKey(m.id))" :aria-label="'Dar toque a ' + nameOf(m)" @click="openPokeDialog(m)">
+                          <PokePaw />{{ sentPokes.has(pokeKey(m.id)) ? 'Enviado' : 'Dar toque' }}
+                        </button>
+                        <em v-else>Pendiente</em>
+                      </span>
+                    </div>
+                  </div>
+                  <p v-else class="midnight-complete-copy">
+                    La vida del grupo está protegida hoy. El nuevo día comienza a medianoche.
+                  </p>
+                </div>
+
+                <div
+                  class="midnight-clock-box"
+                  :aria-label="`Tiempo restante hasta las 12 de la medianoche: ${hours} horas, ${minutes} minutos y ${seconds} segundos`"
+                >
+                  <span class="midnight-clock-label">CUENTA REGRESIVA · 12:00 A. M.</span>
+                  <div class="midnight-clock-digits">
+                    <div class="clock-unit">
+                      <strong>{{ String(hours).padStart(2, '0') }}</strong>
+                      <small>HORAS</small>
+                    </div>
+                    <span class="clock-sep">:</span>
+                    <div class="clock-unit">
+                      <strong>{{ String(minutes).padStart(2, '0') }}</strong>
+                      <small>MIN</small>
+                    </div>
+                    <span class="clock-sep">:</span>
+                    <div class="clock-unit">
+                      <strong>{{ String(seconds).padStart(2, '0') }}</strong>
+                      <small>SEG</small>
+                    </div>
+                  </div>
+                </div>
+              </section>
             </div>
 
             <!-- Chat en modo Minimizado (como estaba antes, debajo del valle) -->
-            <section v-if="isChatOpen && !isChatExpanded" class="adventure-chat compact-chat">
+            <section v-if="!group.archivedAt && isChatOpen && !isChatExpanded" class="adventure-chat compact-chat">
               <GroupChat
                 :group="group"
                 :alert="null"
@@ -545,24 +1019,46 @@ async function handleLeaveGroup() {
           </div>
         </div>
 
-        <!-- Chat en modo Grande Slideado al lado derecho -->
-        <aside v-if="isChatOpen && isChatExpanded" class="adventure-chat expanded-side-chat">
-          <GroupChat
-            :group="group"
-            :alert="null"
-            :expanded="true"
-            @close="isChatOpen = false"
-            @toggle-expand="isChatExpanded = false"
-            @send="send"
-          />
+        <aside class="group-side-panels">
+          <section v-if="isChatOpen && isChatExpanded" class="adventure-chat expanded-side-chat">  
+            <GroupChat  
+              :group="group"  
+              :alert="null"  
+              :expanded="true"  
+              @close="isChatOpen = false"  
+              @toggle-expand="isChatExpanded = false"  
+              @send="send"  
+            />  
+          </section>
+          <button type="button" class="roster-toggle" :aria-expanded="isRosterOpen"
+            aria-controls="group-roster" @click="isRosterOpen = !isRosterOpen">
+            <AppIcon name="users" :size="15" />
+            {{ isRosterOpen ? 'Ocultar miembros' : 'Ver miembros' }}
+          </button>
+          <section v-show="isRosterOpen" id="group-roster" class="game-panel team-roster side-roster group-roster">  
+            <div class="game-title">  
+              <h2><AppIcon name="users" :size="18" />Miembros ({{ group.members.length }}/20)</h2>  
+            </div>  
+            <div class="roster-list">  
+              <article v-for="m in group.members" :key="m.id" class="roster-member">  
+                <CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="36" />  
+                <span class="roster-member-copy">  
+                  <strong>{{ nameOf(m) }}</strong>  
+                  <small>{{ m.role === 'ADMIN' ? 'Admin' : 'Miembro' }}</small>  
+                  <small :class="{ 'roster-done': m.checkedInToday && !m.isFallen }">  
+                    {{ m.isFallen ? 'Caído' : m.checkedInToday ? 'Al día' : 'Pendiente' }}  
+                  </small>  
+                </span>  
+              </article>  
+            </div>  
+          </section>
         </aside>
       </div>
     </div>
 
     <!-- Modal editar hábito -->
-    <Teleport to="body">
       <div
-        v-if="editing"
+        v-if="editing && isAdmin"
         class="adventure-modal-backdrop"
         @click.self="editing = false"
         @keydown.esc="editing = false"
@@ -579,23 +1075,23 @@ async function handleLeaveGroup() {
           </button>
 
           <header class="mission-hero">
-            <div class="mission-flag" aria-hidden="true">
-              <span><AppIcon name="trophy" :size="31" /></span>
+            <div class="mission-sticker" aria-hidden="true">
+              <AppIcon :name="habitIconName(habitIconDraft)" :size="20" />
             </div>
             <div>
-              <span class="mission-kicker">NUEVA AVENTURA DEL EQUIPO</span>
-              <h2 id="edit-title">{{ editingHabitId ? 'Ajustar misión' : '¡Prepara la próxima misión!' }}</h2>
-              <p>Define el reto y hasta dónde llegará el equipo.</p>
+              <span class="mission-kicker">EL TABLERO DEL EQUIPO</span>
+              <h2 id="edit-title">{{ editingHabitId ? 'Un pequeño ajuste' : 'Una nueva misión' }}</h2>
+              <p>Algo pequeño que puedan repetir cada día.</p>
             </div>
           </header>
 
           <section class="mission-step">
             <span class="mission-step-number">1</span>
             <div class="mission-field">
-              <label for="habit-name">¿Qué hábito quiere conquistar el equipo?</label>
+              <label for="habit-name">¿Qué van a practicar?</label>
               <div class="mission-name-input">
                 <AppIcon name="target" :size="20" />
-                <input id="habit-name" v-model="draft" autofocus maxlength="120" placeholder="Ej. Leer 20 minutos" required />
+                <input id="habit-name" v-model="draft" autofocus maxlength="80" placeholder="Leer 20 minutos" required />
               </div>
             </div>
           </section>
@@ -603,7 +1099,7 @@ async function handleLeaveGroup() {
           <section class="mission-step">
             <span class="mission-step-number">2</span>
             <div class="mission-field">
-              <label>Elige un emblema para el hábito</label>
+              <label>Su insignia</label>
               <div class="habit-icon-options" role="group" aria-label="Icono del hábito">
                 <button
                   v-for="icon in habitIcons"
@@ -615,36 +1111,21 @@ async function handleLeaveGroup() {
                   :aria-pressed="habitIconDraft === icon"
                   @click="habitIconDraft = icon"
                 >
-                  {{ icon }}
+                  <AppIcon :name="icon" :size="21" />
                 </button>
               </div>
-              <small class="habit-icon-note">Tu emblema aparecerá junto al hábito en la aventura.</small>
             </div>
           </section>
 
-          <section class="mission-step">
+          <section class="mission-step mission-description">
             <span class="mission-step-number">3</span>
             <div class="mission-field">
-              <label>Elige la distancia</label>
-              <div class="mission-length-options">
-                <button
-                  v-for="days in missionLengths"
-                  :key="days"
-                  type="button"
-                  class="mission-length-card"
-                  :class="{ selected: targetDaysDraft === days }"
-                  :aria-pressed="targetDaysDraft === days"
-                  @click="targetDaysDraft = days"
-                >
-                  <span class="length-flag"><AppIcon name="flag" :size="18" /></span>
-                  <strong>{{ days }}</strong>
-                  <small>DÍAS</small>
-                  <em>{{ days === 30 ? 'Reto corto' : days === 90 ? 'Gran recorrido' : 'Aventura épica' }}</em>
-                </button>
-              </div>
+              <label for="habit-description">Descripción (opcional)</label>
+              <textarea id="habit-description" v-model="habitDescriptionDraft" maxlength="300" rows="3" />
             </div>
           </section>
 
+          <p v-if="notice" class="dialog-notice" role="alert">{{ notice }}</p>
           <footer class="mission-actions">
             <button type="button" class="game-button secondary" @click="editing = false">
               Cancelar
@@ -663,15 +1144,16 @@ async function handleLeaveGroup() {
         @click.self="editingGroup = false"
         @keydown.esc="editingGroup = false"
       >
-        <form class="adventure-modal group-edit-modal" role="dialog" aria-modal="true" aria-labelledby="group-edit-title" @submit.prevent="saveGroup">
-          <header class="group-edit-hero">
+        <form class="adventure-modal group-edit-modal" :style="{ '--edit-accent': draftBannerTheme.color }" role="dialog" aria-modal="true" aria-labelledby="group-edit-title" @submit.prevent="saveGroup">
+          <header class="group-edit-hero" :style="{ '--edit-banner': `url('${draftBannerTheme.bannerUrl}')`, '--edit-banner-filter': draftBannerTheme.filter ?? 'none', '--edit-accent': draftBannerTheme.color }">
+            <button type="button" class="mission-close" aria-label="Cerrar configuración" @click="editingGroup = false"><AppIcon name="x" :size="19" /></button>
             <span class="group-edit-emblem" :style="{ '--emblem-color': groupColorDraft }">
               <AppIcon :name="groupCategoryIcon" :size="23" />
             </span>
             <div>
-              <small>PERSONALIZA TU CAMPAMENTO</small>
-              <h2 id="group-edit-title">Editar aventura</h2>
-              <p>Ajusta los detalles para que el equipo se sienta como en casa.</p>
+              <small>{{ (groupCategoryDraft || group.category || 'EL CAMPAMENTO').toUpperCase() }} · EDITAR INFORMACIÓN</small>
+              <h2 id="group-edit-title">{{ groupNameDraft.trim() || group.name }}</h2>
+              <p>{{ groupDescriptionDraft.trim() || 'Edita el nombre, categoría, descripción y miembros de tu grupo.' }}</p>
             </div>
           </header>
           <div class="group-edit-content">
@@ -702,9 +1184,14 @@ async function handleLeaveGroup() {
               </div>
               <label for="group-description">Descripción</label>
               <textarea id="group-description" v-model="groupDescriptionDraft" maxlength="200" rows="3" />
-              <span class="color-label">Color del grupo</span>
-              <div class="group-color-options">
-                <button v-for="color in GROUP_COLORS" :key="color" type="button" :aria-label="`Elegir color ${color}`" :aria-pressed="groupColorDraft === color" :class="{ selected: groupColorDraft === color }" :style="{ '--group-color': color }" @click="groupColorDraft = color" />
+              <span class="color-label">Banner y tema del grupo</span>
+              <div class="group-color-options group-banner-options">
+                <button v-for="theme in GROUP_BANNER_THEMES" :key="theme.color" type="button" class="group-banner-option" :aria-label="`Elegir banner ${theme.name}`" :aria-pressed="groupColorDraft === theme.color" :class="{ selected: groupColorDraft === theme.color }" :style="{ '--group-color': theme.color, '--swatch-banner': `url('${theme.bannerUrl}')`, '--swatch-filter': theme.filter ?? 'none' }" @click="groupColorDraft = theme.color">
+                  <span class="group-banner-option-bg" aria-hidden="true"></span>
+                  <span class="group-banner-option-shade" aria-hidden="true"></span>
+                  <span class="group-banner-option-name">{{ theme.name }}</span>
+                  <span v-if="groupColorDraft === theme.color" class="group-banner-option-check"><AppIcon name="check" :size="12" /></span>
+                </button>
               </div>
             </section>
             <section class="group-member-editor">
@@ -712,9 +1199,9 @@ async function handleLeaveGroup() {
               <span class="group-member-title-icon"><AppIcon name="user" :size="17" /></span>
               <span class="group-member-title-copy">
                 <strong>Miembros del equipo</strong>
-                <small>Selecciona a alguien para gestionar su acceso</small>
+                <small>Roles y acceso al grupo</small>
               </span>
-              <small>{{ group.members.length }} en la aventura</small>
+              <small>{{ group.members.length }} {{ group.members.length === 1 ? 'miembro' : 'miembros' }}</small>
             </div>
             <div class="group-member-list">
               <button
@@ -745,6 +1232,9 @@ async function handleLeaveGroup() {
             >
               <p>Gestionando a <strong>{{ nameOf(selectedMember) }}</strong></p>
               <div>
+                <button v-if="selectedMember.isFallen" type="button" class="member-role-button" @click="reviveMember(selectedMember.id)">
+                  <AppIcon name="flame" :size="15" />Revivir
+                </button>
                 <button type="button" class="member-role-button" @click="toggleMemberRole(selectedMember)">
                   <AppIcon name="shield" :size="15" />
                   {{ selectedMember.role === 'ADMIN' ? 'Quitar admin' : 'Dar admin' }}
@@ -759,6 +1249,7 @@ async function handleLeaveGroup() {
             </p>
             </section>
           </div>
+          <p v-if="notice" class="dialog-notice" role="status">{{ notice }}</p>
           <div class="group-edit-actions">
             <button type="button" class="game-button secondary" @click="editingGroup = false">Cancelar</button>
             <button class="game-button" type="submit" :disabled="saving || groupNameDraft.trim().length < 3">{{ saving ? 'Guardando…' : 'Guardar cambios' }}</button>
@@ -773,8 +1264,12 @@ async function handleLeaveGroup() {
         @click.self="confirmingLeave = false"
         @keydown.esc="confirmingLeave = false"
       >
-        <div class="adventure-modal" role="dialog" aria-modal="true" aria-labelledby="leave-title">
-          <h2 id="leave-title">¿Salir de «{{ group.name }}»?</h2>
+        <div class="adventure-modal leave-modal" role="dialog" aria-modal="true" aria-labelledby="leave-title">
+          <button type="button" class="mission-close" aria-label="Cerrar" @click="confirmingLeave = false"><AppIcon name="x" :size="19" /></button>
+          <span class="leave-character"><AdventureCharacter :character="characters.forMember(me?.id ?? '', true, me?.name ?? '')" :size="90" /></span>
+          <small class="mission-kicker">UNA PAUSA EN EL CAMINO</small>
+          <h2 id="leave-title">¿Te vas del equipo?</h2>
+          <strong class="leave-group-name">{{ group.name }}</strong>
           <p class="leave-copy">
             <template v-if="group.members.length === 1">
               Como eres la única persona, el grupo quedará archivado y dejará de aparecer en tu inicio. Tu progreso guardado se conserva.
@@ -784,9 +1279,10 @@ async function handleLeaveGroup() {
               Podrás pedir acceso de nuevo con el código <strong>{{ group.inviteCode }}</strong>.
             </template>
           </p>
-          <div>
+          <p v-if="notice" class="dialog-notice" role="alert">{{ notice }}</p>
+          <div class="leave-actions">
             <button type="button" class="game-button secondary" @click="confirmingLeave = false">
-              Cancelar
+              Me quedo
             </button>
             <button type="button" class="game-button danger-btn" @click="handleLeaveGroup">
               <AppIcon name="logout" :size="15" />
@@ -795,7 +1291,6 @@ async function handleLeaveGroup() {
           </div>
         </div>
       </div>
-    </Teleport>
   </div>
   <div v-else class="game-page">
     <RouterLink :to="{ name: 'inicio' }" class="game-button">Volver a Inicio</RouterLink>
@@ -1301,31 +1796,17 @@ async function handleLeaveGroup() {
 }
 
 .player-name {
-  display: flex;
-  gap: 6px;
-  align-items: center;
+  display: block;
   max-width: 160px;
   overflow-wrap: anywhere;
-  padding: 6px 9px;
-  border-radius: 7px;
-  background: #f3eed9;
-  border: 2px solid #8b9876;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.player-name b {
-  font-size: 6px;
-  background: #a58aca;
-  color: white;
-  border-radius: 3px;
-  padding: 3px;
-}
-
-.player.selected .player-name {
-  background: #59476d;
-  border-color: #e3c9f5;
-  color: #fff0fe;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fbf5e6;
+  color: #2d2634;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .player:hover :deep(.adventure-character) {
@@ -2958,7 +3439,7 @@ async function handleLeaveGroup() {
 
 .group-edit-content {
  display: grid;
- grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+ grid-template-columns: repeat(2, minmax(0, 1fr));
  align-items: start;
  gap: 18px;
  min-height: 0;
@@ -3039,8 +3520,8 @@ async function handleLeaveGroup() {
 .group-edit-settings .color-label {
  margin: 3px 0 -4px;
  color: #e7d9f1;
- font-size: 10px;
- font-weight: 850;
+ font-size: 12px;
+ font-weight: 750;
 }
 
 .group-edit-settings > input,
@@ -3064,14 +3545,16 @@ async function handleLeaveGroup() {
 }
 
 .group-member-editor {
- gap: 12px;
+ gap: 11px;
  align-self: start;
 }
 
 .group-member-heading {
- justify-content: flex-start;
- flex-wrap: nowrap;
- padding-bottom: 12px;
+ display: grid;
+ grid-template-columns: 42px minmax(0, 1fr) auto;
+ align-items: center;
+ gap: 11px;
+ padding-bottom: 13px;
  border-bottom: 1px solid #493753;
 }
 
@@ -3082,12 +3565,14 @@ async function handleLeaveGroup() {
 }
 
 .group-member-heading .group-member-title-copy {
- flex: 1;
+ display: grid;
+ gap: 4px;
+ min-width: 0;
 }
 
 .group-member-heading > small {
- flex: 0 0 auto;
- margin-left: auto;
+ margin: 0;
+ white-space: nowrap;
  padding: 5px 8px;
  color: #d7c3e8;
  background: #392b45;
@@ -3175,14 +3660,6 @@ async function handleLeaveGroup() {
    padding: 13px;
  }
 
- .group-member-heading {
-   flex-wrap: wrap;
- }
-
- .group-member-heading > small {
-   margin-left: 53px;
- }
-
  .group-edit-settings,
  .group-member-editor {
    padding: 13px;
@@ -3202,4 +3679,1603 @@ async function handleLeaveGroup() {
    flex: 1;
  }
 }
+
+/* Una sola misión diaria: los hábitos son objetivos y el jugador entrega energía al equipo. */
+.daily-quest {
+  --quest-accent: #9ed35b;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--quest-accent) 45%, #4d3c5e);
+  border-bottom: 5px solid color-mix(in srgb, var(--quest-accent) 32%, #17101e);
+  border-radius: 18px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--quest-accent) 12%, #2b2135), #211a2b 65%);
+}
+
+.daily-quest.quest-90 { --quest-accent: #5fc7e8; }
+.daily-quest.quest-120 { --quest-accent: #f0a85d; }
+
+.daily-quest-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.quest-rank-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border: 2px solid color-mix(in srgb, var(--quest-accent) 62%, white);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--quest-accent) 25%, #2c2037);
+  box-shadow: inset 0 -5px #0002;
+  font-size: 27px;
+}
+
+.daily-quest-heading div { display: grid; gap: 2px; }
+.daily-quest-heading small { color: var(--quest-accent); font-size: 9px; font-weight: 900; letter-spacing: .08em; }
+.daily-quest-heading strong { color: #fff; font-size: 14px; }
+.daily-quest-heading span:last-child { color: #bcaec8; font-size: 10px; }
+
+.quest-objectives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 14px 0 11px;
+}
+
+.quest-objectives > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #5a4768;
+  border-radius: 10px;
+  background: #1b1522;
+  color: #cfc4d8;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.quest-objectives > span.complete {
+  border-color: var(--quest-accent);
+  color: #fff;
+  background: color-mix(in srgb, var(--quest-accent) 17%, #1b1522);
+}
+
+.quest-energy-track {
+  height: 9px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 2px solid #130e18;
+  border-radius: 99px;
+  background: #100c15;
+}
+
+.quest-energy-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--quest-accent), color-mix(in srgb, var(--quest-accent) 62%, white));
+  box-shadow: 0 0 12px var(--quest-accent);
+  transition: width .35s ease;
+}
+
+.daily-quest .checkin-button { width: 100%; min-height: 52px; }
+
+.mission-board-title { display: flex; align-items: center; gap: 10px; }
+.mission-board-title > span { font-size: 29px; }
+.mission-board-title > div { display: grid; gap: 1px; }
+.mission-board-title small { color: #9ed35b; font-size: 9px; font-weight: 900; letter-spacing: .08em; }
+.mission-board-title h2 { margin: 0; }
+.mission-board-copy { margin: -3px 0 14px; color: #b9a9c5; font-size: 11px; }
+.mission-board-90 .mission-board-title small { color: #5fc7e8; }
+.mission-board-120 .mission-board-title small { color: #f0a85d; }
+.mission-board-30 { box-shadow: inset 4px 0 #9ed35b; }
+.mission-board-90 { box-shadow: inset 4px 0 #5fc7e8; }
+.mission-board-120 { box-shadow: inset 4px 0 #f0a85d; }
+
+@media(max-width:700px) {
+  .daily-quest { padding: 14px; }
+  .daily-quest-heading { align-items: flex-start; }
+  .quest-rank-icon { width: 44px; height: 44px; font-size: 23px; }
+}
+
+.adventure-body.side-chat-active { grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; }
+.expanded-side-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 195px);
+  min-height: 560px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.expanded-side-chat > :last-child { min-height: 0; flex: 1; overflow: hidden; border-radius: 17px; }
+.side-roster {
+  display: grid;
+  gap: 8px;
+  padding: 15px;
+  flex: 0 0 auto;
+  border-color: #6c4e7f;
+  background: linear-gradient(145deg, #32233e, #251a30);
+}
+
+.side-roster .game-title { margin: 0 0 4px; }
+.side-roster .game-title h2 { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.side-roster .game-title svg { color: #d5b2ef; }
+.side-roster .roster-member {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #554064;
+  border-bottom: 3px solid #1a1221;
+  border-radius: 12px;
+  background: #2a2035;
+}
+
+.side-roster .roster-member-copy { display: grid; flex: 1; min-width: 0; gap: 4px; font-size: 11px; }
+.side-roster .roster-role { width: fit-content; margin: 0; }
+.side-roster .roster-member-check { padding: 5px 7px; font-size: 8px; }
+
+.player-panel {
+  position: relative;
+  overflow: hidden;
+  border-color: #705684;
+  background: radial-gradient(circle at 92% 20%, #ba8dda25, transparent 25%), linear-gradient(120deg, #30243c, #251b31);
+}
+
+.player-panel::after {
+  position: absolute;
+  right: -18px;
+  bottom: -42px;
+  content: '✦';
+  color: #d3b0f3;
+  font-size: 120px;
+  opacity: .12;
+  pointer-events: none;
+}
+
+.team-habits { padding: 19px; }
+.team-habits .game-title { padding-bottom: 13px; border-bottom: 1px solid #493652; }
+.team-habit-row { border-radius: 14px; }
+.mission-board-title > span { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: #443154; font-size: 22px; }
+
+@media(max-width:1050px) {
+  .adventure-body.side-chat-active { grid-template-columns: minmax(0, 1fr) 285px; }
+}
+
+@media(max-width:860px) {
+  .adventure-status { grid-template-columns: 1fr; gap: 8px; }
+  .adventure-body.side-chat-active { grid-template-columns: 1fr; }
+  .expanded-side-chat { position: static; height: auto; min-height: 0; }
+  .expanded-side-chat > :last-child { min-height: 500px; }
+  .side-roster { order: 0; }
+}
+
+/* Escena compacta para que el valle tenga el peso de una ilustración de campamento. */
+.adventure-page {
+  background:
+    radial-gradient(ellipse at 50% -20%, #6e438340, transparent 48%),
+    linear-gradient(180deg, #1c1429, #120d1c 62%);
+}
+
+.adventure-header {
+  padding: 2px 3px 15px;
+  border-bottom: 1px solid #624374;
+}
+
+.adventure-header h1 { color: #f9e5c5; font-size: 24px; }
+.adventure-header .back { color: #d9aef4; }
+.adventure-header .invite-badge { border-radius: 12px; background: #33203f; border-color: #8955a1; }
+
+.world {
+  height: 276px;
+  border: 2px solid #8c6ca3;
+  border-bottom: 5px solid #26162f;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #4e3f78 0%, #6b568d 42%, #364d6d 43%, #223b4e 100%);
+  box-shadow: 0 12px 25px #0d081b75;
+}
+
+.world-hud { top: 12px; left: 14px; right: 14px; }
+.world-title {
+  position: relative;
+  min-width: 125px;
+  padding: 9px 12px;
+  color: #56364b;
+  background: #f0c991;
+  border-color: #a36e64;
+  border-bottom-color: #7c504f;
+  border-radius: 8px 13px 13px 8px;
+  box-shadow: 0 3px 0 #2a183733;
+}
+.world-title::after { content: '✦'; position: absolute; right: -9px; top: -9px; color: #e8b95b; font-size: 18px; }
+.world-streak, .world-time { padding: 6px 9px; color: #5a3850; background: #fff0d1; border-color: #d09a7d; border-bottom-width: 3px; }
+.world-streak { margin-left: auto; }
+.sun { top: 52px; right: 24%; width: 34px; height: 34px; background: #f6daa0; box-shadow: 0 0 0 9px #f6d79524; }
+.cloud { opacity: .34; top: 78px; background: #cfbfdf; transform: scale(.7); }
+.cloud-two { top: 96px; }
+.mountain { bottom: 59px; height: 148px; background: #394365; opacity: .9; }
+.mountain-two { bottom: 58px; height: 167px; background: #534b78; }
+.mountain-three { bottom: 54px; height: 150px; background: #30395d; }
+.hill { bottom: 0; height: 104px; background: #344d55; }
+.hill-two { bottom: -5px; height: 102px; background: #283f4d; }
+.trail { bottom: -78px; width: 58%; height: 130px; background: #8e9677; box-shadow: 0 -6px 0 #5c7967; }
+.pine { bottom: 58px; transform: scale(.58); transform-origin: bottom; background: #1f494a; }
+.pine-two { transform: scale(.57); }
+.pine-three { bottom: 64px; transform: scale(.36); }
+.camp-flag { right: 9%; bottom: 58px; height: 52px; background: #604447; }
+.camp-flag:after { background: #d85a6c; }
+.flower { bottom: 35px; font-size: 15px; }
+.flower-two { bottom: 30px; }
+.flower-three { bottom: 42px; }
+.world-route { top: 98px; left: 31%; right: 25%; }
+.world-route:before { border-top-color: #e6cbe88c; }
+.route-stop > span { width: 25px; height: 25px; }
+.players { bottom: 40px; }
+.player { transform: scale(.78); transform-origin: bottom center; }
+.world-bottom { min-height: 38px; padding: 8px 13px; background: #1d2938ed; font-size: 9px; }
+.team-lives { transform: scale(.86); transform-origin: right center; }
+
+.camp-tent { position: absolute; left: 43%; bottom: 51px; width: 74px; height: 71px; background: #b56787; clip-path: polygon(50% 0, 100% 100%, 0 100%); filter: drop-shadow(0 4px 0 #332041); }
+.camp-tent::before { content: ''; position: absolute; inset: 11px 11px 0; background: #e09eab; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.camp-tent i { position: absolute; z-index: 1; left: 31px; bottom: 0; width: 15px; height: 30px; background: #38243f; border-radius: 9px 9px 0 0; }
+.camp-lantern { position: absolute; z-index: 2; width: 12px; height: 16px; background: #ffcc78; border: 3px solid #49344a; border-radius: 4px; box-shadow: 0 0 18px #ffca697d; }
+.camp-lantern::before { content: ''; position: absolute; width: 12px; height: 7px; top: -10px; left: -3px; border: 2px solid #49344a; border-bottom: 0; border-radius: 9px 9px 0 0; }
+.lantern-one { left: 35%; top: 70px; }.lantern-two { right: 10%; top: 92px; transform: scale(.76); }
+.firefly { position: absolute; z-index: 3; width: 4px; height: 4px; background: #ffe98e; border-radius: 50%; box-shadow: 0 0 9px 3px #ffe98e80; animation: firefly 2.3s ease-in-out infinite alternate; }
+.firefly-one { left: 37%; bottom: 106px; }.firefly-two { right: 28%; bottom: 96px; animation-delay: .7s; }.firefly-three { left: 20%; bottom: 70px; animation-delay: 1.1s; }
+@keyframes firefly { to { transform: translateY(-8px); opacity: .25; } }
+
+.player-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, .85fr) minmax(250px, 1.15fr);
+  align-items: center;
+  gap: 14px 20px;
+  min-height: 125px;
+  padding: 16px 20px;
+  background: linear-gradient(105deg, #3c2a4d, #4d315e);
+  border-color: #86648f;
+}
+.player-panel .player-detail-heading { grid-column: 1; grid-row: 1; }
+.player-panel .current-habit { grid-column: 1; grid-row: 2; margin: 0; }
+.player-panel .player-metrics, .player-panel .last-message { display: none; }
+.player-panel .daily-quest { grid-column: 2; grid-row: 1 / 3; margin: 0; padding: 0; border: 0; background: transparent; }
+.player-panel .daily-quest-heading { padding-bottom: 7px; }.player-panel .quest-rank-icon { width: 44px; height: 44px; font-size: 23px; }
+.player-panel .quest-objectives { display: none; }.player-panel .quest-energy-track { height: 7px; margin: 8px 0; }
+.player-panel .checkin-button { min-height: 43px; font-size: 12px; }
+.player-panel .check-notice { grid-column: 1 / -1; margin: 0; }
+
+.team-habits { position: relative; padding: 20px; border-color: #79568e; background: linear-gradient(180deg, #33253f, #271d33); }
+.team-habits::before, .team-habits::after { position: absolute; color: #b1d181; opacity: .85; font-size: 25px; pointer-events: none; }
+.team-habits::before { content: '❋'; left: -10px; top: -12px; }.team-habits::after { content: '❋'; right: -7px; bottom: -14px; }
+.mission-board-title > span { transform: rotate(-7deg); background: #83537d; border: 1px solid #b982a5; }
+.team-habit-row { padding: 14px; background: #3b2b49; border-color: #70577b; }
+.team-habit-row:hover { background: #463453; border-color: #9a74a3; }
+
+@media(max-width:860px) {
+  .world { height: 300px; }
+  .player-panel { grid-template-columns: 1fr; }.player-panel .player-detail-heading,.player-panel .current-habit,.player-panel .daily-quest { grid-column: auto; grid-row: auto; }
+  .camp-tent { left: 42%; }.world-route { left: 26%; right: 18%; }
+}
+
+@media(prefers-reduced-motion:reduce) { .firefly { animation: none; } }
+
+/* El orden nuevo usa otra distribución, pero el tema vuelve a definir el ambiente. */
+.adventure-page {
+  background: radial-gradient(ellipse at 88% 0%, color-mix(in srgb, var(--theme-dark) 38%, transparent), transparent 43%), #151520;
+}
+.adventure-header { padding: 0 0 14px; border: 0; }
+.adventure-header h1,
+.adventure-page .game-title h2,
+.adventure-page .mission-board-title h2,
+.adventure-page .player-detail-heading h2 {
+  font-family: 'Baloo 2', var(--font);
+  font-weight: 800;
+  letter-spacing: -.025em;
+}
+.adventure-header h1 { color: #f7f1dd; font-size: clamp(28px, 3vw, 36px); line-height: .95; }
+.adventure-header .back { color: #cdb6de; }
+.adventure-header .invite-badge { background: #302638; border-color: color-mix(in srgb, var(--theme-accent) 45%, #594368); }
+
+.world {
+  height: 360px;
+  background: var(--sky, #b5dccb);
+  border: 3px solid #5e766d;
+  border-bottom: 5px solid #0b1014;
+  border-radius: 19px;
+  box-shadow: 0 5px 0 #0b1014;
+}
+.world-hud { top: 15px; left: 17px; right: 17px; }
+.world-title, .world-streak, .world-time { color: #273f38; background: #f5eed3ef; border-color: #6c8873; border-bottom-color: #617d66; }
+.world-title { min-width: 0; border-radius: 9px; box-shadow: 0 4px 0 #38524716; }
+.world-title::after { content: none; }
+.world-streak, .world-time { padding: 7px 10px; }
+.world-time { transition: background-color .35s, color .35s, box-shadow .35s, transform .35s; }
+.world-time-warning { color: #593718; background: #ffe2a3; border-color: #d59a4c; box-shadow: 0 0 0 3px #ffc96c35; }
+.world-time-urgent { color: #fff7f3; background: #b94b50; border-color: #ef8b75; box-shadow: 0 0 0 4px #ed6a5738, 0 0 22px #ef635b70; animation: countdown-pulse 1.2s ease-in-out infinite; }
+.world-time-complete { color: #354629; background: #d9edb7; border-color: #91b56a; box-shadow: none; }
+@keyframes countdown-pulse { 50% { transform: scale(1.045); filter: brightness(1.12); } }
+.sun { top: 45px; right: 22%; width: 65px; height: 65px; background: #fff0b7; box-shadow: 0 0 0 14px #fff2c72e; }
+.cloud { opacity: 1; top: 88px; background: #eef6e3; transform: none; }.cloud-two { top: 132px; }
+.mountain { bottom: 105px; height: 250px; background: var(--mountain, #82afa0); opacity: 1; }
+.mountain-two { bottom: 95px; height: 280px; background: color-mix(in srgb, var(--mountain, #82afa0) 80%, #fff 20%); }
+.mountain-three { bottom: 105px; height: 310px; background: color-mix(in srgb, var(--mountain, #82afa0) 85%, #244838 15%); }
+.hill { bottom: 0; height: 205px; background: var(--grass, #95b975); }.hill-two { bottom: 5px; height: 185px; background: color-mix(in srgb, var(--grass, #95b975) 80%, #355d40 20%); }
+.trail { bottom: -60px; width: 70%; height: 175px; background: #d5c290; box-shadow: 0 -10px 0 #afbc7c; }
+.pine { bottom: 105px; transform: none; background: #4f7e60; }.pine-two { transform: scale(.9); }.pine-three { bottom: 124px; transform: scale(.55); }
+.camp-flag { right: 12%; bottom: 102px; height: 73px; background: #655742; }.camp-flag:after { background: #b27a85; }
+.flower { bottom: 68px; font-size: 22px; }.flower-two { bottom: 58px; }.flower-three { bottom: 95px; }
+.world-route { top: 119px; left: 22%; right: 25%; }.world-route:before { border-top-color: #f2eed1a1; }.route-stop > span { width: 29px; height: 29px; }
+.players { bottom: 54px; }.player { transform: none; }.world-bottom { min-height: 0; padding: 12px 16px; background: #0d1920dd; font-size: 10px; }.team-lives { transform: none; }
+.camp-tent, .camp-lantern, .firefly { display: none; }
+
+.player-panel { background: #2a2133; border: 0; box-shadow: 0 10px 28px #0e091326; }
+.team-habits { background: #282031; border: 0; box-shadow: 0 10px 28px #0e091326; }
+.team-habits::before, .team-habits::after { content: none; }
+.team-habit-row { background: #30263a; border: 0; box-shadow: inset 0 -1px #ffffff0b; }.team-habit-row:hover { background: #352941; border: 0; }
+.mission-board-title > span { transform: none; background: color-mix(in srgb, var(--theme-accent) 20%, #382b45); border: 0; }
+.side-roster { border: 0; background: #2a2034; box-shadow: 0 10px 24px #0e091326; }
+.side-roster .roster-member { border: 0; background: #33273d; box-shadow: inset 0 -1px #ffffff0c; }
+
+@media(max-width:860px) { .world { height: 410px; } }
+
+/* Ajuste del valle en anchos intermedios: cada capa conserva su propio espacio. */
+.world {
+  height: clamp(330px, 33vw, 390px);
+}
+
+.world-route {
+  top: 102px;
+  left: 23%;
+  right: 23%;
+}
+
+.players {
+  bottom: 92px;
+}
+
+.player {
+  min-width: 94px;
+}
+
+.world-bottom {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 10px 18px;
+  min-height: 68px;
+  padding: 10px 16px;
+}
+
+.world-bottom > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.world-progress {
+  width: min(100%, 310px);
+  min-width: 0;
+}
+
+.team-lives {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  justify-self: end;
+  min-width: 0;
+  gap: 3px 8px;
+}
+
+.lives-caption { max-width: 150px; text-align: right; }
+
+@media(max-width:660px) {
+  .world { height: 340px; }
+  .world-route { top: 34px; left: 14%; right: 14%; }
+  .players { bottom: 84px; }
+  .player { min-width: 72px; transform: scale(.82); transform-origin: bottom center; }
+  .player-bubble { margin-bottom: 14px; }
+  .world-bottom { grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 9px 11px; }
+  .world-progress { width: 100%; }
+  .team-lives { grid-column: 1; grid-row: auto; justify-self: start; }
+  .lives-caption { max-width: none; text-align: left; }
+}
+
+/* Deja aire entre el recorrido, el estado del personaje y la zona de energía. */
+@media(min-width:661px) {
+  .world-route { top: 34px; }
+  .player-bubble { margin-bottom: 14px; }
+}
+
+/* El chat lateral mantiene el espacio para leer y escribir con comodidad. */
+.adventure-body.side-chat-active { grid-template-columns: minmax(0, 1fr) minmax(370px, 410px); gap: 20px; }
+.expanded-side-chat { height: calc(100vh - 130px); min-height: 560px; gap: 14px; }
+.expanded-side-chat > :last-child { min-height: 420px; flex: 1 1 auto; }
+.expanded-side-chat :deep(.chat) { min-height: 0; height: 100%; border-radius: 18px; overflow: hidden; }
+
+@media(max-width:1050px) {
+  .adventure-body.side-chat-active { grid-template-columns: minmax(0, 1fr) 350px; gap: 16px; }
+}
+
+@media(max-width:860px) {
+  .adventure-body.side-chat-active { grid-template-columns: minmax(0, 1fr); }
+  .expanded-side-chat { height: auto; min-height: 0; }
+  .expanded-side-chat > :last-child { min-height: 520px; }
+}
+.player-panel .mission-habits {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.mission-habits ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.mission-habits li > :is(label, span) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #ffffff09;
+  overflow-wrap: anywhere;
+}
+.mission-habits label { cursor: pointer; }
+.mission-habits input { flex-shrink: 0; accent-color: var(--theme-accent); width: 18px; height: 18px; }
+.mission-habits label:has(input:checked) { background: #a6d76525; }
+.mission-habits p { margin: 0; overflow-wrap: anywhere; }
+.mission-note { display: grid; gap: 6px; margin-bottom: 12px; font-size: 12px; }
+.mission-note input {
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #17121e;
+}
+.player .player-bubble {
+  display: grid;
+  text-align: center;
+  max-width: 145px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.player-daily-note {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+.group-header-emblem {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  padding: 0;
+  color: #fff;
+  background: linear-gradient(145deg, var(--emblem-color, #b995db), #30213d);
+  border: 0;
+  border-bottom: 4px solid #1b1123;
+  border-radius: 15px;
+  box-shadow: 0 5px 14px rgba(10, 5, 18, 0.5);
+  cursor: default;
+  transition: transform 0.16s, filter 0.16s;
+}
+.group-header-emblem.editable {
+  cursor: pointer;
+}
+.group-header-emblem.editable:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+.group-brand-copy {
+  min-width: 0;
+}
+.group-brand-copy h1 {
+  margin: 2px 0 0;
+}
+.group-brand-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.group-category-tag {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #d8f39c;
+}
+.group-inline-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #6b4e84;
+  background: #2f233b;
+  color: #e4ccf8;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.group-inline-edit:hover {
+  background: #3d2d4d;
+  border-color: #a982cb;
+  transform: translateY(-1px);
+}
+.adventure-header {
+  position: relative;
+  overflow: hidden;
+  padding: 16px 20px;
+  border-radius: 20px;
+  border: 0;
+  border-bottom: 4px solid #100a19;
+  background: #1d1329;
+  box-shadow: 0 10px 26px rgba(10, 6, 20, 0.5);
+}
+.adventure-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--header-banner);
+  background-size: cover;
+  background-position: center;
+  filter: var(--header-banner-filter, none);
+  z-index: 0;
+}
+.adventure-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    92deg,
+    rgba(16, 10, 26, 0.72) 0%,
+    rgba(16, 10, 26, 0.28) 45%,
+    rgba(16, 10, 26, 0.08) 100%
+  );
+  z-index: 0;
+}
+.adventure-header > * {
+  position: relative;
+  z-index: 1;
+}
+.group-brand-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #c2b3d1;
+  line-height: 1.4;
+}
+.world {
+  position: relative;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 22px;
+  background: #0b0813;
+}
+.world::before {
+  content: '';
+  position: absolute;
+  inset: -4% -4% 34px -4%;
+  background-image: var(--world-bg);
+  background-size: cover;
+  background-position: center bottom;
+  z-index: 0;
+  pointer-events: none;
+}
+.world > .scenery {
+  display: none;
+}
+.world > :not(.scenery) {
+  z-index: 1;
+}
+.world .players {
+  bottom: 63px;
+  max-height: 250px;
+  padding: 16px 14px 0;
+}
+.world .player:nth-child(even) {
+  margin-bottom: 4px;
+}
+.world .player .player-bubble,
+.member-note-cloud {
+  --cloud-bg: #fffdf9;
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 84px;
+  max-width: 170px;
+  margin: 4px 0 14px;
+  padding: 7px 14px;
+  border: 0 !important;
+  border-radius: 18px;
+  background: var(--cloud-bg);
+  color: #2c1f3d;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  filter:
+    drop-shadow(0 3px 0 rgba(25, 16, 40, 0.28))
+    drop-shadow(0 6px 12px rgba(10, 6, 20, 0.18));
+  transition: transform 0.2s ease;
+}
+.world .player.completed .player-bubble {
+  --cloud-bg: #ffffff;
+}
+.world .player:hover .player-bubble {
+  transform: translateY(-2px);
+}
+/* Sin circulitos alrededor: solo la burbuja limpia y las dos bolitas de abajo */
+.world .player .player-bubble::before,
+.member-note-cloud::before {
+  content: none;
+}
+/* Dos bolitas de diálogo abajo */
+.world .player .player-bubble::after,
+.member-note-cloud::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -15px;
+  width: 28px;
+  height: 16px;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(circle at 58% 4px, var(--cloud-bg) 4.8px, transparent 5.5px),
+    radial-gradient(circle at 36% 12px, var(--cloud-bg) 3px, transparent 3.7px);
+  z-index: -1;
+  pointer-events: none;
+}
+.world .player .player-daily-note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  font-size: 10.5px;
+  font-weight: 850;
+  line-height: 1.25;
+  color: #241833;
+}
+.world .player .player-bubble-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8.5px;
+  font-weight: 800;
+  color: #6a5880;
+  line-height: 1.15;
+}
+.world .player.completed .player-bubble-meta {
+  color: #3d6d34;
+}
+.world .player .player-bubble.has-note .player-bubble-meta {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e6f4d2;
+  color: #355e2d;
+  font-size: 8px;
+}
+.member-note-cloud {
+  width: fit-content;
+  min-width: 90px;
+  max-width: 240px;
+  margin: 6px 0 16px !important;
+  padding: 8px 16px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.member-note-cloud::after {
+  left: 22px;
+  transform: none;
+}
+.world .world-bottom {
+  position: absolute;
+  bottom: -3px;
+  left: -3px;
+  right: -3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 47px;
+  padding: 5px 19px 8px;
+  background: linear-gradient(180deg, rgba(16, 12, 26, 0.92), #0b0813 65%);
+  backdrop-filter: blur(8px);
+  border: 0;
+}
+.world .hud-energy-cluster {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  flex: 1;
+}
+.world .hud-energy-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #f6efe2;
+  white-space: nowrap;
+}
+.world .hud-energy-label svg {
+  color: #ffad47;
+}
+.world .hud-energy-label small {
+  color: #c2b6d1;
+  font-size: 10px;
+  font-weight: 700;
+}
+.world .world-progress {
+  width: min(190px, 100%);
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(10, 7, 18, 0.85);
+  border: 0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.65);
+  padding: 1px;
+}
+.world .world-progress > span {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #86e062, #c8ef72);
+  box-shadow: none;
+}
+.world .team-lives {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  padding: 3px 10px 3px 12px;
+  border-radius: 999px;
+  background: rgba(9, 6, 16, 0.72);
+  border: 0;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.55);
+}
+.world .lives-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+  gap: 1px;
+}
+.world .lives-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #efe7fb;
+}
+.world .lives-caption {
+  font-size: 8px;
+  font-weight: 700;
+  color: #b5e4a0;
+}
+.world .team-lives.lives-at-risk .lives-caption {
+  color: #ffd074;
+}
+.world .heart-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.world .life-token {
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+.world .life-token .token-main,
+.world .life-token .token-stem {
+  fill: rgba(255, 255, 255, 0.16);
+  stroke: none;
+}
+.world .life-token .token-spot {
+  fill: rgba(255, 255, 255, 0.08);
+}
+/* Colores vivos estilo barra de videojuego cuando el icono de vida está activo (sin bordes brillantes) */
+.world .life-token.alive {
+  filter: drop-shadow(0 2px 0 rgba(10, 6, 18, 0.85));
+}
+.world .life-token.kind-heart.alive .token-main {
+  fill: #ff567e;
+}
+.world .life-token.kind-heart.alive .token-spot {
+  fill: #ffdce5;
+}
+.world .life-token.kind-mushroom.alive .token-main {
+  fill: #ff5964;
+}
+.world .life-token.kind-mushroom.alive .token-stem {
+  fill: #f6e7c8;
+}
+.world .life-token.kind-mushroom.alive .token-spot {
+  fill: #fff7e6;
+}
+.world .life-token.kind-star.alive .token-main {
+  fill: #ffd447;
+}
+.world .life-token.kind-star.alive .token-spot {
+  fill: #fff6c2;
+}
+.world .life-token.kind-sun.alive .token-main {
+  fill: #ff9f2e;
+}
+.world .life-token.kind-sun.alive .token-spot {
+  fill: #ffe875;
+}
+.world .life-token.kind-flame.alive .token-main {
+  fill: #ff5447;
+}
+.world .life-token.kind-flame.alive .token-spot {
+  fill: #ffdd63;
+}
+/* Estado en riesgo (misión pendiente hoy) */
+.world .life-token.threatened {
+  animation: heart-warning 0.9s ease-in-out infinite alternate;
+}
+/* Banners temáticos del grupo y ventanas con el color profundo de la temática (fucsia/tema del grupo) */
+.adventure-page {
+  --group-soft: color-mix(in srgb, var(--group-accent, #8b5cf6) 66%, #f4ebff);
+  --group-window-bg: color-mix(in srgb, var(--group-accent) 8%, #201b28);
+  --group-card-bg: color-mix(in srgb, var(--group-accent) 11%, #251f2d);
+}
+.adventure-page .team-habits {
+  overflow: hidden;
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--group-window-bg) !important;
+  box-shadow: 0 12px 28px rgba(10, 6, 20, 0.35);
+}
+.adventure-page .team-habits .mission-board-copy {
+  color: #f3e8fb;
+}
+.adventure-page .team-habits > .game-title {
+  position: relative;
+  overflow: hidden;
+  margin: -20px -20px 14px;
+  padding: 18px 20px;
+  min-height: 82px;
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--group-accent, #8b5cf6) 38%, #21152e);
+}
+.adventure-page .team-habits > .game-title::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--group-section-banner);
+  background-size: 103% 238%;
+  background-position: center 49.5%;
+  background-repeat: no-repeat;
+  z-index: 0;
+  pointer-events: none;
+}
+.adventure-page .team-habits > .game-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    92deg,
+    rgba(16, 10, 26, 0.56) 0%,
+    rgba(16, 10, 26, 0.18) 52%,
+    rgba(16, 10, 26, 0.40) 100%
+  );
+  z-index: 0;
+  pointer-events: none;
+}
+.adventure-page .team-habits > .game-title > * {
+  position: relative;
+  z-index: 1;
+}
+.adventure-page .mission-board-title > span {
+  color: #fff;
+  background: linear-gradient(
+    145deg,
+    var(--group-accent, #8b5cf6),
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 38%, #22162f)
+  );
+  box-shadow: 0 5px 14px rgba(10, 5, 18, 0.45);
+}
+.adventure-page .mission-board-title small {
+  color: #f6edff !important;
+  text-shadow: 0 1px 6px rgba(10, 5, 18, 0.85);
+}
+.adventure-page .mission-board-title h2 {
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(10, 5, 18, 0.8);
+}
+.adventure-page .team-habits .game-title > .game-button.add-habit-button {
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--group-accent, #8b5cf6),
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 58%, #1f142b)
+  );
+  border: 0;
+  box-shadow: 0 4px 12px rgba(10, 5, 18, 0.48) !important;
+}
+.adventure-page .team-habit-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--group-surface) !important;
+}
+.adventure-page .team-habit-row > * {
+  position: relative;
+  z-index: 1;
+}
+.adventure-page .team-habit-copy small {
+  color: #f2e6fa;
+}
+.adventure-page .team-habit-row .habit-actions .edit-habit:not(.remove-habit) {
+  background: color-mix(in srgb, var(--group-accent, #8b5cf6) 36%, #241732);
+  color: #f8effd;
+}
+.adventure-page .team-habit-icon {
+  color: #fff;
+  background: linear-gradient(
+    145deg,
+    var(--group-accent, #8b5cf6),
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 38%, #22162f)
+  );
+  border: 0;
+}
+.adventure-page .player-panel {
+  background: var(--group-window-bg) !important;
+}
+.adventure-page .player-panel .mission-habits li > :is(label, span) {
+  background: var(--group-card-bg);
+}
+.adventure-page .side-roster {
+  background: var(--group-window-bg) !important;
+}
+.adventure-page .side-roster .roster-member {
+  background: var(--group-card-bg) !important;
+}
+.adventure-page .player-panel .daily-quest {
+  --quest-accent: var(--group-accent, #9ed35b);
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 0 !important;
+  background: var(--group-surface) !important;
+  color: #fff;
+}
+.adventure-page .player-panel .daily-quest > * {
+  position: relative;
+  z-index: 1;
+}
+.adventure-page .player-panel .daily-quest-heading small {
+  color: var(--group-soft);
+  text-shadow: 0 1px 6px rgba(12, 7, 20, 0.72);
+}
+.adventure-page .player-panel .daily-quest-heading strong {
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(12, 7, 20, 0.72);
+}
+.adventure-page .player-panel .daily-quest-heading span:last-child {
+  color: #f4ecfb;
+  text-shadow: 0 1px 6px rgba(12, 7, 20, 0.68);
+}
+.adventure-page .player-panel .quest-rank-icon {
+  color: #231730 !important;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 56%, #f8f0ff),
+    var(--group-soft)
+  ) !important;
+}
+.adventure-page .player-panel .mission-note {
+  color: #f7f0fd;
+  font-weight: 700;
+  text-shadow: 0 1px 5px rgba(12, 7, 20, 0.65);
+}
+.adventure-page .player-panel .mission-note input {
+  background: rgba(18, 12, 28, 0.64);
+  color: #fff;
+}
+.adventure-page .mission-habits input {
+  accent-color: var(--group-accent, var(--theme-accent));
+}
+.adventure-page .mission-habits label:has(input:checked) {
+  background: color-mix(in srgb, var(--group-accent, #8b5cf6) 22%, rgba(255, 255, 255, 0.05));
+}
+.adventure-page .side-roster .game-title svg {
+  color: var(--group-accent, #d5b2ef);
+}
+/* Armonización completa con el color del grupo (tono suave y luminoso, sin ser chillón) */
+.adventure-page {
+  --group-soft: color-mix(in srgb, var(--group-accent, #8b5cf6) 66%, #f4ebff);
+  --group-surface: var(--group-card-bg);
+}
+.adventure-page .adventure-header .edit-group-trigger {
+  color: #231730;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 56%, #f9f2ff),
+    var(--group-soft)
+  );
+}
+.adventure-page .adventure-header .invite-badge {
+  background: color-mix(in srgb, var(--group-accent, #8b5cf6) 22%, #241932);
+}
+.adventure-page .group-category-tag {
+  color: color-mix(in srgb, var(--group-accent, #8b5cf6) 52%, #ffffff);
+}
+.adventure-page .world-pip {
+  background: var(--group-soft);
+}
+.adventure-page .route-stop.reached > span {
+  background: var(--group-soft);
+  color: #241832;
+  border-color: color-mix(in srgb, var(--group-accent, #efd58a) 35%, #fff);
+  border-bottom-color: color-mix(in srgb, var(--group-accent, #efd58a) 45%, #1c1328);
+}
+.adventure-page .player.own-player .player-name {
+  background: color-mix(in srgb, var(--group-accent) 28%, #fbf5e6);
+}
+.adventure-page .player.selected .player-name {
+  background: color-mix(in srgb, var(--group-accent) 55%, #fbf5e6);
+}
+.adventure-page .world .player.completed .player-bubble-meta {
+  color: color-mix(in srgb, var(--group-accent, #3d6d34) 68%, #221730);
+}
+.adventure-page .world .player .player-bubble.has-note .player-bubble-meta {
+  background: color-mix(in srgb, var(--group-accent, #8b5cf6) 22%, #f5f0fb);
+  color: color-mix(in srgb, var(--group-accent, #8b5cf6) 72%, #1c1228);
+}
+.adventure-page .world .hud-energy-label svg {
+  color: var(--group-soft);
+}
+.adventure-page .world .world-progress > span {
+  background: linear-gradient(
+    90deg,
+    var(--group-soft),
+    color-mix(in srgb, var(--group-accent, #c8ef72) 45%, #ffffff)
+  );
+}
+.adventure-page .world .lives-caption {
+  color: color-mix(in srgb, var(--group-accent, #b5e4a0) 52%, #ffffff);
+}
+/* Colores de vida por temática del grupo (suaves y luminosos) */
+.adventure-page .world .heart-row[data-theme='pink'] .life-token.alive .token-main {
+  fill: #ff7aa8;
+}
+.adventure-page .world .heart-row[data-theme='pink'] .life-token.alive .token-spot {
+  fill: #ffe3ee;
+}
+.adventure-page .world .heart-row[data-theme='purple'] .life-token.alive .token-main {
+  fill: #c194ff;
+}
+.adventure-page .world .heart-row[data-theme='purple'] .life-token.alive .token-spot {
+  fill: #f5ebff;
+}
+.adventure-page .world .heart-row[data-theme='green'] .life-token.alive .token-main {
+  fill: #5ce092;
+}
+.adventure-page .world .heart-row[data-theme='green'] .life-token.alive .token-stem {
+  fill: #f6e7c8;
+}
+.adventure-page .world .heart-row[data-theme='green'] .life-token.alive .token-spot {
+  fill: #ffffff;
+}
+.adventure-page .world .heart-row[data-theme='amber'] .life-token.alive .token-main {
+  fill: #ffbe4d;
+}
+.adventure-page .world .heart-row[data-theme='amber'] .life-token.alive .token-spot {
+  fill: #fff4b8;
+}
+.adventure-page .world .heart-row[data-theme='blue'] .life-token.alive .token-main {
+  fill: #64ceff;
+}
+.adventure-page .world .heart-row[data-theme='blue'] .life-token.alive .token-spot {
+  fill: #e8f8ff;
+}
+.adventure-page .world .heart-row[data-theme='red'] .life-token.alive .token-main {
+  fill: #ff6b7b;
+}
+.adventure-page .world .heart-row[data-theme='red'] .life-token.alive .token-spot {
+  fill: #ffe580;
+}
+/* Checks del grupo sincronizados con la temática del grupo en tono suave */
+.adventure-page .team-roster .roster-member-check.complete,
+.adventure-page .team-habit-row .habit-check-state.complete {
+  color: #231730;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 54%, #f8f0ff),
+    var(--group-soft)
+  );
+  border-color: transparent;
+}
+.adventure-page .team-habits .game-title > .game-button.add-habit-button {
+  color: #231730;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 54%, #f8f0ff),
+    var(--group-soft)
+  );
+}
+.adventure-page .mission-board-title > span,
+.adventure-page .team-habit-icon {
+  color: #231730;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 58%, #f8f0ff),
+    var(--group-soft)
+  );
+}
+.adventure-page .customize-link {
+  color: var(--group-soft);
+}
+/* Contador grande y notorio al final hasta las 12:00 a. m. (sin bordes, fondo del grupo, solo letras rojas cuando hay pendientes) */
+.adventure-page .midnight-countdown-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 22px 26px;
+  border-radius: 20px;
+  border: 0 !important;
+  box-shadow: 0 10px 28px rgba(10, 6, 20, 0.28) !important;
+  background: var(--group-window-bg) !important;
+  color: #f7f1fc;
+}
+.adventure-page .midnight-countdown-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--group-section-banner);
+  background-size: 103% 238%;
+  background-position: center 49.5%;
+  background-repeat: no-repeat;
+  opacity: 0.56;
+  z-index: 0;
+  pointer-events: none;
+}
+.adventure-page .midnight-countdown-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 36%, rgba(22, 15, 34, 0.50)) 0%,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 42%, rgba(22, 15, 34, 0.64)) 45%,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 38%, rgba(20, 13, 30, 0.74)) 100%
+  );
+  z-index: 0;
+  pointer-events: none;
+}
+.adventure-page .midnight-countdown-card > * {
+  position: relative;
+  z-index: 1;
+}
+.adventure-page .midnight-countdown-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.adventure-page .midnight-countdown-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.adventure-page .midnight-countdown-badge {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 15px;
+  color: #241832;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--group-accent, #8b5cf6) 56%, #f8f0ff),
+    var(--group-soft)
+  );
+}
+.adventure-page .midnight-countdown-kicker {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--group-soft);
+}
+.adventure-page .midnight-countdown-card.is-danger .midnight-countdown-kicker {
+  color: #ff8594;
+}
+.adventure-page .midnight-countdown-head h3 {
+  margin: 3px 0 0;
+  font-family: 'Baloo 2', var(--font);
+  font-size: clamp(19px, 2.1vw, 24px);
+  font-weight: 800;
+  line-height: 1.1;
+  color: #fff;
+}
+.adventure-page .midnight-countdown-card.is-danger .midnight-countdown-head h3 {
+  color: #ff8f9d;
+}
+.adventure-page .midnight-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.adventure-page .midnight-pending-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ff8594;
+}
+.adventure-page .midnight-pending-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.adventure-page .midnight-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
+  border: 0;
+  box-shadow: none;
+  background: rgba(18, 13, 28, 0.58);
+  font-size: 11.5px;
+  color: #f6effb;
+}
+.adventure-page .midnight-pending-chip em {
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0;
+  background: transparent;
+  color: #ff7d8d;
+}
+.adventure-page .midnight-complete-copy {
+  margin: 0;
+  font-size: 12px;
+  color: #ebe2f6;
+}
+.adventure-page .midnight-clock-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 18px;
+  border-radius: 18px;
+  border: 0;
+  box-shadow: none;
+  background: rgba(17, 12, 26, 0.55);
+  flex-shrink: 0;
+}
+.adventure-page .midnight-clock-label {
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: var(--group-soft);
+}
+.adventure-page .midnight-countdown-card.is-danger .midnight-clock-label {
+  color: #ff8594;
+}
+.adventure-page .midnight-clock-digits {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.adventure-page .clock-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 54px;
+  padding: 6px 10px 4px;
+  border-radius: 12px;
+  border: 0;
+  background: color-mix(in srgb, var(--group-accent, #8b5cf6) 24%, #1a1326);
+}
+.adventure-page .clock-unit strong {
+  font-family: 'Baloo 2', var(--font);
+  font-size: clamp(26px, 2.8vw, 34px);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--group-soft);
+}
+.adventure-page .midnight-countdown-card.is-danger .clock-unit strong {
+  color: #ff7a8a;
+}
+.adventure-page .clock-unit small {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.72);
+  margin-top: 2px;
+}
+.adventure-page .clock-sep {
+  font-family: 'Baloo 2', var(--font);
+  font-size: 26px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: -10px;
+}
+.adventure-page .midnight-countdown-card.is-danger .clock-sep {
+  color: #ff7a8a;
+}
+@media (max-width: 760px) {
+  .adventure-page .midnight-countdown-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .adventure-page .midnight-clock-box {
+    width: 100%;
+  }
+}
+@media (max-width: 660px) {
+  .world .world-bottom {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 6px 12px;
+  }
+  .world .players {
+    bottom: 84px;
+  }
+}
+.archived-adventure {
+  display: grid;
+  min-height: calc(100dvh - 112px);
+  max-width: 1250px;
+  margin: 0 auto;
+  align-content: center;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #232429;
+  color: #f1f1f4;
+  text-align: center;
+}
+.archived-scene {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  min-height: clamp(260px, 48vh, 520px);
+  gap: 8px;
+  padding: 24px;
+  filter: grayscale(1);
+  background-image: linear-gradient(#20212755, #232429), var(--group-section-banner);
+  background-position: center;
+  background-size: cover;
+}
+.archived-scene span { padding: 6px 14px; border-radius: 10px; background: #26262c; font-weight: 800; }
+.archived-copy { padding: 8px 24px 40px; }
+.archived-copy h1 { margin: 0; font: 800 clamp(34px, 6vw, 64px)/1.1 'Baloo 2', var(--font); }
+.archived-copy p { max-width: 48ch; margin: 16px auto 26px; color: #d0d0d6; line-height: 1.6; }
+.archived-copy .game-button { background: #e4e4ea; color: #212126; padding: 14px 22px; }
+.penalty-dialog { width: min(430px, calc(100% - 32px)); padding: 26px; border: 0; border-radius: 20px; background: #2d2239; color: #fff3eb; }
+.penalty-dialog::backdrop { background: #120d1cbb; }
+.penalty-dialog p { line-height: 1.55; }
+.adventure-wrap { container: group-layout / inline-size; }
+.adventure-page .adventure-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px clamp(16px, 3vw, 32px);
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 12px 28px #0b081b45;
+}
+.adventure-page .adventure-header::after {
+  background: linear-gradient(95deg, #17131eea, #211b29ab);
+}
+.adventure-page .adventure-header h1 {
+  font-size: clamp(29px, 3.2vw, 43px);
+  line-height: 1.05;
+  color: #fff5ed;
+  overflow-wrap: anywhere;
+}
+.header-identity { min-width: 0; }
+.header-shortcuts { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.group-side-panels .roster-toggle {
+  justify-self: end;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #ffffff08;
+  color: #ded3e4;
+  font-size: 12px;
+}
+.adventure-page .header-actions { gap: 8px; flex-wrap: wrap; justify-content: flex-start; }
+.adventure-page .adventure-header .invite-badge {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px 7px 7px;
+  border: 0;
+  border-radius: 17px;
+  background: #221d2bed;
+  text-align: left;
+}
+.invite-copy-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: #22162a;
+  background: color-mix(in srgb, var(--group-accent) 55%, white);
+}
+.invite-copy-text { display: grid; gap: 3px; }
+.adventure-header .invite-label { color: #f0e3f7; font-size: 11px; }
+.adventure-header .invite-badge strong { color: white; font-size: 15px; letter-spacing: .1em; }
+.invite-fallback { width: 11ch; padding: 9px; border: 0; border-radius: 8px; background: #23192e; text-align: center; }
+.adventure-page .adventure-header .header-actions > .game-button.secondary {
+  min-height: 42px;
+  border-radius: 12px;
+  background: #292433eb;
+  color: #fbf3ff;
+}
+.adventure-page .adventure-header .header-actions > .game-button.edit-group-trigger {
+  background: color-mix(in srgb, var(--group-accent) 55%, white);
+  color: #261b2e;
+}
+@container group-layout (min-width: 950px) {
+  .adventure-page .adventure-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+.world .world-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px 5px 6px;
+  border-radius: 16px;
+  background: #231927e8;
+  color: #ffd6a1;
+}
+.world-streak > span:not(.streak-fire) { display: grid; gap: 3px; }
+.world-streak strong { font-size: 19px; line-height: 1; }
+.world-streak small { color: #f0d4bb; font-size: 10px; }
+.team-celebration { text-align: center; }
+.team-celebration[open] { animation: team-celebration-in .32s ease-out; }
+.team-celebration h2 { margin: 14px 0 0; font: 800 33px/1.05 'Baloo 2', var(--font); }
+.team-celebration-characters { display: flex; justify-content: center; align-items: end; flex-wrap: wrap; gap: 12px; }
+@keyframes team-celebration-in { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .team-celebration[open] { animation: none; } }
+.adventure-body.group-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'main' 'side';
+  gap: 16px;
+  align-items: start;
+}
+.group-columns .adventure-main-col { grid-area: main; min-width: 0; }
+.group-side-panels { grid-area: side; display: grid; gap: 16px; min-width: 0; }
+.group-columns .group-roster {
+  align-content: start;
+  min-width: 0;
+  background: color-mix(in srgb, var(--group-accent) 12%, #231c2c);
+}
+.group-roster .game-title h2 { color: #f5eff8; font-size: 15px; }
+.roster-list { display: grid; gap: 8px; max-height: 230px; overflow-y: auto; }
+.group-roster .roster-member { padding: 10px; }
+.group-roster .roster-member-copy { font-size: 13px; overflow-wrap: anywhere; }
+.group-roster .roster-member-copy small { margin: 0; font-size: 11px; color: #d6c8df; }
+.group-roster .roster-member-copy .roster-done { color: #d0eba3; }
+.group-columns .expanded-side-chat {
+  position: static;
+  height: clamp(560px, 82dvh, 980px);
+  min-height: 0;
+  min-width: 0;
+}
+.group-columns .expanded-side-chat > :last-child { min-height: 0; }
+.group-columns .expanded-side-chat :deep(.messages) { font-size: 13px; }
+.group-columns .expanded-side-chat :deep(.bubble) { font-size: 13px; }
+@container group-layout (min-width: 950px) {
+  .adventure-body.group-columns:is(.roster-open, .side-chat-active) {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 34%);
+    grid-template-areas: 'main side';
+  }
+}
+.adventure-page .player-panel::after { display: none; }
+.adventure-page .player-panel .daily-quest-heading {
+  padding: 12px;
+  border-radius: 14px;
+  background-image: linear-gradient(95deg, #211a2aec, #211a2aa6), var(--group-section-banner);
+  background-size: cover;
+  background-position: center;
+}
+.adventure-page .team-habits > .game-title::before,
+.adventure-page .midnight-countdown-card::before { opacity: .48; }
+.fallen-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0 0 12px; }
+.adventure-page .world .heart-row[data-theme] .life-token.alive .token-main {
+  fill: var(--group-accent);
+}
+.adventure-page .world .heart-row[data-theme] .life-token.alive :is(.token-spot, .token-stem) {
+  fill: color-mix(in srgb, var(--group-accent) 38%, #32263a);
+}
+.adventure-page .world .heart-row[data-theme] .life-token.threatened {
+  animation: none;
+  filter: none;
+}
+.adventure-page .world .heart-row[data-theme] .life-token.alive.threatened .token-main {
+  fill: color-mix(in srgb, var(--group-accent) 27%, #797382);
+  stroke: none;
+}
+.adventure-page .world .heart-row[data-theme] .life-token.alive.threatened :is(.token-spot, .token-stem) {
+  fill: color-mix(in srgb, var(--group-accent) 20%, #57515e);
+}
+.adventure-page .world .team-lives.lives-at-risk .lives-caption { color: var(--group-soft); }
+.adventure-page .check-notice { color: var(--group-soft); }
+
+.scene-pages {
+  position: absolute;
+  inset: 16px auto auto 16px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #211a2e;
+  color: #fff;
+  font-size: 12px;
+}
+.scene-pages button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: #ffffff18;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+}
+.scene-pages button:disabled { opacity: .4; }
+.adventure-page .world .players { inset-inline: 4%; gap: 4px; }
+.adventure-page .world .players .player { min-width: 0; flex: 0 1 120px; }
+.adventure-page .world .players .own-player { order: -1; z-index: 2; }
+.team-celebration-member { display: grid; justify-items: center; position: relative; padding-bottom: 20px; }
+.own-avatar-label { position: absolute; bottom: 0; font-size: 12px; font-weight: 800; color: #e9d5ff; }
+.streak-poke-button{grid-column:1/-1;justify-self:start;display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:7px 17px 7px 8px;margin:0;border:0;border-radius:16px;background:linear-gradient(135deg,color-mix(in srgb,var(--poke-accent) 52%,#fff2fb),color-mix(in srgb,var(--poke-accent) 74%,#fff2fb));color:#22152c;font-size:16px;font-weight:850;box-shadow:0 4px 0 color-mix(in srgb,var(--poke-accent) 54%,#21172d);cursor:pointer}
+.streak-poke-button:enabled:hover{filter:brightness(1.12)}
+.streak-poke-button:disabled{opacity:.65;cursor:default}
+.streak-poke-hand{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:12px;background:#ffffff49}
+.streak-poke-button,.streak-reminder-primary{max-width:100%;overflow-wrap:anywhere}
+.adventure-page{--poke-accent:var(--group-accent)}
+.countdown-poke{min-height:28px;gap:4px;padding:3px 7px;border-radius:8px;font-size:11px;box-shadow:none;white-space:nowrap}
+.countdown-poke :deep(svg){width:16px;height:16px;flex:none}
+.streak-reminder-actions .streak-reminder-primary{gap:7px;background:color-mix(in srgb,var(--poke-accent) 57%,#fff2fb)}
 </style>
+
+<style src="@/assets/styles/group-dialogs.css"></style>

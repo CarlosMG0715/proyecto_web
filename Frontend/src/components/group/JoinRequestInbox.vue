@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
+import AdventureTombstone from '@/components/ui/AdventureTombstone.vue'
 import { CHARACTERS } from '@/stores/characters'
 import { useGroupsStore } from '@/stores/groups'
 import { groupService, type JoinRequest } from '@/services/groupService'
@@ -38,7 +39,7 @@ function openInbox() {
   void refresh()
 }
 
-async function decide(request: JoinRequest, action: 'ACCEPTED' | 'REJECTED') {
+async function decide(request: JoinRequest, action: 'ACCEPTED' | 'REJECTED' | 'EXPELLED') {
   busyId.value = request.id
   error.value = ''
   try {
@@ -78,14 +79,24 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
       <header><strong>Solicitudes de aventura</strong><button type="button" aria-label="Cerrar bandeja" @click="open = false"><AppIcon name="x" :size="15" /></button></header>
       <p v-if="error" class="inbox-error">{{ error }}</p>
       <p v-else-if="!requests.length" class="inbox-empty">No hay solicitudes pendientes.</p>
-      <article v-for="request in requests" :key="request.id" class="request-card">
-        <div class="request-avatar"><CharacterIcon :character="characterFor(request.requester.characterId)" :size="42" /></div>
+      <article v-for="request in requests" :key="request.id" class="request-card" :style="{ '--request-accent': request.group.color ?? '#8b5cf6' }">
+        <div class="request-avatar" :class="{ fallen: request.isReturn }">
+          <CharacterIcon :character="characterFor(request.requester.characterId)" :size="42" />
+          <AdventureTombstone v-if="request.isReturn" class="request-tombstone" :size="29" />
+        </div>
         <div class="request-content">
-          <p><strong>{{ request.requester.name }}</strong> quiere unirse a la aventura</p>
+          <p><strong>{{ request.requester.name }}</strong> {{ request.isReturn ? 'pide volver a la aventura' : 'quiere unirse a la aventura' }}</p>
           <small>{{ request.group.name }}</small>
           <div class="request-actions">
-            <button type="button" class="accept" :disabled="busyId === request.id" @click="decide(request, 'ACCEPTED')">Aceptar</button>
-            <button type="button" class="reject" :disabled="busyId === request.id" @click="decide(request, 'REJECTED')">Rechazar</button>
+            <template v-if="request.isReturn">
+              <button type="button" class="accept" :disabled="busyId === request.id" @click="decide(request, 'ACCEPTED')">Revivir</button>
+              <button type="button" class="reject" :disabled="busyId === request.id" @click="decide(request, 'REJECTED')">Rechazar</button>
+              <button type="button" class="expel" :disabled="busyId === request.id" @click="decide(request, 'EXPELLED')">Expulsar</button>
+            </template>
+            <template v-else>
+              <button type="button" class="accept" :disabled="busyId === request.id" @click="decide(request, 'ACCEPTED')">Aceptar</button>
+              <button type="button" class="reject" :disabled="busyId === request.id" @click="decide(request, 'REJECTED')">Rechazar</button>
+            </template>
           </div>
         </div>
       </article>
@@ -107,13 +118,17 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 .inbox-empty,.inbox-error { margin:0; padding:12px 8px; color:var(--muted); font-size:.82rem; }
 .inbox-error { color:#fb7185; }
 .request-card { display:flex; gap:10px; padding:12px 0; border-top:1px solid var(--border); }
-.request-avatar { width:44px; height:44px; flex:none; display:grid; place-items:center; border-radius:13px; background:var(--surface); }
+.request-avatar { position:relative; width:52px; height:52px; flex:none; display:grid; place-items:center; border-radius:15px; background:color-mix(in srgb,var(--request-accent) 18%,var(--surface)); }
+.request-avatar.fallen { background:color-mix(in srgb,var(--request-accent) 24%,#28222f); }
+.request-avatar.fallen > :deep(.character-icon) { filter:grayscale(.72) brightness(.78); }
+.request-tombstone { position:absolute; right:-5px; bottom:-5px; padding:2px; border-radius:50%; background:var(--bg-sidebar); }
 .request-content { min-width:0; }
 .request-content p { margin:0; font-size:.81rem; line-height:1.4; }
 .request-content small { display:block; margin-top:3px; color:var(--muted); font-size:.72rem; }
-.request-actions { display:flex; gap:7px; margin-top:9px; }
-.request-actions button { padding:6px 10px; border:1px solid var(--border); border-radius:8px; font:inherit; font-size:.72rem; font-weight:700; cursor:pointer; }
+.request-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+.request-actions button { padding:6px 9px; border:0; border-radius:8px; font:inherit; font-size:.72rem; font-weight:700; cursor:pointer; }
 .request-actions button:disabled { opacity:.5; cursor:wait; }
-.accept { background:#b6e3a1; color:#20331b; }
+.accept { background:color-mix(in srgb,var(--request-accent) 62%,#ece5f4); color:#24192d; }
 .reject { background:var(--surface); color:var(--text-soft); }
+.expel { background:#4a2936; color:#f1b8c4; }
 </style>

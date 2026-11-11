@@ -19,3 +19,67 @@
 [data-kordia-theme] .day:hover,[data-kordia-theme] .month-button:hover{border-color:var(--theme-accent)}
 [data-kordia-theme] .week .today>span{outline-color:var(--theme-accent)}
 [data-kordia-theme] .theme-options button:hover{border-color:var(--swatch)}
+
+.personal-theme {
+  --kordia-lavender: #bda7de;
+  --theme-accent: color-mix(in srgb, var(--personal-selected-accent) 78%, var(--kordia-lavender));
+  --theme-companion: #ecd3a5;
+  --theme-motif: '✧';
+  --theme-motif-small: '✦';
+}
+[data-kordia-theme='sprout'] .personal-theme { --theme-companion: #e2b4cd; --theme-motif: '❀'; --theme-motif-small: '✦'; }
+[data-kordia-theme='fox'] .personal-theme { --theme-companion: #dec1a0; --theme-motif: '☀︎'; --theme-motif-small: '✧'; }
+[data-kordia-theme='music'] .personal-theme { --theme-companion: #ddd19e; --theme-motif: '❧'; --theme-motif-small: '✿'; }
+[data-kordia-theme='pilot'] .personal-theme { --theme-companion: #b5cbe0; --theme-motif: '❄︎'; --theme-motif-small: '✦'; }
+[data-kordia-theme='royal'] .personal-theme { --theme-companion: #d9c8a5; --theme-motif: '☾'; --theme-motif-small: '✧'; }
+[data-kordia-theme='cap'] .personal-theme { --theme-companion: #b3d4c9; --theme-motif: '∿'; --theme-motif-small: '✧'; }
+[data-kordia-theme='red'] .personal-theme { --theme-companion: #e8ba9c; --theme-motif: '✶'; --theme-motif-small: '✦'; }
+[data-kordia-theme='pink'] .personal-theme { --theme-companion: #ebc6b4; --theme-motif: '✿'; --theme-motif-small: '❀'; }
+
+.personal-theme :is(.game-page, .inicio-page) {
+  background:
+    radial-gradient(ellipse at 88% 0%, color-mix(in srgb, var(--theme-accent) 18%, transparent), transparent 54%),
+    #171220;
+}
+.personal-theme .game-page .game-panel {
+  background-color: color-mix(in srgb, var(--theme-dark) 15%, #241d30);
+}
+.personal-theme .game-page .game-title h2 > svg,
+.personal-theme .game-page .setting-icon {
+  color: color-mix(in srgb, var(--theme-accent) 72%, #fff);
+}
+.personal-theme .game-page .setting-icon {
+  background: color-mix(in srgb, var(--theme-companion) 12%, #282033);
+}
+.personal-theme :is(.game-header, .heading) { position: relative; isolation: isolate; }
+.personal-theme .theme-ornaments {
+  position: absolute;
+  inset: 0 20%;
+  z-index: -1;
+  pointer-events: none;
+  color: var(--theme-companion);
+}
+.theme-ornaments::before,
+.theme-ornaments::after {
+  position: absolute;
+  font-family: Georgia, serif;
+  line-height: 1;
+}
+.theme-ornaments::before {
+  content: var(--theme-motif);
+  right: 24%;
+  top: 5%;
+  font-size: 47px;
+  opacity: .24;
+  transform: rotate(-14deg);
+}
+.theme-ornaments::after {
+  content: var(--theme-motif-small);
+  right: 16%;
+  top: 60%;
+  font-size: 18px;
+  opacity: .45;
+}
+@media (max-width: 550px) {
+  .personal-theme .theme-ornaments { opacity: .45; }
+}

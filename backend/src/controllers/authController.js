@@ -15,8 +15,26 @@ class AuthController {
         return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
       }
 
-      const user = await authService.register({ name, email, password })
-      res.status(201).json({ message: 'Usuario registrado con éxito', user })
+      const result = await authService.register({ name, email, password })
+      res.status(201).json(result)
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async verifyEmail(req, res, next) {
+    try {
+      await authService.verifyEmail(req.body.token)
+      res.sendStatus(204)
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  async resendVerification(req, res, next) {
+    try {
+      await authService.resendVerification(req.body)
+      res.sendStatus(204)
     } catch (error) {
       next(error)
     }

@@ -7,6 +7,7 @@ const validTimeZone = (value) => {
 }
 
 const createGroupSchema = z.object({
+  replaceArchivedGroupId: z.string().min(1).max(100).optional(),
   // zod limpia espacios, valida formatos y agrega valores por defecto.
   name: z.string().trim().min(3, 'El nombre debe tener al menos 3 caracteres').max(60),
   category: z.string().trim().max(40).default('General'),
@@ -15,7 +16,9 @@ const createGroupSchema = z.object({
   timeZone: z.string().trim().refine(validTimeZone, 'La zona horaria no es válida').default('America/Bogota'),
   inviteCode: z.string().trim().transform((s) => s.toUpperCase())
     .refine((s) => /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(s), 'El código de invitación no tiene el formato válido').optional(),
+  targetDays: z.union([z.literal(30), z.literal(90), z.literal(120)]).default(30),
   initialHabit: z.object({
+    description: z.string().trim().max(300).default(''),
     name: z.string().trim().min(1, 'El grupo debe tener al menos un hábito').max(80),
     icon: z.string().trim().min(1).max(12).default('🎯'),
   }),

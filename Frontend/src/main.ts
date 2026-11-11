@@ -6,6 +6,7 @@ import { router } from './router'
 import { setSessionExpiredHandler } from '@/services/api'
 import { useSessionStore } from '@/stores/session'
 import './assets/styles/styles.css'
+import './assets/styles/surfaces.css'
 
 const app = createApp(App)
 

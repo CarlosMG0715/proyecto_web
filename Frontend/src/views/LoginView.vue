@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // pantalla de acceso y alta; valida campos y delega registro/login al servicio de autenticacion.
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import { useSessionStore } from '@/stores/session'
-import { login, register } from '@/services/authService'
+import { login, register, requiresEmailVerification, resendVerification } from '@/services/authService'
 import kordiaLogo from '@/assets/kordia_logo.png'
 
 const session = useSessionStore()
@@ -16,8 +16,13 @@ const name = ref('')
 const email = ref('')
 const password = ref('')
 const success = ref<string | null>(null)
+const pendingVerificationEmail = ref('')
+const resending = ref(false)
 
 const isRegister = computed(() => mode.value === 'register')
+const canResend = computed(() => !isRegister.value && !!email.value.trim() && !!password.value)
+
+watch(email, () => { pendingVerificationEmail.value = '' })
 
 function toggleMode(): void {
   mode.value = isRegister.value ? 'login' : 'register'
@@ -34,17 +39,50 @@ function getRedirect(): string {
 }
 
 async function onSubmit(): Promise<void> {
+  if (session.isLoading || resending.value) return
   success.value = null
+  const credentials = { email: email.value, password: password.value }
   try {
     if (isRegister.value) {
-      await register({ name: name.value, email: email.value, password: password.value })
-      await login({ email: email.value, password: password.value })
-    } else {
-      await login({ email: email.value, password: password.value })
+      const result = await register({ name: name.value, ...credentials })
+      mode.value = 'login'
+      pendingVerificationEmail.value = credentials.email
+      if (result.verificationSent) {
+        success.value = 'Revisa tu correo y confirma la cuenta para iniciar sesión.'
+      } else {
+        session.setError('La cuenta se creó, pero no pudimos enviar el correo. Puedes pedir otro enlace en un minuto.')
+      }
+      return
     }
+    await login(credentials)
     await router.push(getRedirect())
-  } catch {
-    /* el mensaje ya quedó en session.error */
+  } catch (error) {
+    if (requiresEmailVerification(error)) {
+      pendingVerificationEmail.value = credentials.email
+      return
+    }
+    const message = session.error ?? (error instanceof Error ? error.message : '')
+    if (isRegister.value && /correo electrónico ya está registrado/i.test(message)) {
+      mode.value = 'login'
+      pendingVerificationEmail.value = credentials.email
+      session.setError(null)
+      success.value = 'Esta cuenta ya existe. Ingresa tu contraseña y pulsa “Reenviar verificación” para recibir otro enlace.'
+    }
+  }
+}
+
+async function resend(): Promise<void> {
+  if (!canResend.value || resending.value || session.isLoading) return
+  resending.value = true
+  success.value = null
+  session.setError(null)
+  try {
+    await resendVerification({ email: email.value, password: password.value })
+    success.value = 'Enviamos un enlace nuevo. Revisa tu bandeja de entrada y correo no deseado.'
+  } catch (error) {
+    session.setError(error instanceof Error ? error.message : 'No pudimos reenviar el correo.')
+  } finally {
+    resending.value = false
   }
 }
 </script>
@@ -158,7 +196,7 @@ async function onSubmit(): Promise<void> {
         </div>
 
         <!-- Botón Principal -->
-        <button type="submit" class="submit-btn" :disabled="session.isLoading">
+        <button type="submit" class="submit-btn" :disabled="session.isLoading || resending">
           <span v-if="session.isLoading" class="spinner"></span>
           <span>
             {{
@@ -170,6 +208,10 @@ async function onSubmit(): Promise<void> {
             }}
           </span>
           <AppIcon v-if="!session.isLoading" name="arrow-right" :size="16" />
+        </button>
+
+        <button v-if="canResend" type="button" class="toggle-link" :disabled="resending || session.isLoading" @click="resend">
+          {{ resending ? 'Enviando…' : 'Reenviar correo de verificación' }}
         </button>
 
         <!-- Toggle Modo -->

@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
+import { isAxiosError } from 'axios'
 import { DEMO_GROUPS, toDateKey } from '@/mocks/demoGroups'
 import { useCharacterStore } from './characters'
 import { useSessionStore } from './session'
@@ -13,7 +14,7 @@ import {
   removeGroupMemberRequest,
   sendGroupMessageRequest,
   setGroupMemberRoleRequest,
-  toggleCheckInRequest,
+  setDailyCheckRequest,
   updateGroupRequest,
   updateHabitRequest,
 } from '@/services/groupsService'
@@ -117,6 +118,8 @@ export const useGroupsStore = defineStore('groups', () => {
       completionHistory: remote.completionHistory ?? previous?.completionHistory ?? [0, 0, 0, 0, 0, 0, 0],
       habits: (remote.habits ?? previous?.habits ?? []).map((habit) => ({ ...habit, targetDays: habit.targetDays ?? 30 })),
       timeZone: remote.timeZone ?? previous?.timeZone ?? 'America/Bogota',
+      targetDays: remote.targetDays ?? previous?.targetDays,
+      archivedAt: remote.archivedAt ?? null,
       members: remote.memberships.map((membership) => {
         const old = priorMembers.get(membership.user.id)
         const current = remoteMembers.get(membership.user.id)
@@ -130,6 +133,9 @@ export const useGroupsStore = defineStore('groups', () => {
           daysTotal: current?.daysTotal ?? old?.daysTotal ?? 0,
           streak: current?.streak ?? old?.streak ?? 0,
           checkedInToday: current?.checkedInToday ?? old?.checkedInToday ?? false,
+          dailyReport: current?.dailyReport ?? null,
+          fallenAt: current?.fallenAt ?? null,
+          isFallen: current?.isFallen ?? false,
           isCurrentUser: membership.user.id === session.currentUser?.id,
           isOnline: current?.isOnline ?? old?.isOnline ?? false,
           characterId: membership.user.characterId,
@@ -315,19 +321,37 @@ export const useGroupsStore = defineStore('groups', () => {
   }
 
   const bestStreak = computed<number>(() => {
-    return groups.value.reduce((max, g) => {
+    const dates = [...new Set(checkInHistory.value)]
+      .map((date) => date.slice(0, 10))
+      .sort()
+    const dayMs = 24 * 60 * 60 * 1000
+    let previous = Number.NaN
+    let consecutive = 0
+    let longest = 0
+
+    for (const date of dates) {
+      const day = Date.parse(`${date}T00:00:00Z`)
+      if (!Number.isFinite(day)) continue
+      consecutive = Math.round((day - previous) / dayMs) === 1 ? consecutive + 1 : 1
+      longest = Math.max(longest, consecutive)
+      previous = day
+    }
+
+    const bestInGroups = groups.value.reduce((max, g) => {
       const me = g.members.find((m) => m.isCurrentUser)
       return Math.max(max, me?.streak ?? 0)
     }, 0)
+
+    return Math.max(longest, bestInGroups)
   })
 
   const pendingToday = computed<number>(() => {
-    return groups.value.filter((g) => g.members.some((m) => m.isCurrentUser && !m.checkedInToday))
+    return groups.value.filter((g) => !g.archivedAt && g.members.some((m) => m.isCurrentUser && !m.isFallen && !m.checkedInToday))
       .length
   })
 
   const doneToday = computed<number>(() => {
-    return groups.value.filter((g) => g.members.some((m) => m.isCurrentUser && m.checkedInToday))
+    return groups.value.filter((g) => !g.archivedAt && g.members.some((m) => m.isCurrentUser && !m.isFallen && m.checkedInToday))
       .length
   })
 
@@ -374,37 +398,37 @@ export const useGroupsStore = defineStore('groups', () => {
     return candidate
   }
 
-  async function toggleMyCheckIn(groupId: string): Promise<void> {
-    const rawGroup = allGroups.value.find((g) => g.id === groupId)
-    const me = rawGroup?.members.find((m) => matchesCurrentUser(m))
-    if (!rawGroup || !me) return
+  async function toggleMyCheckIn(groupId: string, habitIds: string[], note: string) {
+    const userId = session.currentUser?.id
+    const before = groupById(groupId)?.members.find((m) => m.id === userId)
+    if (!before) throw new Error('Vuelve a abrir el grupo antes de registrar el aporte.')
+    if (before.isFallen) throw new Error('Necesitas aprobación para volver a la aventura.')
 
-    const habits = rawGroup.habits ?? []
-    if (Array.isArray(rawGroup.habits) && habits.length === 0) {
-      error.value = 'Este grupo todavía no tiene hábitos. Pídele al admin que agregue uno antes del check-in.'
-      throw new Error(error.value)
-    }
-    const shouldComplete = !me.checkedInToday
-    if (habits.length) {
-      try {
-        for (const habit of habits) {
-          const current = Boolean(habit.checks[me.id]?.done)
-          if (current === shouldComplete) continue
-          const result = await toggleCheckInRequest(groupId, habit.id, habit.checks[me.id]?.note ?? '')
-          habit.checks[me.id] = { done: result.done, note: result.note }
+    const result = await setDailyCheckRequest(groupId, !before.checkedInToday, habitIds, note)
+      .catch((cause: unknown) => {
+        if (!isAxiosError<{ error?: string; correlationId?: string }>(cause) || !cause.response) {
+          throw new Error('No se pudo conectar con el servidor. Intenta registrar el aporte de nuevo.')
         }
-        me.checkedInToday = shouldComplete
-      } catch (cause) {
-        error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
-          ?? 'No pudimos guardar el check-in en el servidor.'
-        await refreshRemoteGroups()
-        throw cause
-      }
+        const { status, data } = cause.response
+        if (status < 500 && data?.error) throw new Error(data.error)
+        const reference = data?.correlationId ? ` Referencia: ${data.correlationId}` : ''
+        throw new Error(`El servidor no pudo guardar el aporte (HTTP ${status}).${reference}`)
+      })
+    if (session.currentUser?.id !== userId) return result
+    const rawGroup = allGroups.value.find((g) => g.id === groupId)
+    const me = rawGroup?.members.find((m) => m.id === userId)
+    if (!rawGroup || !me) return result
+
+    const changed = me.checkedInToday !== result.done
+    me.dailyReport = result.report
+    me.checkedInToday = result.done
+    if (!changed) {
+      persistAll()
+      return result
     }
 
     const myData = ensureMyData()
     const todayKey = toDateKey(new Date())
-    if (!habits.length) me.checkedInToday = !me.checkedInToday
 
     if (me.checkedInToday) {
       me.streak += 1
@@ -413,7 +437,6 @@ export const useGroupsStore = defineStore('groups', () => {
         rawGroup.streak,
         Math.min(...rawGroup.members.map((m) => m.streak)),
       )
-      rawGroup.health = Math.min(100, rawGroup.health + 4)
       if (!myData.checkInHistory.includes(todayKey)) {
         myData.checkInHistory.push(todayKey)
       }
@@ -421,13 +444,12 @@ export const useGroupsStore = defineStore('groups', () => {
         id: `act-${Date.now()}`,
         kind: 'check-in',
         groupId,
-        text: `Completaste «${me.habit}» (Racha: ${me.streak} ${me.streak === 1 ? 'día' : 'días'})`,
+        text: `Registraste tu aporte diario en «${rawGroup.name}»`,
         at: new Date().toISOString(),
       })
     } else {
       me.streak = Math.max(0, me.streak - 1)
       me.daysCompleted = Math.max(0, me.daysCompleted - 1)
-      rawGroup.health = Math.max(0, rawGroup.health - 4)
       const stillDoneSomewhere = groups.value.some((g) =>
         g.members.some((m) => m.isCurrentUser && m.checkedInToday),
       )
@@ -436,6 +458,7 @@ export const useGroupsStore = defineStore('groups', () => {
       }
     }
     persistAll()
+    return result
   }
 
   function updateMyHabit(groupId: string, newHabit: string): void {
@@ -484,10 +507,10 @@ export const useGroupsStore = defineStore('groups', () => {
     await refreshRemoteGroups()
   }
 
-  async function createGroupHabit(groupId: string, name: string, icon = '🎯', targetDays: 30 | 90 | 120 = 30): Promise<void> {
+  async function createGroupHabit(groupId: string, name: string, icon = 'target', description = ''): Promise<void> {
     error.value = null
     try {
-      await createHabitRequest(groupId, name, icon, targetDays)
+      await createHabitRequest(groupId, name, icon, description)
       await refreshRemoteGroups()
     } catch (cause) {
       error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -496,11 +519,11 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  async function editGroupHabit(groupId: string, habitId: string, name: string, targetDays: 30 | 90 | 120, icon?: string): Promise<void> {
+  async function editGroupHabit(groupId: string, habitId: string, name: string, description: string, icon?: string): Promise<void> {
     error.value = null
     try {
       const currentIcon = allGroups.value.find((group) => group.id === groupId)?.habits?.find((habit) => habit.id === habitId)?.icon
-      await updateHabitRequest(groupId, habitId, { name, icon: icon ?? currentIcon ?? '🎯', targetDays })
+      await updateHabitRequest(groupId, habitId, { name, icon: icon ?? currentIcon ?? 'target', description })
       await refreshRemoteGroups()
     } catch (cause) {
       error.value = (cause as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -521,7 +544,7 @@ export const useGroupsStore = defineStore('groups', () => {
     }
   }
 
-  function createGroup(payload: CreateGroupPayload, ownerName: string, persisted?: { id: string; inviteCode: string }): Group {
+  function createGroup(payload: CreateGroupPayload, ownerName: string, persisted?: { id: string; inviteCode: string; replacedGroupId?: string }): Group {
     const id = persisted?.id ?? `grp-${Date.now()}`
     const name = payload.name.trim()
     const requestedCode = payload.inviteCode?.trim().toUpperCase()
@@ -571,6 +594,7 @@ export const useGroupsStore = defineStore('groups', () => {
       ],
     }
 
+    allGroups.value = allGroups.value.filter((group) => group.id !== persisted?.replacedGroupId)
     allGroups.value.push(newGroup)
     const myData = ensureMyData()
     myData.activity.unshift({

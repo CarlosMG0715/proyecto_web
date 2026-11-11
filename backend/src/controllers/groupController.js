@@ -1,5 +1,6 @@
 const { prisma } = require('../prisma')
 const groupService = require('../services/groupService')
+const { GROUP_MEMBER_LIMIT, addGroupMember } = require('../services/groupCapacity')
 
 const httpError = (message, status) => Object.assign(new Error(message), { status })
 const selectUser = { id: true, name: true, email: true, characterId: true, themeId: true }
@@ -28,24 +29,42 @@ async function requestJoin(req, res, next) {
       })
     }
     if (!group) return res.status(404).json({ error: 'No encontramos una aventura con ese código' })
+    await groupService.assertActive(group.id)
     const memberCount = await prisma.groupMembership.count({ where: { groupId: group.id } })
     if (memberCount === 0) return res.status(410).json({ error: 'Esta aventura quedó archivada y ya no recibe solicitudes' })
     const userId = req.user.userId
-    if (await prisma.groupMembership.findUnique({ where: { groupId_userId: { groupId: group.id, userId } } })) {
+    const membership = await prisma.groupMembership.findUnique({ where: { groupId_userId: { groupId: group.id, userId } } })
+    if (membership && !membership.fallenAt) {
       return res.status(409).json({ error: 'Ya perteneces a este grupo' })
     }
     const pending = await prisma.groupJoinRequest.findFirst({ where: { groupId: group.id, requesterId: userId, status: 'PENDING' } })
     if (pending) return res.status(200).json({ request: pending, group, alreadyPending: true })
-    const request = await prisma.groupJoinRequest.create({ data: { groupId: group.id, requesterId: userId }, include: { group: { select: { id: true, name: true } } } })
-    return res.status(201).json({ request, group: request.group })
+    const isReturn = Boolean(membership?.fallenAt)
+    if (!isReturn && memberCount >= GROUP_MEMBER_LIMIT) {
+      throw httpError(`Este grupo ya tiene sus ${GROUP_MEMBER_LIMIT} cupos ocupados`, 409)
+    }
+    if (isReturn && !await prisma.groupMembership.count({
+      where: { groupId: group.id, role: 'ADMIN', fallenAt: null, userId: { not: userId } },
+    })) throw httpError('Otro admin debe aprobar tu regreso. Puedes nombrar a otro admin desde el grupo.', 409)
+    const request = await prisma.groupJoinRequest.create({
+      data: { groupId: group.id, requesterId: userId, isReturn },
+    }).catch(async (error) => {
+      if (!isReturn || error.code !== 'P2002') throw error
+      const existing = await prisma.groupJoinRequest.findFirst({
+        where: { groupId: group.id, requesterId: userId, isReturn: true, status: 'PENDING' },
+      })
+      if (!existing) throw error
+      return existing
+    })
+    return res.status(201).json({ request, group })
   } catch (error) { return next(error) }
 }
 
 async function inbox(req, res, next) {
   try {
     const requests = await prisma.groupJoinRequest.findMany({
-      where: { status: 'PENDING', group: { memberships: { some: { userId: req.user.userId, role: 'ADMIN' } } } },
-      include: { group: { select: { id: true, name: true, inviteCode: true } }, requester: { select: selectUser } },
+      where: { status: 'PENDING', requesterId: { not: req.user.userId }, group: { archivedAt: null, memberships: { some: { userId: req.user.userId, role: 'ADMIN', fallenAt: null } } } },
+      include: { group: { select: { id: true, name: true, inviteCode: true, color: true } }, requester: { select: selectUser } },
       orderBy: { createdAt: 'asc' },
     })
     return res.json({ requests })
@@ -62,18 +81,49 @@ async function myRequests(req, res, next) {
 async function decide(req, res, next) {
   try {
     const action = req.body.action
-    if (!['ACCEPTED', 'REJECTED'].includes(action)) return res.status(400).json({ error: 'La decisión debe ser aceptar o rechazar' })
+    if (!['ACCEPTED', 'REJECTED', 'EXPELLED'].includes(action)) return res.status(400).json({ error: 'La decisión no es válida' })
+    const pendingRequest = await prisma.groupJoinRequest.findUnique({
+      where: { id: req.params.requestId }, select: { groupId: true },
+    })
+    if (!pendingRequest) throw httpError('La solicitud ya no existe', 404)
+    await groupService.assertStanding(pendingRequest.groupId, req.user.userId)
+    await groupService.assertActive(pendingRequest.groupId)
     const result = await prisma.$transaction(async (tx) => {
+      // Serializa las decisiones para que dos admins no ocupen el mismo cupo.
+      await tx.$queryRaw`SELECT id FROM groups WHERE id = ${pendingRequest.groupId} FOR UPDATE`
       const request = await tx.groupJoinRequest.findUnique({ where: { id: req.params.requestId }, include: { group: true } })
       if (!request) throw httpError('La solicitud ya no existe', 404)
+      if (request.group.archivedAt) throw httpError('Esta aventura ya terminó', 410)
       const admin = await tx.groupMembership.findUnique({ where: { groupId_userId: { groupId: request.groupId, userId: req.user.userId } } })
-      if (!admin || admin.role !== 'ADMIN') throw httpError('Solo quien administra esta aventura puede responder', 403)
+      if (!admin || admin.role !== 'ADMIN' || admin.fallenAt) throw httpError('Solo un admin en pie puede responder', 403)
+      if (request.requesterId === req.user.userId) throw httpError('Otro admin debe responder tu solicitud', 403)
       if (request.status !== 'PENDING') throw httpError('Esta solicitud ya fue respondida', 409)
-      const updated = await tx.groupJoinRequest.update({ where: { id: request.id }, data: { status: action, decidedAt: new Date(), decidedById: req.user.userId } })
-      if (action === 'ACCEPTED') {
-        await tx.groupMembership.upsert({ where: { groupId_userId: { groupId: request.groupId, userId: request.requesterId } }, update: {}, create: { groupId: request.groupId, userId: request.requesterId, role: 'MIEMBRO' } })
+      if (action === 'EXPELLED' && !request.isReturn) throw httpError('Solo se puede expulsar a un miembro caído', 400)
+      const status = action === 'EXPELLED' ? 'REJECTED' : action
+      const decision = await tx.groupJoinRequest.updateMany({
+        where: { id: request.id, status: 'PENDING' },
+        data: { status, decidedAt: new Date(), decidedById: req.user.userId },
+      })
+      if (!decision.count) throw httpError('Esta solicitud ya fue respondida', 409)
+      if (action === 'EXPELLED') {
+        const removed = await tx.groupMembership.deleteMany({
+          where: { groupId: request.groupId, userId: request.requesterId, fallenAt: { not: null } },
+        })
+        if (!removed.count) throw httpError('La persona ya no está caída en este grupo', 409)
+      } else if (action === 'ACCEPTED' && request.isReturn) {
+        const restored = await tx.groupMembership.updateMany({
+          where: { groupId: request.groupId, userId: request.requesterId, fallenAt: { not: null } },
+          data: { fallenAt: null },
+        })
+        if (!restored.count) throw httpError('La persona ya no puede volver con esta solicitud', 409)
+        await tx.penalty.updateMany({
+          where: { groupId: request.groupId, userId: request.requesterId, status: 'PENDING' },
+          data: { status: 'RESOLVED' },
+        })
+      } else if (action === 'ACCEPTED') {
+        await addGroupMember(tx, request.groupId, request.requesterId)
       }
-      return { request: updated, group: { id: request.group.id, name: request.group.name } }
+      return { request: { ...request, status }, group: { id: request.group.id, name: request.group.name } }
     })
     return res.json(result)
   } catch (error) { return next(error) }
@@ -142,6 +192,25 @@ async function checkIn(req, res, next) {
   catch (error) { return next(error) }
 }
 
+async function dailyCheck(req, res, next) {
+  try {
+    if (typeof req.body?.done !== 'boolean') throw httpError('Indica si completaste el aporte', 400)
+    return res.json(await groupService.setDailyCheck({
+      userId: req.user.userId, groupId: req.params.groupId, done: req.body.done,
+      habitIds: req.body.habitIds, note: req.body.note,
+    }))
+  } catch (error) { return next(error) }
+}
+
+async function joinHabit(req, res, next) {
+  try {
+    await groupService.joinHabit({
+      userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId,
+    })
+    return res.sendStatus(204)
+  } catch (error) { return next(error) }
+}
+
 async function updateCheckInNote(req, res, next) {
   try {
     await groupService.updateCheckInNote({ userId: req.user.userId, groupId: req.params.groupId, habitId: req.params.habitId, ...req.body })
@@ -154,4 +223,4 @@ async function sendMessage(req, res, next) {
   catch (error) { return next(error) }
 }
 
-module.exports = { list: listMine, listMine, create, requestJoin, inbox, myRequests, decide, checkInHistory, getOne, updateGroup, setMemberRole, removeGroupMember, leaveGroup, createHabit, updateHabit, deleteHabit, checkIn, updateCheckInNote, sendMessage }
+module.exports = { list: listMine, listMine, create, requestJoin, inbox, myRequests, decide, checkInHistory, getOne, updateGroup, setMemberRole, removeGroupMember, leaveGroup, createHabit, updateHabit, deleteHabit, checkIn, updateCheckInNote, sendMessage, dailyCheck, joinHabit }

@@ -24,6 +24,7 @@ function errorHandler(error, req, res, _next) {
   )
 
   res.status(status).json({
+    ...(error.publicCode ? { code: error.publicCode } : {}),
     error:
       status >= 500 && process.env.NODE_ENV === 'production'
         ? 'Error interno del servidor'

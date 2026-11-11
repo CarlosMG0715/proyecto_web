@@ -5,6 +5,7 @@ import StreakFlame from '@/components/ui/StreakFlame.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
 import AdventureCharacter from '@/components/ui/AdventureCharacter.vue'
 import { CHARACTERS, CHARACTER_THEMES, useCharacterStore } from '@/stores/characters'
+import { getThemeBackground } from '@/constants/themeBackgrounds'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
 import '@/assets/styles/game-views.css'
@@ -32,9 +33,10 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 </script>
 
 <template>
-  <div class="game-page">
+  <div class="game-page profile-page" :style="{ '--profile-color': characters.theme.color, '--profile-shade': characters.theme.dark }">
     <div class="game-wrap">
       <header class="game-header">
+        <span class="theme-ornaments" aria-hidden="true"></span>
         <div>
           <h1>Perfil</h1>
         </div>
@@ -47,7 +49,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
       <!-- Tarjeta de Identidad y Avatar -->
       <section
         class="identity game-panel"
-        :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color }"
+        :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color, '--theme-bg': `url('${getThemeBackground(characters.theme.id)}')` }"
       >
         <div class="identity-art">
           <div class="avatar-stage">
@@ -83,14 +85,22 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
         id="personalizar"
         class="game-panel personalization"
         :aria-busy="characters.isLoading || characters.isSaving"
-        :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color }"
+        :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color, '--theme-bg': `url('${getThemeBackground(characters.theme.id)}')` }"
       >
         <div class="game-title">
           <h2>Personalizar</h2>
         </div>
 
         <div class="personalization-grid">
-          <div class="character-options">
+          <div class="character-preview">
+            <span class="preview-caption">Así se verá tu avatar en los grupos</span>
+            <AdventureCharacter :character="characters.current" :size="140" />
+            <strong>{{ name }}</strong>
+          </div>
+
+          <div class="character-picker">
+            <h3>Avatar</h3>
+            <div class="character-options">
             <button
               v-for="c in CHARACTERS"
               :key="c.id"
@@ -111,23 +121,16 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
               </span>
               <span v-else>Elegir</span>
             </button>
+            </div>
           </div>
 
-          <div class="character-preview">
-            <span class="preview-caption">EN LA AVENTURA</span>
-            <AdventureCharacter :character="characters.current" :size="112" />
-            <strong>{{ name }}</strong>
-            <span>{{ characters.current.name }}</span>
-          </div>
-        </div>
-
-        <div class="theme-picker">
-          <h3>Tema</h3>
+          <div class="theme-picker">
+          <h3>Tema <span class="active-theme-name">{{ characters.theme.name }}</span></h3>
           <div class="theme-options">
             <button
               v-for="t in CHARACTER_THEMES"
               :key="t.id"
-              :style="{ '--swatch': t.color, '--swatch-dark': t.dark }"
+              :style="{ '--swatch': t.color, '--swatch-dark': t.dark, '--swatch-bg': `url('${getThemeBackground(t.id)}')` }"
               :class="{ chosen: characters.theme.id === t.id }"
               :aria-label="`Tema ${t.name}`"
               :aria-pressed="characters.theme.id === t.id"
@@ -139,6 +142,7 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
               </span>
               <strong>{{ t.name }}</strong>
             </button>
+          </div>
           </div>
         </div>
 
@@ -541,8 +545,52 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 
 .personalization-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 24px;
+  gap: 16px;
+}
+
+.personalization {
+  container: profile-customization / inline-size;
+}
+
+@container profile-customization (min-width: 680px) {
+  .personalization-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .character-preview {
+    grid-column: 1 / -1;
+  }
+
+  .character-picker,
+  .theme-picker {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-template-rows: subgrid;
+    grid-row: 2 / span 3;
+  }
+
+  .character-picker { grid-column: span 3; }
+  .theme-picker { grid-column: span 4; }
+
+  .personalization-grid h3 {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  .personalization-grid :is(.character-options, .theme-options) {
+    grid-column: 1 / -1;
+    grid-row: span 2;
+    grid-template-columns: subgrid;
+    grid-template-rows: subgrid;
+    gap: inherit;
+  }
+
+  .personalization-grid :is(.character-option, .theme-options button) {
+    justify-content: center;
+    border-radius: 12px;
+    padding: 10px 6px;
+  }
 }
 
 .character-options {
@@ -600,24 +648,32 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 }
 
 .character-preview {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   flex-direction: column;
-  gap: 12px;
-  background: linear-gradient(180deg, var(--profile-cover) 0 50%, #4c6548 50% 88%, #354632 88%);
-  border: 2px solid var(--profile-accent);
-  border-bottom: 5px solid #17101f;
+  gap: 8px;
+  min-height: 264px;
+  aspect-ratio: 3 / 1;
+  background: var(--profile-cover);
   border-radius: 13px;
-  padding: 20px;
+  padding: 16px 18px;
   text-align: center;
-  transition: background 0.3s, border-color 0.3s;
+}
+
+.character-preview::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: -1;
+  background: var(--theme-bg) center bottom / cover no-repeat;
 }
 
 .preview-caption {
-  font-size: 8px;
-  letter-spacing: 0.13em;
-  color: #eee1f5;
+  font-size: 12px;
 }
 
 .character-preview strong {
@@ -631,11 +687,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
   overflow-wrap: anywhere;
 }
 
-.character-preview > span:last-child {
-  font-size: 10px;
-  color: #e1ecd4;
-}
-
 .character-saved {
   display: flex;
   align-items: center;
@@ -645,15 +696,10 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
   margin: 16px 0 0;
 }
 
-.theme-picker {
-  margin-top: 25px;
-  padding-top: 23px;
-  border-top: 1px solid #493651;
-}
-
-.theme-picker h3 {
+.personalization-grid h3 {
   font-size: 13px;
-  margin: 0 0 15px;
+  line-height: 24px;
+  margin: 0 0 10px;
 }
 
 .theme-options {
@@ -715,12 +761,6 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
 }
 
 @media (max-width: 800px) {
-  .personalization-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .character-preview {
-    min-height: 240px;
-  }
   .character-option {
     gap: 10px;
     padding: 14px 8px;
@@ -774,4 +814,88 @@ const unlocked = computed(() => milestones.value.filter((m) => m.value >= m.targ
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+.identity-art::before {
+  content: '';
+  position: absolute;
+  inset: -4%;
+  background-image: var(--theme-bg);
+  background-size: cover;
+  background-position: center bottom;
+  opacity: 0.72;
+  z-index: 0;
+}
+.identity-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(20, 14, 32, 0.15) 0%, rgba(20, 14, 32, 0.55) 100%);
+  z-index: 0;
+}
+.character-preview .preview-caption {
+  margin-bottom: auto;
+}
+.preview-caption {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(20, 14, 32, 0.62);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-weight: 800;
+}
+.theme-swatch {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 110px;
+  height: 52px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.38);
+}
+.theme-swatch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--swatch-bg);
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+.theme-swatch > * {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.85));
+}
+.profile-page .identity {
+  background: linear-gradient(112deg, var(--profile-shade), color-mix(in srgb, var(--profile-color) 24%, #221a2e) 65%, #231b30);
+}
+.profile-page .personalization,
+.profile-page .game-stat,
+.profile-page .badge.unlocked {
+  background: color-mix(in srgb, var(--profile-color) 15%, #231c30);
+}
+.profile-page :is(.identity-flame strong, .game-stat > svg, .member-label, .character-saved, .mission-status) {
+  color: color-mix(in srgb, var(--profile-color) 74%, white);
+}
+.profile-page .unlocked .medal {
+  background: var(--profile-color);
+  color: #211628;
+  filter: drop-shadow(0 4px 0 var(--profile-shade));
+}
+.profile-page .game-meter > span {
+  background: linear-gradient(90deg, var(--profile-color), color-mix(in srgb, var(--profile-color) 65%, white));
+}
+.profile-page .theme-options button.chosen {
+  background: color-mix(in srgb, var(--swatch) 28%, #231b30);
+  color: color-mix(in srgb, var(--swatch) 48%, white);
+}
+.active-theme-name {
+  margin-inline-start: 8px;
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--profile-color) 28%, #231b30);
+  color: color-mix(in srgb, var(--profile-color) 65%, white);
+  font-size: 11px;
+}
+
 </style>

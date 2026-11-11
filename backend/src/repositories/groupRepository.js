@@ -10,14 +10,15 @@ const withMembers = {
 }
 
 const groupRepository = {
-  createWithAdmin({ name, category, description, color, timeZone, inviteCode, userId, initialHabit }) {
+  createWithAdmin({ name, category, description, color, timeZone, inviteCode, userId, initialHabit, targetDays }, db = prisma) {
     // crea el grupo y su primera membresia en una sola operacion prisma.
-    return prisma.group.create({
+    return db.group.create({
       data: {
         name, category, description, color, timeZone, inviteCode,
         createdById: userId,
+        targetDays,
         memberships: { create: { userId, role: 'ADMIN' } },
-        habits: { create: { name: initialHabit.name, icon: initialHabit.icon, createdById: userId } },
+        habits: { create: { name: initialHabit.name, icon: initialHabit.icon, description: initialHabit.description, targetDays, createdById: userId } },
       },
       include: withMembers,
     })
@@ -32,10 +33,6 @@ const groupRepository = {
 
   findMembership(groupId, userId) {
     return prisma.groupMembership.findUnique({ where: { groupId_userId: { groupId, userId } } })
-  },
-
-  addMember(groupId, userId) {
-    return prisma.groupMembership.create({ data: { groupId, userId } })
   },
 
   listByUser(userId) {

@@ -1,0 +1,233 @@
+/* Superficies sin marcos. Selectores explícitos para conservar los trazos del
+   escenario, avatares, indicadores de progreso y controles de selección.
+   body también incluye los diálogos que Vue transporta fuera de #app. */
+body :is(
+  .panel, .surface, .game-panel, .game-stat, .game-chip,
+  .auth-card, .header-title-badge, .floating-hero-window,
+  .sidebar, .account, .inbox-panel, .request-card,
+  .guild-modal, .adventure-modal, .mission-modal, .group-edit-modal,
+  .inicio-dialog, .logout-dialog,
+  .group-edit-settings, .group-member-editor, .group-member-actions,
+  .group-member-hint, .group-member-heading, .group-editor-section-title,
+  .group-edit-hero, .group-edit-actions, .mission-hero, .mission-actions,
+  .mission-step, .mission-length-card, .mission-name-input,
+  .habit-icon-option, .group-category-option, .group-member-option,
+  .member-command-card, .group-color-options,
+  .banner-preview, .mode-tabs, .code-showcase, .join-showcase,
+  .matched-group, .code-chip, .unique-pill, .success-badge, .join-success,
+  .world, .world-bottom, .world-title, .world-streak, .world-time,
+  .player-panel, .team-habits, .team-habit-row, .side-roster,
+  .roster-member, .daily-quest, .current-habit, .habit-empty,
+  .compact-chat, .expanded-side-chat, .chat-head, .team-checks,
+  .bubble, .system-msg, .quick-replies, .alert,
+  .setting, .setting-icon, .motion-preview, .control-stat,
+  .badge, .mission, .character-option, .character-preview, .theme-picker,
+  .habit, .new-team, .feed-row, .profile-stats, .monthly,
+  .missing-habit, .day-victory, .reminder, .dialog-notice
+) {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* La elevación separa las ventanas de la página sin dibujar un contorno. */
+body :is(.guild-modal, .adventure-modal, .inicio-dialog, .logout-dialog, .inbox-panel) {
+  box-shadow: 0 24px 72px #08060f66 !important;
+}
+
+/* Botones y campos mantienen sus fondos, tamaños y estados originales. */
+body :is(
+  .game-page, .adventure-page, .guild-modal, .inicio-dialog, .login-card,
+  .logout-dialog, .chat, .inbox-panel
+) :is(button, input:not([type='checkbox']):not([type='radio']):not([type='color']), textarea, select),
+body :is(.btn, .game-button, .game-btn, .month-button) {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body :is(.game-page, .adventure-page, .guild-modal, .inicio-dialog, .logout-dialog, .login-card, .chat, .inbox-panel)
+  :is(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--theme-accent, var(--primary));
+  outline-offset: 4px;
+}
+
+/* Un fondo coloreado señala la elección sin enmarcar todas las opciones. */
+body :is(.character-option.chosen, .group-member-option.selected) {
+  background: color-mix(in srgb, var(--theme-accent, #c4a6f5) 28%, var(--surface-2)) !important;
+}
+body .group-category-option.selected {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--edit-accent, var(--group-accent, var(--theme-accent, #c4a6f5))) 56%, #f9f2ff),
+    color-mix(in srgb, var(--edit-accent, var(--group-accent, var(--theme-accent, #c4a6f5))) 68%, #f1e6ff)
+  ) !important;
+  color: #231730 !important;
+}
+
+body :is(.theme-options button, .group-color-options button, .color-dot).selected,
+body .theme-options button.chosen,
+body .color-dot.active {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+body .theme-options button.chosen {
+  background: color-mix(in srgb, var(--swatch) 24%, var(--surface-2));
+}
+
+body .chat :is(.team-checks > span, .day-sep span, .leader),
+body :is(.player-metrics > div, .profile-stats > div, .team-habits .game-title) {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body .chat :is(.day-sep::before, .day-sep::after) {
+  background: transparent;
+}
+
+/* Acciones principales: volumen por debajo, sin borde luminoso. */
+body .day-celebration {
+  width: min(410px, calc(100vw - 32px));
+  padding: 30px;
+  border: 0;
+  border-radius: 28px;
+  background: #292132;
+  color: #f7effb;
+  text-align: center;
+  box-shadow: 0 28px 90px #08050b80;
+}
+body .day-celebration[open] { animation: celebration-enter .35s ease-out; }
+body .day-celebration::backdrop { background: #0b071ac4; backdrop-filter: blur(7px); }
+.celebration-fire { display: grid; place-items: center; margin: 0 auto 10px; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle, #ee974333, transparent 70%); }
+.day-celebration h2 { margin: 0; font: 800 38px/1.2 'Baloo 2', var(--font); }
+.day-celebration p { font-size: 14px; color: #d4c6df; }
+.celebration-streak { display: grid; gap: 2px; margin: 22px 0 8px; color: #ffca83; }
+.celebration-streak strong { font: 800 64px/1 'Baloo 2', var(--font); }
+.celebration-streak span { font-size: 18px; font-weight: 800; }
+.day-celebration > small { color: #b9a9c6; font-size: 11px; }
+.celebration-continue { width: 100%; margin-top: 26px; padding: 14px; border: 0; border-radius: 14px; background: #ffd18a; color: #422c20; font: 800 22px 'Baloo 2', var(--font); box-shadow: 0 5px #95612f; }
+.celebration-continue:active { transform: translateY(3px); box-shadow: 0 2px #95612f; }
+@keyframes celebration-enter { from { opacity: 0; transform: translateY(20px) scale(.94); } to { opacity: 1; transform: none; } }
+body .adventure-page .player-panel .daily-quest { position: relative; overflow: hidden; padding: 22px; border-radius: 22px; background: color-mix(in srgb, var(--quest-accent) 9%, #261e30); }
+body .adventure-page .daily-quest-heading { gap: 16px; padding-bottom: 14px; }
+body .adventure-page .daily-quest-heading strong { font: 800 24px/1.15 'Baloo 2', var(--font); display: block; margin-top: 6px; }
+body .adventure-page .quest-rank-icon { width: 56px; height: 60px; flex-shrink: 0; border: 0; border-radius: 18px; background: color-mix(in srgb, var(--quest-accent) 22%, #302638); color: var(--quest-accent); }
+body .adventure-page .player-panel .quest-energy-track { height: 10px; margin: 10px 0 20px; border: 0; border-radius: 12px; }
+body .adventure-page .checkin-button .check-button-copy strong { font: 800 23px/1.2 'Baloo 2', var(--font); }
+body .adventure-page .checkin-button .check-button-copy { text-align: center; }
+@media (prefers-reduced-motion: reduce) { body .day-celebration[open] { animation: none; } }
+body .journey-check,
+body .adventure-page .checkin-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 78px;
+  margin: 0 0 7px;
+  padding: 15px 22px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--theme-accent, #c4a6f5);
+  color: #211a2b;
+  box-shadow: 0 7px 0 color-mix(in srgb, var(--theme-accent, #c4a6f5) 40%, #211a2b) !important;
+  font-family: 'Baloo 2', var(--font);
+  font-size: 23px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s, filter .15s;
+}
+body .check-emblem {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #ffffff38;
+  transform: rotate(-6deg);
+}
+body .check-button-copy { display: grid; gap: 5px; text-align: left; }
+body .check-button-copy strong { font: inherit; }
+body .check-button-copy small { font: 600 11px/1.4 var(--font); opacity: .8; }
+body .journey-check:enabled:hover,
+body .adventure-page .checkin-button:enabled:hover { transform: translateY(-2px); filter: brightness(1.06); }
+body .journey-check:enabled:active,
+body .adventure-page .checkin-button:enabled:active {
+  transform: translateY(5px);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--theme-accent, #c4a6f5) 40%, #211a2b) !important;
+}
+body .journey-check.completed { background: #b9d990; color: #273622; box-shadow: 0 5px 0 #597442 !important; }
+body .adventure-page .checkin-button {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--group-accent, var(--theme-accent, #c4a6f5)) 56%, #f9f2ff),
+    color-mix(in srgb, var(--group-accent, var(--theme-accent, #c4a6f5)) 70%, #f1e6ff)
+  );
+  color: #231730;
+  text-shadow: none;
+  box-shadow: 0 6px 0 color-mix(in srgb, var(--group-accent, var(--theme-accent, #c4a6f5)) 48%, #20152e) !important;
+}
+body .adventure-page .checkin-button.completed {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--group-accent, var(--theme-accent, #c4a6f5)) 48%, #f4ebff),
+    color-mix(in srgb, var(--group-accent, var(--theme-accent, #c4a6f5)) 62%, #eadcff)
+  );
+  color: #231730;
+  box-shadow: 0 5px 0 color-mix(in srgb, var(--group-accent, var(--theme-accent, #c4a6f5)) 42%, #1c1329) !important;
+}
+body .journey-check:disabled,
+body .adventure-page .checkin-button:disabled { cursor: default; filter: saturate(.55); }
+body .journey-check:disabled:not(.completed) { opacity: .5; }
+@media (max-width: 600px) {
+  body .journey-check, body .adventure-page .checkin-button { font-size: 21px; padding: 14px; gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .journey-check, body .adventure-page .checkin-button { transition: none; }
+}
+dialog.streak-loss-dialog {
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 18px 22px 22px;
+  border: 0;
+  border-radius: 20px;
+  background: #261e32;
+  color: #fff3eb;
+}
+dialog.streak-loss-dialog::backdrop { background: #120d1cbb; }
+.streak-loss-banner { display: block; width: 100%; max-height: 190px; aspect-ratio: 2.3; object-fit: cover; border-radius: 13px; margin-bottom: 16px; }
+.streak-loss-dialog h2 { margin: 0; font-size: 1.35rem; }
+.streak-loss-dialog p { line-height: 1.55; }
+.streak-loss-dialog form { display: flex; justify-content: flex-end; }
+.streak-loss-dialog .game-button { background: var(--theme-accent, #c4a6f5); color: #21182b; border: 0; }
+dialog.streak-reminder-dialog {
+  width: min(480px, calc(100% - 28px));
+  max-height: calc(100dvh - 28px);
+  box-sizing: border-box;
+  padding: clamp(14px, 4vw, 22px);
+  overflow: auto;
+  border: 0;
+  border-radius: 24px;
+  background: linear-gradient(150deg, #3c294b, #251c31 75%);
+  color: #f6eafa;
+  box-shadow: 0 20px 65px #0d061b9c;
+}
+dialog.streak-reminder-dialog::backdrop { background: #160d21bc; }
+.streak-reminder-dialog > p { margin: 13px 0; color: #ebd9ec; line-height: 1.45; }
+.streak-reminder-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.streak-reminder-actions .streak-reminder-primary,
+.streak-reminder-actions .streak-reminder-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: none;
+}
+.streak-reminder-actions .streak-reminder-primary { background: #ffca87; color: #382039; }
+.streak-reminder-actions .streak-reminder-secondary { background: #ffffff13; color: #f4e2fa; }
+.streak-reminder-actions button:disabled { opacity: .65; }

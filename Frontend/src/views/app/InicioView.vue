@@ -1,54 +1,138 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import StreakFlame from '@/components/ui/StreakFlame.vue'
 import CharacterIcon from '@/components/ui/CharacterIcon.vue'
+import AdventureCharacter from '@/components/ui/AdventureCharacter.vue'
 import { useCharacterStore } from '@/stores/characters'
 import { useCreateGroupModal } from '@/composables/useCreateGroupModal'
+import { getGroupBannerTheme } from '@/constants/groupBanners'
+import { getThemeBackground } from '@/constants/themeBackgrounds'
+import checkLavanda from '@/assets/Botones check/Check_General_Lavanda.png'
+import checkAtardecer from '@/assets/Botones check/Check_General_Atardecer.png'
+import checkBosque from '@/assets/Botones check/Check_General_Bosque.png'
+import checkGlaciar from '@/assets/Botones check/Check_General_Glaciar.png'
+import checkAnochecer from '@/assets/Botones check/Check_General_Anochecer.png'
+import checkLaguna from '@/assets/Botones check/Check_General_Laguna.png'
+import checkVolcan from '@/assets/Botones check/Check_General_Volcan.png'
+import checkFresa from '@/assets/Botones check/Check_General_Fresa.png'
+import { GROUP_CATEGORIES } from '@/constants/groupCategories'
 import { useMidnightCountdown } from '@/composables/useMidnightCountdown'
 import { useGroupsStore } from '@/stores/groups'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
 const characters = useCharacterStore()
+const checkImages = {
+  sprout: checkLavanda, fox: checkAtardecer, music: checkBosque, pilot: checkGlaciar,
+  royal: checkAnochecer, cap: checkLaguna, red: checkVolcan, pink: checkFresa,
+}
 const store = useGroupsStore()
 const modal = useCreateGroupModal()
-const { hours, minutes } = useMidnightCountdown()
+const { hours, minutes, dayKey } = useMidnightCountdown()
 const name = computed(() => session.currentUser?.name ?? 'Valeria')
 const date = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
 const habits = computed(() => store.groups.flatMap(group => {
   const member = group.members.find(m => m.isCurrentUser)
-  return member ? [{ group, member }] : []
+  return member && !group.archivedAt && !member.isFallen ? [{ group, member }] : []
 }))
 const total = computed(() => store.doneToday + store.pendingToday)
 const ready = computed(() => total.value > 0 && !store.pendingToday)
 const progress = computed(() => total.value ? Math.round(store.doneToday / total.value * 100) : 0)
 const claimed = ref(false)
 const missing = ref(false)
-function claim() { if (ready.value) claimed.value = true; else missing.value = true }
+const celebration = ref<HTMLDialogElement | null>(null)
+const personalCheckKey = computed(() => session.currentUser ? `kordia:general-check:${session.currentUser.id}` : '')
+
+watch([dayKey, personalCheckKey], ([today, key]) => {
+  claimed.value = false
+  if (!key) return
+  try {
+    claimed.value = localStorage.getItem(key) === today
+  } catch {
+    // El registro del check general depende del almacenamiento del navegador.
+  }
+}, { immediate: true })
+
+function claim() {
+  if (!ready.value) {
+    missing.value = true
+    return
+  }
+  claimed.value = true
+  if (personalCheckKey.value) {
+    try { localStorage.setItem(personalCheckKey.value, dayKey.value) } catch { /* La celebración sigue disponible. */ }
+  }
+  celebration.value?.showModal()
+}
 const average = computed(() => Math.round(store.weekProgress.reduce((s, d) => s + d.value, 0) / 7))
 const activity = computed(() => store.activity.slice(0, 5))
 function time(at: string) { return new Date(at).toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }
+function teamBannerStyle(color?: string) {
+  const theme = getGroupBannerTheme(color)
+  return {
+    '--team': theme.color,
+    '--team-banner': `url("${theme.bannerUrl}")`,
+    '--team-banner-filter': theme.filter ?? 'none',
+  }
+}
+function categoryIcon(category?: string) {
+  return GROUP_CATEGORIES.find(c => c.label === category)?.icon ?? 'users'
+}
 </script>
 
 <template>
-  <div class="inicio-page"><div class="dashboard">
-    <header class="heading"><div><h1>Hola, {{ name.split(' ')[0] }}<em>.</em></h1></div><span class="date"><AppIcon name="calendar" :size="16" />{{ date }}</span></header>
+  <div class="inicio-page">
+    <Teleport to="body">
+      <dialog :style="{ '--celebration-art': 'url(' + getThemeBackground(characters.theme.id) + ')', '--celebration-color': characters.theme.color }" ref="celebration" class="day-celebration" aria-labelledby="celebration-title">
+        <div class="celebration-fire"><StreakFlame :size="130" /></div>
+        <h2 id="celebration-title">¡Lo lograste!</h2>
+        <p>Completaste tus aportes de hoy.</p>
+        <div class="celebration-streak"><strong>{{ store.bestStreak }}</strong><span>{{ store.bestStreak === 1 ? 'día de racha' : 'días de racha' }}</span></div>
+        <small>Tu mejor racha entre tus equipos</small>
+        <form method="dialog"><button class="celebration-continue">¡A seguir así!</button></form>
+      </dialog>
+    </Teleport>
+    <div class="dashboard">
+    <header class="heading"><span class="theme-ornaments" aria-hidden="true"></span><div><h1>Hola, {{ name.split(' ')[0] }}<em>.</em></h1></div><span class="date"><AppIcon name="calendar" :size="16" />{{ date }}</span></header>
     <div class="columns"><div class="main-column"><div v-if="claimed" class="day-victory" role="status"><StreakFlame :size="58" /><div><strong>Día completado</strong></div><AppIcon name="shield" :size="30" /></div>
-      <section class="daily surface"><div class="daily-top"><div><h2>Progreso de hoy</h2></div><div class="score"><span class="score-label">PROGRESO DIARIO</span><strong>{{ store.doneToday }}<span>/{{ total }}</span></strong><small>hábitos de hoy</small></div></div><div class="track" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100" aria-label="Hábitos completados hoy"><span :style="{ width: `${progress}%` }"></span></div><div class="daily-bottom"><span><i class="dot"></i>{{ ready ? 'Todo listo. Cierra tu día.' : 'Pendientes: ' + store.pendingToday }}</span><span><AppIcon name="clock" :size="13" />{{ hours }} h {{ String(minutes).padStart(2, '0') }} min restantes</span></div></section>
-      <section><div class="section-title"><h2>Hábitos de hoy <b class="count">{{ total }}</b></h2></div><div class="surface habits">
+      <section class="daily surface dashboard-camp" :style="{ '--camp-sky': characters.theme.sky, '--camp-mountain': characters.theme.mountain, '--camp-grass': characters.theme.grass, '--camp-bg': `url('${getThemeBackground(characters.theme.id)}')` }">
+        <div class="camp-copy">
+          <div class="camp-streak">
+            <StreakFlame :size="48" />
+            <div>
+              <span class="camp-label">Tu mejor racha</span>
+              <h2>{{ store.bestStreak }} {{ store.bestStreak === 1 ? 'día' : 'días' }}</h2>
+            </div>
+          </div>
+          <div class="camp-progress-label"><strong>{{ store.doneToday }} de {{ total }}</strong><span>aportes de hoy</span></div>
+          <div class="track" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100" aria-label="Aportes completados hoy"><span :style="{ width: progress + '%' }"></span></div>
+          <div class="daily-bottom"><span><AppIcon :name="ready ? 'check' : 'clock'" :size="15" />{{ ready ? 'Todos tus equipos están al día' : hours + ' h ' + String(minutes).padStart(2, '0') + ' min para medianoche' }}</span></div>
+        </div>
+        <div class="camp-scene" aria-hidden="true">
+          <span class="camp-sun"></span><span class="camp-mountain back"></span><span class="camp-mountain front"></span><span class="camp-ground"></span><span class="camp-path"></span>
+          <span class="camp-flag"><AppIcon name="flag" :size="39" /></span>
+          <div class="camp-character"><AdventureCharacter :character="characters.current" :size="125" :complete="ready" /></div>
+          <span class="camp-character-name">{{ characters.current.name }}</span>
+        </div>
+      </section>
+      <button type="button" class="general-check-art"
+        :aria-label="claimed ? 'Día completado' : 'Check general'" :disabled="claimed || !total" @click="claim">
+        <img :src="checkImages[characters.theme.id]" alt="" />
+        <span v-if="claimed" class="general-check-done"><AppIcon name="check" :size="16" />Día completado</span>
+      </button>
+      <section><div class="section-title"><h2>Tu recorrido de hoy <b class="count">{{ total }}</b></h2></div><div class="surface habits">
         <RouterLink v-for="(h, i) in habits" :key="h.group.id" :to="{ name: 'grupo', params: { groupId: h.group.id } }" class="habit" :class="{ done: h.member.checkedInToday }"><span class="habit-number"><AppIcon v-if="h.member.checkedInToday" name="check" /><template v-else>{{ String(i + 1).padStart(2, '0') }}</template></span><div class="habit-copy"><small>{{ h.group.name }}</small><h3>{{ h.member.habit }}</h3><p>{{ h.member.checkedInToday ? 'Completado · Sumaste a tu equipo' : 'Registra tu avance dentro del grupo' }}</p></div><span class="habit-link"><span>{{ h.member.checkedInToday ? 'Ver grupo' : 'Continuar' }}</span><AppIcon name="arrow-right" :size="16" /></span></RouterLink>
         <div v-if="!habits.length" class="empty"><AppIcon name="target" :size="30" /><h3>Tu primer hábito empieza aquí</h3><p>Crea un grupo y comienza a avanzar en equipo.</p><button class="secondary" @click="modal.open">Crear grupo</button></div>
-        <div class="check-footer"><span><AppIcon name="shield" :size="18" />{{ claimed ? 'Día completado. ¡Bien hecho!' : 'Check diario' }}</span><button class="claim" :disabled="claimed || !total" @click="claim"><AppIcon :name="claimed ? 'check' : 'flame'" :size="16" />{{ claimed ? 'Check completado' : 'Check general' }}</button></div>
       </div></section>
       <section><div class="section-title"><h2>Tus equipos <b class="count">{{ store.groups.length }}</b></h2><div style="display:flex;gap:14px"><button class="text-button" @click="modal.openCreate"><AppIcon name="plus" :size="15" />Crear grupo</button><button class="text-button" @click="modal.openJoin"><AppIcon name="link" :size="15" />Unirme a un grupo</button></div></div><div class="teams">
-        <RouterLink v-for="g in store.groups" :key="g.id" :to="{ name: 'grupo', params: { groupId: g.id } }" class="team surface" :style="{ '--team': g.color }"><div class="team-top"><span class="emblem"><AppIcon name="users" :size="24" /></span><span class="team-streak"><StreakFlame :size="24" />{{ g.streak }} días</span></div><h3>{{ g.name }}</h3><p>{{ g.category }}</p><div class="team-people"><div class="avatars"><template v-for="m in g.members.slice(0, 5)" :key="m.id"><CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="33" /></template></div><AppIcon name="arrow-right" :size="17" /></div><div class="team-track"><span :style="{ width: `${g.members.length ? g.members.filter(m => m.checkedInToday).length / g.members.length * 100 : 0}%` }"></span></div><small>{{ g.members.filter(m => m.checkedInToday).length }} de {{ g.members.length }} completaron hoy</small></RouterLink>
+        <RouterLink v-for="g in store.groups" :key="g.id" :to="{ name: 'grupo', params: { groupId: g.id } }" class="team surface" :class="{ 'team-archived': g.archivedAt }" :style="teamBannerStyle(g.color)"><div class="team-banner-cover"><span class="team-banner-art" aria-hidden="true"></span><span class="team-banner-shade" aria-hidden="true"></span><div class="team-top"><span class="emblem"><AppIcon :name="categoryIcon(g.category)" :size="22" /></span><span v-if="g.archivedAt" class="team-streak">Aventura cerrada</span><span v-else class="team-streak"><StreakFlame :size="22" />{{ g.streak }} días</span></div><h3>{{ g.name }}</h3><p>{{ g.category }}</p></div><div class="team-card-body"><div class="team-people"><div class="avatars"><template v-for="m in g.members.slice(0, 5)" :key="m.id"><CharacterIcon :character="characters.forMember(m.id, m.isCurrentUser, m.name)" :size="33" /></template></div><AppIcon name="arrow-right" :size="17" /></div><div v-if="!g.archivedAt" class="team-track"><span :style="{ width: `${g.members.length ? g.members.filter(m => m.checkedInToday).length / g.members.length * 100 : 0}%` }"></span></div><small v-if="!g.archivedAt">{{ g.members.filter(m => m.checkedInToday).length }} de {{ g.members.length }} completaron hoy</small></div></RouterLink>
         <button class="new-team" @click="modal.open"><span><AppIcon name="plus" :size="24" /></span><strong>Un nuevo equipo</strong></button>
       </div></section>
       <section><div class="section-title"><h2>En comunidad</h2><small class="live"><i class="dot"></i>Actividad de tus equipos</small></div><div class="surface feed"><article v-for="a in activity" :key="a.id" class="feed-row"><span class="feed-icon" :class="a.kind"><AppIcon :name="a.kind === 'check-in' ? 'check' : a.kind === 'streak' ? 'flame' : a.kind === 'join' ? 'users' : 'bell'" :size="19" /></span><div><RouterLink :to="{ name: 'grupo', params: { groupId: a.groupId } }" class="feed-group">{{ store.groupById(a.groupId)?.name ?? 'Kordia' }}</RouterLink><p>{{ a.text }}</p><time :datetime="a.at">{{ time(a.at) }}</time></div><AppIcon name="activity" :size="17" class="feed-mark" /></article><p v-if="!activity.length" class="empty">Los avances de tus equipos aparecerán aquí.</p></div></section>
     </div>
     <aside class="right-column">
-      <section class="profile surface" :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color }"><div class="cover"><span class="cover-shape first"></span><span class="cover-shape second"></span><AppIcon name="target" :size="58" /></div><div class="profile-body"><div class="character"><CharacterIcon :character="characters.current" :size="96" /></div><h2>{{ name }}</h2><RouterLink :to="{ name: 'perfil' }">Ver mi perfil<AppIcon name="arrow-right" :size="14" /></RouterLink></div><div class="profile-stats"><div><strong>{{ store.groups.length }}</strong><span>equipos</span></div><div><strong>{{ store.doneToday }}</strong><span>checks hoy</span></div><div><strong>{{ store.bestStreak }}</strong><span>mejor racha</span></div></div></section>
+      <section class="profile surface" :style="{ '--profile-cover': characters.theme.dark, '--profile-accent': characters.theme.color, '--profile-bg': `url('${getThemeBackground(characters.theme.id)}')` }"><div class="cover"><span class="cover-shape first"></span><span class="cover-shape second"></span><AppIcon name="target" :size="58" /></div><div class="profile-body"><div class="character"><CharacterIcon :character="characters.current" :size="96" /></div><h2>{{ name }}</h2><RouterLink :to="{ name: 'perfil' }">Ver mi perfil<AppIcon name="arrow-right" :size="14" /></RouterLink></div><div class="profile-stats"><div><strong>{{ store.groups.length }}</strong><span>equipos</span></div><div><strong>{{ store.doneToday }}</strong><span>checks hoy</span></div><div><strong>{{ store.bestStreak }}</strong><span>mejor racha</span></div></div></section>
       <section class="streak surface"><div class="section-title"><h2>Racha personal</h2><StreakFlame :size="32" /></div><div class="streak-score"><strong>{{ store.bestStreak }}</strong><div><b>días</b><small>mejor racha</small></div><StreakFlame :size="90" /></div><div class="week"><div v-for="d in store.weekProgress" :key="d.key" :class="{ today: d.isToday, full: d.value === 100 }"><small>{{ d.label }}</small><span :title="`${d.value}% de cumplimiento del equipo`"><AppIcon v-if="d.value === 100" name="check" :size="15" /><i v-else></i></span></div></div></section>
       <section class="weekly surface"><div class="section-title"><h2>El ritmo del equipo</h2><AppIcon name="activity" :size="18" /></div><div class="weekly-score"><strong>{{ average }}<span>%</span></strong><p>cumplimiento promedio<br />en los últimos 7 días</p></div><div class="chart" role="img" aria-label="Cumplimiento grupal de los últimos siete días"><div v-for="d in store.weekProgress" :key="d.key" :class="{ today: d.isToday }"><div class="bar"><span :style="{ height: `${Math.max(d.value, 3)}%` }" :title="`${d.label}: ${d.value}%`"></span></div><small>{{ d.label }}</small></div></div><div class="monthly"><span>Tu constancia · últimos 30 días</span><strong>{{ store.completionRate30 }}%</strong></div></section>
 
@@ -65,9 +149,32 @@ function time(at: string) { return new Date(at).toLocaleString('es-CO', { day: '
 @media(max-width:1000px){.columns{grid-template-columns:minmax(0,1fr)}.right-column{grid-template-columns:repeat(2,minmax(0,1fr))}.profile{grid-row:span 2}.note{display:none}.date{max-width:145px}.weekly{padding:18px}}
 @media(max-width:600px){.inicio-page{padding:22px 14px}.heading{flex-wrap:wrap;gap:14px;margin-bottom:22px}h1{font-size:29px}.date{max-width:none}.daily{padding:18px}.daily h2{font-size:22px}.daily .eyebrow{font-size:8px}.daily p{font-size:11px}.score strong{font-size:29px}.score small{font-size:8px}.daily-top{align-items:flex-start}.teams,.right-column{grid-template-columns:minmax(0,1fr)}.profile{grid-row:auto}.habit{padding:17px 14px;gap:11px}.habit-copy h3{font-size:12px}.habit-copy p{font-size:9px}.section-title>small{font-size:8px}.check-footer{padding:14px}.check-footer>span{font-size:9px}.new-team{min-height:145px}.week>div>span{max-height:42px}.cover{height:115px}footer{font-size:7px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
-.day-victory{display:flex;align-items:center;gap:15px;padding:17px 22px;background:#34402c;border:1px solid #81975e;border-bottom:4px solid #1c2817;border-radius:14px;animation:victory-in .4s ease-out}.day-victory>div{flex:1}.day-victory span{font-size:8px;letter-spacing:.13em;color:#c5dda1}.day-victory strong{display:block;font-size:18px;color:#eff7dd;margin:6px 0}.day-victory p{font-size:10px;color:#c3d0b0;margin:0}.day-victory>svg{color:#c9e5a2}@keyframes victory-in{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}} /* Relieve y estados de juego, limitados a Inicio. */
+.day-victory{display:flex;align-items:center;gap:15px;padding:17px 22px;background:linear-gradient(115deg,color-mix(in srgb,var(--theme-accent,#b9a2f1) 24%,#211c2d),color-mix(in srgb,var(--theme-dark,#393654) 62%,#211c2d));border:0;border-bottom:4px solid color-mix(in srgb,var(--theme-dark,#393654) 72%,#100c16);border-radius:14px;box-shadow:inset 0 1px color-mix(in srgb,var(--theme-accent,#b9a2f1) 28%,transparent),0 8px 0 -4px #100b18;animation:victory-in .4s ease-out}.day-victory>div{flex:1}.day-victory span{font-size:8px;letter-spacing:.13em;color:color-mix(in srgb,var(--theme-accent,#b9a2f1) 72%,white)}.day-victory strong{display:block;font-size:18px;color:#f6f0fb;margin:6px 0}.day-victory p{font-size:10px;color:#d1c6dc;margin:0}.day-victory>svg{color:color-mix(in srgb,var(--theme-accent,#b9a2f1) 72%,white)}@keyframes victory-in{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}} /* Relieve y estados de juego, limitados a Inicio. */
 .inicio-page{background:#14111e}.surface{background:#211c2d;border-color:#3c3049;border-bottom-width:3px}.daily{background:linear-gradient(115deg,color-mix(in srgb,var(--theme-dark) 78%,#201b27),#292038);border-color:#755391;box-shadow:inset 0 1px #b18ad026,0 8px 0 -4px #100b18}.daily h2{max-width:360px;font-size:32px}.daily .eyebrow{display:inline-block;padding:6px 9px;background:#1e1429;border:1px solid #705082;border-radius:6px;font-size:8px;color:#ddc0fa}.score{background:#21162d;border:1px solid #74528c;border-bottom:4px solid #140c1c;border-radius:13px;padding:15px 20px;transform:rotate(3deg)}.score-label{display:block;font-size:7px;letter-spacing:.12em;color:#c6a5e4;margin-bottom:7px}.score strong{font-size:40px}.track{height:12px;background:#171020;border:1px solid #644479;border-radius:5px}.track>span{background:repeating-linear-gradient(90deg,var(--theme-accent) 0,var(--theme-accent) 20px,color-mix(in srgb,var(--theme-accent),white 24%) 20px,color-mix(in srgb,var(--theme-accent),white 24%) 23px)}.habit-number{height:49px;border-bottom:4px solid #1a1125;background:#40304f;transform:rotate(-3deg)}.done .habit-number{border-bottom:4px solid #1b291d;background:#b5d68c;color:#31412a}.habit-link{background:#35263f;border:1px solid #674978;border-bottom:3px solid #160d20;padding:9px;border-radius:8px}.check-footer{background:#2a2034}.team{background:#272031;border-bottom-width:4px}.emblem{border-bottom:4px solid #170f23;transform:rotate(-6deg)}.new-team{border-width:2px;background:#1d1727}.team-track{height:7px;background:#140f1d}.profile .cover{height:125px;background:var(--theme-accent,#9978bd)}.profile-body .character{margin-top:-55px;padding:3px;background:#211c2d;border:4px solid var(--profile-accent,#9978bd);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(0,0,0,.5);position:relative;z-index:2}.profile-body .character :deep(.avatar){width:96px!important;height:96px!important}.avatars>*{margin-left:-7px;border-radius:50%;box-shadow:0 0 0 2px #1d1b25!important}.streak{background:linear-gradient(145deg,#3d2934,#251d2b);border-color:#745044}.streak .section-title>svg{display:none}.streak-score{position:relative;min-height:100px;margin:8px 0 20px}.streak-score>strong{font-size:58px;color:#ffce91}.streak-score>.streak-fire{margin-left:auto}.streak-score small{max-width:85px;line-height:1.6}.week>div>span{border-bottom-width:3px}.week .full>span{background:var(--theme-accent);color:#2c3e25;border-color:#809c5e;border-bottom-color:#405832}.week .today>span{outline-color:#ffbf76}.claim{padding:11px 16px;box-shadow:0 4px 0 #150b20}.claim:active{transform:translateY(3px);box-shadow:none}.weekly .bar>span{background:repeating-linear-gradient(0deg,#745b8a 0,#745b8a 10px,#513d65 10px,#513d65 13px)}.weekly .today .bar>span{background:repeating-linear-gradient(0deg,#cfadf5 0,#cfadf5 10px,#9b79be 10px,#9b79be 13px)}
 @media(max-width:1200px){.daily h2{font-size:26px}.score{padding:12px}.streak-score>.streak-fire{width:70px!important;height:80px!important}.streak-score{gap:8px}.streak-score>strong{font-size:48px}}
 @media(max-width:600px){.daily h2{font-size:23px}.score{padding:10px}.score-label{font-size:6px}.score strong{font-size:31px}.score strong span{font-size:19px}.daily-top{gap:10px}.daily .eyebrow{font-size:7px;padding:5px}.habit-link{padding:7px}.profile .cover{height:130px}}
 .profile .cover{background:var(--profile-cover,#9978bd)}.profile .cover-shape{border-color:var(--profile-accent,#c6a6dd)}.profile .cover>svg{color:var(--profile-accent,#dbc3ee)}
+.inicio-page .done .habit-number,
+.inicio-page .week .full > span,
+.inicio-page .feed-icon.check-in {
+  background: color-mix(in srgb, var(--theme-accent, #b9a2f1) 30%, #211c2d);
+  color: color-mix(in srgb, var(--theme-accent, #b9a2f1) 72%, white);
+  border-color: color-mix(in srgb, var(--theme-accent, #b9a2f1) 55%, #211c2d);
+}
+.inicio-page .done .habit-number { border-bottom-color: color-mix(in srgb, var(--theme-dark, #393654) 75%, #100c16); }
+.inicio-page .dot { background: var(--personal-selected-accent, var(--theme-accent, #b9a2f1)); }
+.inicio-page .day-victory {
+  --theme-accent: var(--personal-selected-accent, #b9a2f1);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--theme-accent) 34%, #211c2d), color-mix(in srgb, var(--theme-dark) 72%, #211c2d));
+}
+.inicio-page .done .habit-copy > small { color: var(--personal-selected-accent, var(--theme-accent)); }
+.inicio-page .heading { padding: 12px 20px; border-radius: 16px; background: linear-gradient(95deg, #1b1525f5, #201729ad), var(--personal-art) center 43% / cover; }
+.inicio-page .heading .theme-ornaments { z-index: 0; inset-inline: 42% 22%; }
+.inicio-page .surface:is(.weekly, .streak) { background: linear-gradient(145deg, #21182de8, #21182dbd), var(--personal-art) center / cover; }
+.inicio-page .weekly .bar > span { background: color-mix(in srgb, var(--personal-selected-accent) 46%, #382940); }
+.inicio-page .weekly .today .bar > span { background: var(--personal-selected-accent); }
+body .day-celebration { background: linear-gradient(#191324c9, #191324f5 75%), var(--celebration-art) center / cover; }
+.day-celebration .celebration-continue { background: color-mix(in srgb, var(--celebration-color) 64%, #fff0d6); }
 </style>
+
+<style scoped src="@/assets/styles/dashboard-camp.css"></style>
