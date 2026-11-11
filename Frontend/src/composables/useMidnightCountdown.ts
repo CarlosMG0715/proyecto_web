@@ -1,4 +1,3 @@
-// composable de cuenta regresiva; crea el intervalo al montar y lo limpia al desmontar.
 import { onMounted, onUnmounted, ref } from 'vue'
 
 /**

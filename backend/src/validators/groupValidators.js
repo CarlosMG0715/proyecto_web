@@ -1,4 +1,3 @@
-// esquemas que describen los datos permitidos y sus limites antes de entrar al servicio.
 const { z } = require('zod')
 
 const validTimeZone = (value) => {

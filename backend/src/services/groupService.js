@@ -1,4 +1,3 @@
-// reglas de grupos y conversion del modelo de prisma al formato que consume vue.
 const crypto = require('crypto')
 const { prisma } = require('../prisma')
 const groupRepository = require('../repositories/groupRepository')
@@ -23,7 +22,6 @@ const newInviteCode = (groupName) => {
 
 // Convierte la fila de Prisma en el contrato `Group` del frontend (types/group.ts)
 function toGroupDto(group, currentUserId) {
-  // combina miembros, checks de hoy, habitos y mensajes en un solo objeto de respuesta.
   const today = localDateKey(group.timeZone || 'America/Bogota')
   const activeHabits = (group.habits || []).filter((habit) => habit.isActive)
   const habits = activeHabits.map((habit) => ({
@@ -311,7 +309,6 @@ class GroupService {
   }
 
   async listMine(userId) {
-    // trae los grupos de la persona y los adapta para el frontend.
     const groups = await prisma.group.findMany({
       where: { memberships: { some: { userId } } }, include: groupInclude(),
       orderBy: { createdAt: 'asc' },
@@ -338,7 +335,6 @@ class GroupService {
     ])].sort()
   }
 
-  // Ownership: solo miembros ven el grupo
   async getForMember({ userId, groupId }) {
     // no permite ver un grupo si la cuenta no tiene membresia.
     if (!(await groupRepository.findMembership(groupId, userId))) {
@@ -515,7 +511,6 @@ class GroupService {
   }
 
   async updateCheckInNote({ userId, groupId, habitId, note }) {
-    // cambia la nota del check-in de hoy dentro del grupo indicado.
     const membership = await groupRepository.findMembership(groupId, userId)
     if (!membership) throw httpError('No tienes acceso a este grupo', 403)
     const group = await prisma.group.findUnique({ where: { id: groupId }, select: { timeZone: true } })
@@ -525,7 +520,6 @@ class GroupService {
   }
 
   async sendMessage({ userId, groupId, content }) {
-    // confirma membresia antes de guardar un mensaje en el chat.
     if (!(await groupRepository.findMembership(groupId, userId))) throw httpError('No tienes acceso a este grupo', 403)
     const message = await prisma.message.create({ data: { groupId, userId, content }, include: { user: { select: { id: true, name: true } } } })
     return { id: message.id, kind: 'user', authorId: message.userId, text: message.content, sentAt: message.createdAt.toISOString() }

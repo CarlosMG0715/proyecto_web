@@ -1,8 +1,6 @@
-// centraliza errores para que las rutas respondan con el mismo formato json.
 const { randomUUID } = require('node:crypto')
 
 function notFound(_req, _res, next) {
-  // convierte urls no registradas en un error 404.
   const error = new Error('Ruta no encontrada')
   error.status = 404
   next(error)

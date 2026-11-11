@@ -36,7 +36,6 @@ const createdGroup = ref<Group | null>(null)
 const joinSuccess = ref('')
 const isSubmitting = ref(false)
 
-// Estado para "Unirse a un grupo"
 const joinCode = ref('')
 
 watch(joinCode, (value) => {
@@ -207,7 +206,6 @@ async function handleJoin(): Promise<void> {
 <template>
   <Transition name="modal-pop">
     <div v-if="isOpen" class="overlay" @click.self="close" @keydown.esc="close">
-      <!-- PASO DE ÉXITO: EQUIPO CREADO CON CÓDIGO ÚNICO -->
       <section
         v-if="createdGroup"
         class="guild-modal success-modal"
@@ -297,7 +295,6 @@ async function handleJoin(): Promise<void> {
         </form>
       </section>
 
-      <!-- VENTANA PRINCIPAL: CREAR GRUPO O UNIRSE A UN GRUPO -->
       <section
         v-else
         class="guild-modal"
@@ -327,7 +324,6 @@ async function handleJoin(): Promise<void> {
           </button>
         </header>
 
-        <!-- Pestañas intercambiables -->
         <div v-if="!replaceArchivedGroupId" class="mode-tabs" role="tablist">
           <button
             type="button"
@@ -351,9 +347,7 @@ async function handleJoin(): Promise<void> {
           </button>
         </div>
 
-        <!-- MODO 1: CREAR GRUPO (SIMPLE Y CON CÓDIGO ÚNICO DESTACADO) -->
         <form v-if="mode === 'create'" class="modal-body" @submit.prevent="handleCreate">
-          <!-- Vista previa del grupo con el banner elegido -->
           <div class="banner-preview">
             <span class="banner-preview-art" aria-hidden="true"></span>
             <span class="banner-preview-shade" aria-hidden="true"></span>
@@ -391,7 +385,6 @@ async function handleJoin(): Promise<void> {
             </label>
           </fieldset>
 
-          <!-- Tema de Banner del Grupo -->
           <div class="field">
             <div class="field-header">
               <span>Banner y tema del grupo</span>
@@ -423,7 +416,6 @@ async function handleJoin(): Promise<void> {
             </div>
           </div>
 
-          <!-- Categoría -->
           <div class="field">
             <span>Categoría</span>
             <div class="chips">
@@ -473,7 +465,6 @@ async function handleJoin(): Promise<void> {
           </footer>
         </form>
 
-        <!-- MODO 2: UNIRSE A UN GRUPO (GRANDE Y LLAMATIVO CON BANNER ILUSTRADO) -->
         <form v-else class="modal-body join-body" @submit.prevent="handleJoin">
           <div class="join-showcase">
             <div
@@ -598,7 +589,6 @@ async function handleJoin(): Promise<void> {
   color: #fff;
 }
 
-/* Pestañas Crear / Unirse */
 .mode-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -638,7 +628,6 @@ async function handleJoin(): Promise<void> {
   gap: 16px;
 }
 
-/* Vista previa del estandarte con el Banner Ilustrado */
 .banner-preview {
   position: relative;
   overflow: hidden;
@@ -731,7 +720,6 @@ async function handleJoin(): Promise<void> {
   margin-top: 10px;
 }
 
-/* Selector de Banners Temáticos */
 .theme-picked-label {
   font-size: 11px;
   font-weight: 800;
@@ -821,7 +809,6 @@ async function handleJoin(): Promise<void> {
   text-overflow: ellipsis;
 }
 
-/* Campos */
 .field {
   display: flex;
   flex-direction: column;
@@ -855,7 +842,6 @@ async function handleJoin(): Promise<void> {
   border-color: var(--team-color);
 }
 
-/* Chips de categoría */
 .chips {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -889,7 +875,6 @@ async function handleJoin(): Promise<void> {
   color: #fff;
 }
 
-/* CAJA DESTACADA DEL CÓDIGO DE INVITACIÓN ÚNICO */
 .code-showcase {
   display: flex;
   flex-direction: column;
@@ -992,7 +977,6 @@ async function handleJoin(): Promise<void> {
   cursor: pointer;
 }
 
-/* MODO UNIRSE A UN GRUPO (GRANDE Y LLAMATIVO CON BANNER ILUSTRADO) */
 .join-showcase {
   display: flex;
   flex-direction: column;
@@ -1136,7 +1120,6 @@ async function handleJoin(): Promise<void> {
   color: #534368;
 }
 
-/* Vista de éxito */
 .success-modal {
   text-align: center;
   align-items: center;

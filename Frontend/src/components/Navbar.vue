@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// barra superior de navegacion para las vistas publicas.
 import { RouterLink, useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
 import { api } from '@/services/api'

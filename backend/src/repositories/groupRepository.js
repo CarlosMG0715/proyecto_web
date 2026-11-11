@@ -1,4 +1,3 @@
-// consultas de grupos y membresias; las reglas de acceso pertenecen al servicio.
 const { prisma } = require('../prisma')
 
 const withMembers = {
@@ -36,7 +35,6 @@ const groupRepository = {
   },
 
   listByUser(userId) {
-    // busca solo grupos que tengan una membresia para este usuario.
     return prisma.group.findMany({
       where: { memberships: { some: { userId } } },
       include: withMembers,

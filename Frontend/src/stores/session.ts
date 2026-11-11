@@ -1,4 +1,3 @@
-// store global de la sesion; mantiene el usuario y el access token mientras la app esta abierta.
 import { defineStore } from 'pinia'
 import type { User } from '@/types/auth'
 
@@ -20,13 +19,11 @@ export const useSessionStore = defineStore('session', {
   }),
 
   getters: {
-    // estas propiedades calculadas evitan repetir comprobaciones en cada vista.
     isAuthenticated: (state): boolean => Boolean(state.accessToken && state.user),
     currentUser: (state): User | null => state.user,
   },
 
   actions: {
-    // las acciones son la unica forma recomendada de cambiar los datos de sesion.
     setSession(token: string, user: User): void {
       this.accessToken = token
       this.user = user

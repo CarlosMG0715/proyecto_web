@@ -1,4 +1,3 @@
-// funciones pequeñas para mostrar fechas del servidor como textos mas faciles de leer.
 /** utilidades de formato de fechas sin acentos */
 
 export function formatClock(iso: string): string {

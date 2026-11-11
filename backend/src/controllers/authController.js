@@ -1,11 +1,9 @@
-// controlador de autenticacion: traduce solicitudes http a acciones y respuestas.
 const authService = require('../services/authService')
 const { cookieName, cookieOptions } = require('../config')
 const { extractRefreshToken } = require('../utils/cookies')
 
 class AuthController {
   async register(req, res, next) {
-    // revisa campos obligatorios antes de pedir al servicio que cree la cuenta.
     try {
       const { name, email, password } = req.body
       if (!name || !email || !password) {
@@ -82,7 +80,6 @@ class AuthController {
     }
   }
 
-   // Lista las sesiones abiertas del usuario.
 
     async listSessions(req, res, next) {
     try {

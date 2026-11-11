@@ -48,10 +48,12 @@ async function onSubmit(): Promise<void> {
       if (result.verificationRequired === false) {
         try {
           await login(credentials)
-          await router.push(getRedirect())
+          const { path, query, hash } = router.resolve(getRedirect())
+          await router.push({ path, query, hash, state: { kordiaAccountCreated: true } })
           return
         } catch {
           mode.value = 'login'
+          session.setError(null)
           success.value = '¡Cuenta creada con éxito! Ya puedes iniciar sesión.'
           return
         }
@@ -59,7 +61,7 @@ async function onSubmit(): Promise<void> {
       mode.value = 'login'
       pendingVerificationEmail.value = credentials.email
       if (result.verificationSent) {
-        success.value = 'Revisa tu correo y confirma la cuenta para iniciar sesión.'
+        success.value = 'Te enviamos un correo de verificación. Abre el enlace para confirmar tu cuenta.'
       } else {
         session.setError('La cuenta se creó, pero no pudimos enviar el correo. Puedes pedir otro enlace en un minuto.')
       }
@@ -100,7 +102,6 @@ async function resend(): Promise<void> {
 
 <template>
   <main class="login-wrapper">
-    <!-- Flecha estética para volver al landing page -->
     <RouterLink to="/" class="aesthetic-back-arrow" aria-label="Volver">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="19" y1="12" x2="5" y2="12"></line>
@@ -109,7 +110,6 @@ async function resend(): Promise<void> {
     </RouterLink>
 
     <div class="login-card panel">
-      <!-- Marca y Encabezado -->
       <div class="brand-header">
         <img :src="kordiaLogo" alt="Kordia Logo" class="login-brand-logo" />
         <h1>{{ isRegister ? 'Crea tu cuenta en Kordia' : '¡Hola de nuevo!' }}</h1>
@@ -122,7 +122,6 @@ async function resend(): Promise<void> {
         </p>
       </div>
 
-      <!-- Selector de Modo (Tabs) -->
       <div class="tabs-row">
         <button
           type="button"
@@ -142,9 +141,7 @@ async function resend(): Promise<void> {
         </button>
       </div>
 
-      <!-- Formulario -->
       <form class="login-form" @submit.prevent="onSubmit">
-        <!-- Campo Apodo (solo en registro) -->
         <div v-if="isRegister" class="field">
           <label for="reg-name">Apodo</label>
           <div class="input-wrap">
@@ -161,7 +158,6 @@ async function resend(): Promise<void> {
           </div>
         </div>
 
-        <!-- Campo Correo -->
         <div class="field">
           <label for="user-email">Correo electrónico</label>
           <div class="input-wrap">
@@ -177,7 +173,6 @@ async function resend(): Promise<void> {
           </div>
         </div>
 
-        <!-- Campo Contraseña -->
         <div class="field">
           <label for="user-pass">Contraseña</label>
           <div class="input-wrap">
@@ -195,7 +190,6 @@ async function resend(): Promise<void> {
           <span v-if="isRegister" class="field-hint">Mínimo 8 caracteres</span>
         </div>
 
-        <!-- Mensajes de Error y Éxito -->
         <div v-if="session.error" class="alert-box error" role="alert">
           <AppIcon name="alert" :size="16" />
           <span>{{ session.error }}</span>
@@ -206,7 +200,6 @@ async function resend(): Promise<void> {
           <span>{{ success }}</span>
         </div>
 
-        <!-- Botón Principal -->
         <button type="submit" class="submit-btn" :disabled="session.isLoading || resending">
           <span v-if="session.isLoading" class="spinner"></span>
           <span>
@@ -225,7 +218,6 @@ async function resend(): Promise<void> {
           {{ resending ? 'Enviando…' : 'Reenviar correo de verificación' }}
         </button>
 
-        <!-- Toggle Modo -->
         <button type="button" class="toggle-link" @click="toggleMode">
           {{
             isRegister
@@ -271,7 +263,6 @@ async function resend(): Promise<void> {
     0 0 40px rgba(139, 92, 246, 0.18);
 }
 
-/* Flecha estética para volver */
 .aesthetic-back-arrow {
   position: absolute;
   top: 1.8rem;
@@ -299,7 +290,6 @@ async function resend(): Promise<void> {
   box-shadow: 0 10px 30px -4px rgba(139, 92, 246, 0.5);
 }
 
-/* Marca */
 .brand-header {
   text-align: center;
   margin-bottom: 1.6rem;
@@ -330,7 +320,6 @@ async function resend(): Promise<void> {
   max-width: 320px;
 }
 
-/* Tabs */
 .tabs-row {
   display: flex;
   padding: 0.3rem;
@@ -358,7 +347,6 @@ async function resend(): Promise<void> {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
-/* Formulario e Inputs con ALTO CONTRASTE */
 .login-form {
   display: flex;
   flex-direction: column;
@@ -395,7 +383,6 @@ async function resend(): Promise<void> {
   place-items: center;
 }
 
-/* AQUÍ ESTÁ LA SOLUCIÓN DEL CONTRASTE: */
 .input-wrap input {
   width: 100%;
   padding: 0.75rem 0.9rem 0.75rem 2.4rem;
@@ -424,7 +411,6 @@ async function resend(): Promise<void> {
   color: var(--muted);
 }
 
-/* Alertas */
 .alert-box {
   display: flex;
   align-items: center;
@@ -447,7 +433,6 @@ async function resend(): Promise<void> {
   color: #4ade80;
 }
 
-/* Botón Submit */
 .submit-btn {
   margin-top: 0.4rem;
   display: flex;
@@ -476,7 +461,6 @@ async function resend(): Promise<void> {
   cursor: not-allowed;
 }
 
-/* Toggle link */
 .toggle-link {
   margin-top: 0.3rem;
   background: transparent;

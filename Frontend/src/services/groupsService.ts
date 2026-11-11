@@ -1,15 +1,12 @@
-// capa http de grupos: cada funcion conoce una url y el tipo de respuesta esperado.
 import { api } from '@/services/api'
 import type { CreateGroupPayload, Group, GroupHabit, ChatMessage, DailyCheckReport } from '@/types/group'
 
 export async function fetchMyGroups(): Promise<Group[]> {
-  // trae los grupos donde la persona tiene membresia.
   const { data } = await api.get<{ groups: Group[] }>('/groups')
   return data.groups
 }
 
 export async function fetchCheckInHistory(): Promise<string[]> {
-  // trae las fechas persistidas para dibujar el calendario personal.
   const { data } = await api.get<{ dates: string[] }>('/groups/history')
   return data.dates
 }
@@ -21,7 +18,6 @@ export async function createGroupRequest(payload: CreateGroupPayload): Promise<G
 }
 
 export async function joinGroupRequest(inviteCode: string): Promise<Group> {
-  // intenta unirse usando el codigo escrito en el modal.
   const { data } = await api.post<{ group: Group }>('/groups/join', { inviteCode })
   return data.group
 }
@@ -86,12 +82,10 @@ export async function joinHabitRequest(groupId: string, habitId: string): Promis
 }
 
 export async function saveCheckInNoteRequest(groupId: string, habitId: string, note: string): Promise<void> {
-  // actualiza la nota del check-in que ya existe para hoy.
   await api.put(`/groups/${groupId}/habits/${habitId}/check-in/note`, { note })
 }
 
 export async function sendGroupMessageRequest(groupId: string, content: string): Promise<ChatMessage> {
-  // envia el mensaje para guardarlo y recibe el registro creado.
   const { data } = await api.post<{ message: ChatMessage }>(`/groups/${groupId}/messages`, { content })
   return data.message
 }

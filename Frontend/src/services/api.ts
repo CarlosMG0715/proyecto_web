@@ -1,4 +1,3 @@
-// cliente http comun; centraliza token, cookies y renovacion para no repetirlo en cada servicio.
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { useSessionStore } from '@/stores/session'
 import type { AuthResponse } from '@/types/auth'
@@ -18,7 +17,6 @@ let refreshPromise: Promise<AuthResponse> | null = null
 
 // Una sola llamada de refresh a la vez (evita el falso positivo de reutilización)
 export function refreshSession(): Promise<AuthResponse> {
-  // varias peticiones que vencen a la vez comparten una sola renovacion.
   refreshPromise ??= bare
     .post<AuthResponse>('/auth/refresh')
     .then((res) => {
@@ -32,7 +30,6 @@ export function refreshSession(): Promise<AuthResponse> {
 }
 
 api.interceptors.request.use((config) => {
-  // agrega el token de acceso que pinia guarda en memoria.
   const { accessToken } = useSessionStore()
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`
   return config

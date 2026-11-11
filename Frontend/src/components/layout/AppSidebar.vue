@@ -62,7 +62,6 @@ async function handleLogout(): Promise<void> {
 
 <template>
   <aside class="sidebar">
-    <!-- Marca -->
     <RouterLink :to="{ name: 'inicio' }" class="brand">
       <img :src="kordiaLogo" alt="Kordia Logo" class="brand-logo-img" />
       <span class="brand-text">
@@ -71,7 +70,6 @@ async function handleLogout(): Promise<void> {
       </span>
     </RouterLink>
 
-    <!-- Navegación principal -->
     <nav class="nav">
       <span class="section-label">Menú</span>
       <template v-for="item in NAV_ITEMS" :key="item.name">
@@ -87,7 +85,6 @@ async function handleLogout(): Promise<void> {
       </template>
     </nav>
 
-    <!-- Grupos -->
     <div class="groups">
       <div class="section-row">
         <span class="section-label">Tus grupos</span>
@@ -134,7 +131,6 @@ async function handleLogout(): Promise<void> {
       </button>
     </div>
 
-    <!-- Tu cuenta -->
     <div class="account">
       <RouterLink :to="{ name: 'perfil' }" class="account-link">
         <CharacterIcon :character="characters.current" :size="34" />
@@ -164,7 +160,6 @@ async function handleLogout(): Promise<void> {
   overflow-y: auto;
 }
 
-/* Marca */
 .brand {
   display: flex;
   align-items: center;
@@ -195,7 +190,6 @@ async function handleLogout(): Promise<void> {
   color: var(--muted);
 }
 
-/* Secciones */
 .section-label {
   display: block;
   padding: 0 0.6rem;
@@ -223,7 +217,6 @@ async function handleLogout(): Promise<void> {
   margin-bottom: 0.35rem;
 }
 
-/* Navegación */
 .nav {
   display: flex;
   flex-direction: column;
@@ -252,7 +245,6 @@ async function handleLogout(): Promise<void> {
   color: #c4b5fd;
 }
 
-/* Grupos con Banner */
 .groups {
   display: flex;
   flex-direction: column;
@@ -432,7 +424,6 @@ async function handleLogout(): Promise<void> {
   color: #fff;
 }
 
-/* Cuenta */
 .account {
   margin-top: auto;
   display: flex;

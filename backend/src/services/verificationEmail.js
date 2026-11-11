@@ -1,5 +1,9 @@
 const { emailTemplate } = require('./verificationEmailTemplate')
 
+function demoEmail() {
+  return process.env.DEMO_EMAIL?.trim().toLowerCase() || null
+}
+
 function getVerificationEmailConfig() {
   const apiKey = process.env.RESEND_API_KEY?.trim()
   const from = process.env.EMAIL_FROM?.trim()
@@ -53,4 +57,4 @@ async function sendVerificationEmail(config, email, token) {
   }
 }
 
-module.exports = { getVerificationEmailConfig, sendVerificationEmail }
+module.exports = { demoEmail, getVerificationEmailConfig, sendVerificationEmail }

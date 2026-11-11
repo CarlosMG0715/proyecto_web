@@ -1,10 +1,12 @@
 const { emailTemplate } = require('./verificationEmailTemplate')
 const { prisma } = require('../prisma')
-const { getVerificationEmailConfig } = require('./verificationEmail')
+const { demoEmail, getVerificationEmailConfig } = require('./verificationEmail')
 
 const notificationDefaults = { midnight: true, email: false, chat: true, inactivity: true, mutedGroups: [] }
 
 async function sendDueReminders(config) {
+  const email = demoEmail()
+  if (!email) return
   // Bogota usa UTC-5 durante todo el ano.
   const bogota = new Date(Date.now() - 5 * 60 * 60 * 1000)
   const remaining = 1440 - bogota.getUTCHours() * 60 - bogota.getUTCMinutes()
@@ -26,6 +28,7 @@ async function sendDueReminders(config) {
   const subject = 'Kordia · Recordatorio de ' + threshold.label
   const users = await prisma.user.findMany({
     where: {
+      email,
       emailVerifiedAt: { not: null },
       notificationPreferences: { path: ['email'], equals: true },
       OR: [{ lastReminderDay: null }, { lastReminderDay: { lt: slot } }],

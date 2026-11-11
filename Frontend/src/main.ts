@@ -1,4 +1,3 @@
-// punto de entrada del frontend: conecta vue con el estado global, las rutas y los estilos.
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'

@@ -22,6 +22,7 @@ const groups = useGroupsStore()
 const session = useSessionStore()
 const { dayKey } = useMidnightCountdown()
 const streakLossDialog = ref<HTMLDialogElement | null>(null)
+const accountCreated = ref(false)
 const shownLosses = new Set<string>()
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 
@@ -52,6 +53,10 @@ function refreshProfiles() {
 }
 
 onMounted(() => {
+  if (window.history.state?.kordiaAccountCreated === true) {
+    accountCreated.value = true
+    window.history.replaceState({ ...window.history.state, kordiaAccountCreated: false }, '')
+  }
   refreshTimer = setInterval(refreshProfiles, 15000)
   window.addEventListener('focus', refreshProfiles)
   document.addEventListener('visibilitychange', refreshProfiles)
@@ -78,6 +83,10 @@ onUnmounted(() => {
     <CreateGroupModal />
     <TeamNotifications />
     <Teleport to="body">
+      <div v-if="accountCreated" class="account-created-notice">
+        <p role="status">¡Cuenta creada con éxito! Ya iniciaste sesión.</p>
+        <button type="button" aria-label="Cerrar aviso" @click="accountCreated = false">×</button>
+      </div>
       <dialog ref="streakLossDialog" class="streak-loss-dialog" aria-labelledby="personal-penalty-title"
         :style="{ '--theme-accent': characters.theme.color }">
         <img class="streak-loss-banner" :src="streakLostBanner" alt="" />
@@ -101,6 +110,28 @@ onUnmounted(() => {
   min-width: 0;
   height: 100vh;
   overflow: hidden;
+}
+.account-created-notice {
+  position: fixed;
+  inset: 16px 16px auto auto;
+  z-index: 1000;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface-2, #302641);
+  color: var(--text, #fff);
+  box-shadow: 0 6px 20px #0004;
+}
+.account-created-notice p { margin: 0; }
+.account-created-notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 20px;
+  cursor: pointer;
 }
 @media(max-width:700px){.shell{grid-template-columns:minmax(0,1fr);padding-bottom:68px;min-height:100dvh}.content{height:calc(100dvh - 68px)}}
 </style>

@@ -186,7 +186,6 @@ watch(() => route.params.groupId, () => {
   isRosterOpen.value = false
   isChatOpen.value = false
 })
-/** true = Chat grande slideado al lado derecho; false = Chat minimizado como estaba abajo */
 const isChatExpanded = ref(true)
 const editing = ref(false)
 const editingGroup = ref(false)
@@ -623,7 +622,6 @@ async function handleLeaveGroup() {
         </div>
       </header>
 
-      <!-- Cuerpo principal: si el chat está en modo Grande Lateral, divide pantalla completa -->
       <div class="adventure-body group-columns" :class="{ 'side-chat-active': isChatOpen && isChatExpanded, 'roster-open': isRosterOpen }">
         <div class="adventure-main-col">
           <section
@@ -1005,7 +1003,6 @@ async function handleLeaveGroup() {
               </section>
             </div>
 
-            <!-- Chat en modo Minimizado (como estaba antes, debajo del valle) -->
             <section v-if="!group.archivedAt && isChatOpen && !isChatExpanded" class="adventure-chat compact-chat">
               <GroupChat
                 :group="group"
@@ -1056,7 +1053,6 @@ async function handleLeaveGroup() {
       </div>
     </div>
 
-    <!-- Modal editar hábito -->
       <div
         v-if="editing && isAdmin"
         class="adventure-modal-backdrop"
@@ -1257,7 +1253,6 @@ async function handleLeaveGroup() {
         </form>
       </div>
 
-      <!-- Modal confirmar salir del grupo -->
       <div
         v-if="confirmingLeave"
         class="adventure-modal-backdrop"
@@ -1397,7 +1392,6 @@ async function handleLeaveGroup() {
   transform: translateY(-1px);
 }
 
-/* Layout con Chat Grande Slideado al lado vs Minimizado */
 .adventure-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2352,7 +2346,6 @@ async function handleLeaveGroup() {
 .group-color-options button { width: 28px; height: 28px; border-radius: 50%; background: var(--group-color); border: 2px solid #ffffff55; padding: 0; }
 .group-color-options button.selected { outline: 2px solid #fff; outline-offset: 2px; }
 @media(max-width:700px) { .team-habit-row { flex-wrap: wrap; } .team-habit-copy { min-width: calc(100% - 55px); } .group-edit-modal > div:last-child { flex-wrap: wrap; } .mission-hero{grid-template-columns:72px 1fr;min-height:150px;padding:25px 48px 22px 18px;gap:12px}.mission-flag{transform:scale(.72);transform-origin:left center}.mission-hero h2{font-size:21px}.mission-step{grid-template-columns:30px 1fr;padding:18px 16px 0;gap:10px}.mission-step-number{width:29px;height:29px}.mission-length-options{gap:6px}.mission-length-card{min-height:118px;padding-inline:4px}.mission-length-card strong{font-size:24px}.mission-actions{grid-template-columns:1fr;padding:22px 16px;}.mission-actions .secondary{order:2}.mission-actions button{width:100%}.member-admin-actions{grid-template-columns:1fr}.mission-modal{max-height:calc(100vh - 16px)} }
-/* Pulido visual de misiones y roles, sin alterar sus acciones. */
 .team-habits .game-title {
  padding-bottom: 14px;
  border-bottom: 1px solid #43304e;
@@ -3859,7 +3852,6 @@ async function handleLeaveGroup() {
   .side-roster { order: 0; }
 }
 
-/* Escena compacta para que el valle tenga el peso de una ilustración de campamento. */
 .adventure-page {
   background:
     radial-gradient(ellipse at 50% -20%, #6e438340, transparent 48%),
@@ -3968,7 +3960,6 @@ async function handleLeaveGroup() {
 
 @media(prefers-reduced-motion:reduce) { .firefly { animation: none; } }
 
-/* El orden nuevo usa otra distribución, pero el tema vuelve a definir el ambiente. */
 .adventure-page {
   background: radial-gradient(ellipse at 88% 0%, color-mix(in srgb, var(--theme-dark) 38%, transparent), transparent 43%), #151520;
 }
@@ -4027,7 +4018,6 @@ async function handleLeaveGroup() {
 
 @media(max-width:860px) { .world { height: 410px; } }
 
-/* Ajuste del valle en anchos intermedios: cada capa conserva su propio espacio. */
 .world {
   height: clamp(330px, 33vw, 390px);
 }
@@ -4089,13 +4079,11 @@ async function handleLeaveGroup() {
   .lives-caption { max-width: none; text-align: left; }
 }
 
-/* Deja aire entre el recorrido, el estado del personaje y la zona de energía. */
 @media(min-width:661px) {
   .world-route { top: 34px; }
   .player-bubble { margin-bottom: 14px; }
 }
 
-/* El chat lateral mantiene el espacio para leer y escribir con comodidad. */
 .adventure-body.side-chat-active { grid-template-columns: minmax(0, 1fr) minmax(370px, 410px); gap: 20px; }
 .expanded-side-chat { height: calc(100vh - 130px); min-height: 560px; gap: 14px; }
 .expanded-side-chat > :last-child { min-height: 420px; flex: 1 1 auto; }
@@ -4329,12 +4317,10 @@ async function handleLeaveGroup() {
 .world .player:hover .player-bubble {
   transform: translateY(-2px);
 }
-/* Sin circulitos alrededor: solo la burbuja limpia y las dos bolitas de abajo */
 .world .player .player-bubble::before,
 .member-note-cloud::before {
   content: none;
 }
-/* Dos bolitas de diálogo abajo */
 .world .player .player-bubble::after,
 .member-note-cloud::after {
   content: '';
@@ -4498,7 +4484,6 @@ async function handleLeaveGroup() {
 .world .life-token .token-spot {
   fill: rgba(255, 255, 255, 0.08);
 }
-/* Colores vivos estilo barra de videojuego cuando el icono de vida está activo (sin bordes brillantes) */
 .world .life-token.alive {
   filter: drop-shadow(0 2px 0 rgba(10, 6, 18, 0.85));
 }
@@ -4539,7 +4524,6 @@ async function handleLeaveGroup() {
 .world .life-token.threatened {
   animation: heart-warning 0.9s ease-in-out infinite alternate;
 }
-/* Banners temáticos del grupo y ventanas con el color profundo de la temática (fucsia/tema del grupo) */
 .adventure-page {
   --group-soft: color-mix(in srgb, var(--group-accent, #8b5cf6) 66%, #f4ebff);
   --group-window-bg: color-mix(in srgb, var(--group-accent) 8%, #201b28);
@@ -4708,7 +4692,6 @@ async function handleLeaveGroup() {
 .adventure-page .side-roster .game-title svg {
   color: var(--group-accent, #d5b2ef);
 }
-/* Armonización completa con el color del grupo (tono suave y luminoso, sin ser chillón) */
 .adventure-page {
   --group-soft: color-mix(in srgb, var(--group-accent, #8b5cf6) 66%, #f4ebff);
   --group-surface: var(--group-card-bg);
@@ -4762,7 +4745,6 @@ async function handleLeaveGroup() {
 .adventure-page .world .lives-caption {
   color: color-mix(in srgb, var(--group-accent, #b5e4a0) 52%, #ffffff);
 }
-/* Colores de vida por temática del grupo (suaves y luminosos) */
 .adventure-page .world .heart-row[data-theme='pink'] .life-token.alive .token-main {
   fill: #ff7aa8;
 }
@@ -4802,7 +4784,6 @@ async function handleLeaveGroup() {
 .adventure-page .world .heart-row[data-theme='red'] .life-token.alive .token-spot {
   fill: #ffe580;
 }
-/* Checks del grupo sincronizados con la temática del grupo en tono suave */
 .adventure-page .team-roster .roster-member-check.complete,
 .adventure-page .team-habit-row .habit-check-state.complete {
   color: #231730;
@@ -4833,7 +4814,6 @@ async function handleLeaveGroup() {
 .adventure-page .customize-link {
   color: var(--group-soft);
 }
-/* Contador grande y notorio al final hasta las 12:00 a. m. (sin bordes, fondo del grupo, solo letras rojas cuando hay pendientes) */
 .adventure-page .midnight-countdown-card {
   position: relative;
   overflow: hidden;
