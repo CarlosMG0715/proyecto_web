@@ -23,6 +23,7 @@ async function main() {
       name: process.env.SEED_ADMIN_NAME || 'Admin de desarrollo',
       email,
       passwordHash,
+      emailVerificationRequired: false,
     },
   })
 

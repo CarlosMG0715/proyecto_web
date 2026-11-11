@@ -34,18 +34,39 @@ export async function login(credentials: LoginCredentials): Promise<void> {
   }
 }
 
-export async function register(payload: RegisterPayload): Promise<void> {
+export async function register(payload: RegisterPayload): Promise<{ verificationSent: boolean }> {
   // registra la cuenta; esta funcion no inicia sesion automaticamente.
   const session = useSessionStore()
   session.setLoading(true)
   session.setError(null)
   try {
-    await api.post('/auth/register', payload)
+    const { data } = await api.post<{ verificationSent: boolean }>('/auth/register', payload)
+    return data
   } catch (err) {
     session.setError(extractError(err, 'No se pudo crear la cuenta'))
     throw err
   } finally {
     session.setLoading(false)
+  }
+}
+
+export function requiresEmailVerification(error: unknown): boolean {
+  return axios.isAxiosError<ApiErrorResponse>(error) && error.response?.data?.code === 'EMAIL_VERIFICATION_REQUIRED'
+}
+
+export async function resendVerification(credentials: LoginCredentials): Promise<void> {
+  try {
+    await api.post('/auth/resend-verification', credentials)
+  } catch (error) {
+    throw new Error(extractError(error, 'No pudimos reenviar el correo.'))
+  }
+}
+
+export async function verifyEmail(token: string): Promise<void> {
+  try {
+    await api.post('/auth/verify-email', { token })
+  } catch (error) {
+    throw new Error(extractError(error, 'No pudimos confirmar el correo. Inténtalo de nuevo.'))
   }
 }
 

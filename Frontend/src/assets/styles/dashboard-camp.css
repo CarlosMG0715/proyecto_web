@@ -1,0 +1,126 @@
+/* Inicio: un campamento y un recorrido diario, con el tema del jugador. */
+.inicio-page { --accent: var(--theme-accent, #c1a8ee); }
+.heading h1, .section-title h2, .camp-copy h2 { font-family: 'Baloo 2', var(--font); }
+.heading h1 { font-size: 38px; letter-spacing: -.025em; }
+.section-title h2 { font-size: 23px; font-weight: 700; }
+.columns { grid-template-columns: minmax(0, 1fr) 280px; gap: 28px; }
+.main-column { gap: 32px; }
+.dashboard-camp { display: grid; grid-template-columns: 1.15fr 1fr; padding: 0; min-height: 290px; border: 0; border-radius: 24px; background: color-mix(in srgb, var(--theme-dark, #393654) 23%, #251c32); }
+.camp-copy { padding: 30px 12px 30px 30px; position: relative; z-index: 1; }
+.camp-label { font-size: 10px; letter-spacing: .14em; color: var(--accent); font-weight: 800; }
+.camp-streak { display: flex; align-items: center; gap: 10px; }
+.camp-streak h2 { margin: 3px 0 0; }
+.camp-copy h2 { font-size: clamp(28px, 3vw, 39px); line-height: 1.08; margin: 14px 0 12px; letter-spacing: -.025em; }
+.camp-copy p { font-size: 12px; line-height: 1.65; max-width: 245px; }
+.camp-progress-label { display: flex; align-items: baseline; gap: 8px; margin-top: 24px; }
+.camp-progress-label strong { font-size: 20px; }
+.camp-progress-label span { color: #c4bbce; font-size: 11px; }
+.camp-copy .track { margin-top: 10px; height: 10px; border: 0; border-radius: 20px; background: #13101e66; }
+.camp-copy .track > span { background: linear-gradient(90deg, var(--accent), var(--theme-companion, #ecd3a5)); border-radius: inherit; }
+.camp-copy .daily-bottom { font-size: 10px; line-height: 1.5; }
+.camp-scene { position: relative; overflow: hidden; background: var(--camp-sky); border-radius: 100px 0 0 0; margin: 18px 0 0 10px; min-height: 270px; isolation: isolate; }
+.camp-scene::before { content: ''; position: absolute; inset: -4%; z-index: -1; background-image: var(--camp-bg); background-size: cover; background-position: center bottom; filter: saturate(.74); }
+.camp-sun, .camp-mountain, .camp-ground, .camp-path { display: none; }
+.camp-character { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); }
+.camp-character-name { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); padding: 4px 12px; border-radius: 8px; background: #242030; color: #fff1d8; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.camp-flag { position: absolute; right: 14px; bottom: 28px; color: #714c52; transform: rotate(8deg); }
+.habits { background: transparent; overflow: visible; }
+.habit { border: 0; border-radius: 18px; background: #262130; margin-bottom: 10px; padding: 20px; gap: 16px; }
+.habit:hover { background: color-mix(in srgb, var(--accent) 12%, #262130); }
+.habit-number { width: 48px; height: 52px; background: color-mix(in srgb, var(--accent) 20%, #302638); border: 0; border-radius: 17px 17px 20px 20px; transform: none; font-family: 'Baloo 2', var(--font); font-size: 24px; }
+.done .habit-number { border: 0; }
+.habit-copy h3 { font-size: 15px; margin: 6px 0; }
+.habit-link { border: 0; background: #ffffff09; border-radius: 50%; width: 36px; height: 36px; justify-content: center; padding: 0; }
+.habit-link > span { display: none; }
+.general-check-art {
+  position: relative;
+  display: grid;
+  justify-self: center;
+  width: min(100%, 590px);
+  margin: 10px 0 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  animation: general-check-pop .46s cubic-bezier(.22, .78, .32, 1) both;
+  transition: transform .16s ease, filter .16s ease;
+}
+.general-check-art img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@keyframes general-check-pop {
+  0% { opacity: 0; scale: .91; }
+  68% { opacity: 1; scale: 1.035; }
+  100% { opacity: 1; scale: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .general-check-art { animation: none; transition: none; }
+}
+:global(.kordia-reduce-motion) .general-check-art { animation: none; transition: none; }
+.general-check-art:enabled:hover { transform: translateY(-3px); filter: brightness(1.08); }
+.general-check-art:enabled:active { transform: translateY(2px); }
+.general-check-art:disabled { cursor: default; }
+.general-check-art:disabled:not(:has(.general-check-done)) { opacity: .55; }
+.general-check-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--theme-dark);
+  color: #fff5e8;
+  font-size: 12px;
+  font-weight: 800;
+}
+.inicio-dialog h2 { font: 800 29px/1.15 'Baloo 2', var(--font); }
+.inicio-dialog .missing-habit {
+  margin-top: 8px;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: #352a43;
+}
+.inicio-dialog .missing-habit:hover { background: #443352; }
+.team { border-radius: 19px; position: relative; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.team-banner-cover { position: relative; isolation: isolate; overflow: hidden; padding: 18px 19px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.team-banner-art { position: absolute; inset: 0; z-index: -2; background-image: var(--team-banner); background-size: cover; background-position: center; filter: var(--team-banner-filter, none); transition: transform 0.35s ease; }
+.team:hover .team-banner-art { transform: scale(1.06); }
+.team-banner-shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(16, 11, 26, 0.38) 0%, rgba(16, 11, 26, 0.82) 100%); }
+.team .team-top { margin-bottom: 12px; }
+.team h3 { font-family: 'Baloo 2', var(--font); font-size: 23px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75); }
+.team-banner-cover > p { font-size: 11px; color: rgba(244, 238, 255, 0.9); margin: 3px 0 0; font-weight: 700; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75); }
+.team .emblem { border: 2px solid color-mix(in srgb, var(--team) 70%, #fff); background: rgba(22, 16, 34, 0.78); backdrop-filter: blur(4px); color: #fff; border-radius: 14px; transform: rotate(-5deg); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45); }
+.team .team-streak { padding: 4px 9px; border-radius: 999px; background: rgba(18, 12, 28, 0.72); backdrop-filter: blur(4px); color: #ffe2b0; font-weight: 800; }
+.team-card-body { padding: 15px 19px 18px; display: flex; flex-direction: column; flex: 1; }
+.team-card-body > small { font-size: 10px; color: var(--muted-local); }
+.team.team-archived { filter: grayscale(1); }
+.new-team { border: 0; border-radius: 19px; background: #ffffff04; }
+/* Conservamos los adornos originales de la portada del perfil con el fondo del tema. */
+.profile .cover { height: 125px; background: var(--profile-cover); position: relative; overflow: hidden; }
+.profile .cover::before { content: ''; position: absolute; inset: -4%; background-image: var(--profile-bg); background-size: cover; background-position: center; }
+.profile .cover-shape, .profile .cover > svg { display: none; }
+.profile-body .character { border: 0; padding: 7px; box-shadow: none; margin-top: -44px; }
+.streak { background: #29212b; }
+.weekly .bar > span { background: color-mix(in srgb, var(--accent) 42%, #352b40); border-radius: 6px 6px 0 0; }
+.weekly .today .bar > span { background: var(--accent); }
+.week > div > span { border: 0; }
+@media (max-width: 1050px) {
+  .columns { grid-template-columns: minmax(0, 1fr); }
+  .right-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .dashboard-camp { grid-template-columns: minmax(0, 1fr) 125px; min-height: 280px; }
+  .camp-copy { padding: 22px 0 22px 20px; }
+  .camp-copy h2 { font-size: 29px; }
+  .camp-copy p { font-size: 11px; }
+  .camp-scene { margin-left: 6px; border-radius: 70px 0 0 0; }
+  .camp-character { transform: translateX(-50%) scale(.8); transform-origin: bottom; }
+  .camp-flag { display: none; }
+  .camp-character-name { font-size: 9px; padding: 5px 8px; }
+  .right-column { grid-template-columns: minmax(0, 1fr); }
+  .section-title { flex-wrap: wrap; }
+  .habit { padding: 17px 13px; gap: 11px; }
+  .habit-copy h3 { font-size: 13px; }
+}

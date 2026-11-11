@@ -91,6 +91,18 @@ El cliente usa `/api` en desarrollo y producción. Si más adelante frontend y A
 
 El access token no se guarda en `localStorage`; vive en el store de Pinia. El refresh token va en cookie `refreshToken` con `path=/api/auth`.
 
+## Verificación de correo
+
+Para habilitar el registro de cuentas nuevas con verificación de correo, configura estas variables en el backend local y en Render:
+
+- `APP_PUBLIC_URL` con la URL del frontend que abrirá el destinatario, por ejemplo `http://localhost:5173` en local o la URL HTTPS de Kordia en Render.
+- `RESEND_API_KEY` con una clave de envío de Resend. Guárdala como secreto del backend.
+- `EMAIL_FROM` con un remitente autorizado por Resend, por ejemplo `Kordia <cuentas@tu-dominio.com>` tras verificar el dominio.
+
+Para probar el registro en local sin Resend, configura `VERIFICATION_EMAIL_MODE=console` y apunta `APP_PUBLIC_URL` a tu frontend en localhost. Abre el enlace que aparece en la terminal del backend después de registrarte. El modo de consola está deshabilitado en producción.
+
+Regenera el cliente y aplica la migración con `npm run db:generate` y `npm run db:deploy` desde `backend`. Las cuentas existentes mantienen el acceso. Las cuentas nuevas confirman el enlace antes del primer inicio de sesión. Si vence, pueden volver a solicitarlo con su correo y contraseña.
+
 ## Personalización por cuenta
 
 El personaje (`User.characterId`) y el tema (`User.themeId`) se guardan en PostgreSQL para el usuario autenticado. El navegador conserva una caché, pero al iniciar sesión se carga la elección del servidor, también en incógnito. Las cuentas se identifican por su ID, sin mezclar preferencias de personas con el mismo nombre.

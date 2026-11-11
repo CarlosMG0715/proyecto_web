@@ -20,6 +20,8 @@ COPY backend/prisma/ ./prisma/
 RUN npm ci
 
 COPY backend/ ./
+COPY ["Frontend/src/assets/Banner Recuperacion Verificacion.png", "/app/Frontend/src/assets/Banner Recuperacion Verificacion.png"]
+COPY ["Frontend/src/assets/Recordatorio RACHA.png", "/app/Frontend/src/assets/Recordatorio RACHA.png"]
 COPY --from=frontend-build /app/Frontend/dist /app/Frontend/dist
 
 ENV FRONTEND_DIST_DIR=/app/Frontend/dist

@@ -32,6 +32,7 @@ export interface AuthResponse {
 
 export interface ApiErrorResponse {
   error: string
+  code?: string
   correlationId?: string
 }
 

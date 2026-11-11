@@ -197,7 +197,7 @@ export const useCharacterStore = defineStore('characters', () => {
   }
 
   function select(id: string) {
-    if (CHARACTERS.some(c => c.id === id)) updatePreferences({ characterId: id, themeId: id })
+    if (CHARACTERS.some(c => c.id === id)) updatePreferences({ characterId: id })
   }
 
   async function retrySync() {

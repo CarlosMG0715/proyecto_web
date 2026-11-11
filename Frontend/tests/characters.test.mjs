@@ -18,7 +18,14 @@ function loadStore(path, overrides = {}) {
   return module.exports
 }
 const sessionModule = loadStore('../src/stores/session.ts')
-const { useCharacterStore, CHARACTERS, CHARACTER_THEMES } = loadStore('../src/stores/characters.ts', { './session': sessionModule })
+const preferencesApi = {
+  get: async () => { throw new Error('Sin conexión durante la prueba de caché') },
+  patch: async (_path, preferences) => ({ data: preferences }),
+}
+const { useCharacterStore, CHARACTERS, CHARACTER_THEMES } = loadStore('../src/stores/characters.ts', {
+  './session': sessionModule,
+  '@/services/api': { api: preferencesApi },
+})
 function fresh() { setActivePinia(createPinia()); return { characters: useCharacterStore(), session: sessionModule.useSessionStore() } }
 
 test('los seis personajes seleccionan su icono y tema correspondiente', () => {
@@ -30,7 +37,7 @@ test('los seis personajes seleccionan su icono y tema correspondiente', () => {
   for (const c of CHARACTERS) {
     characters.select(c.id)
     assert.equal(characters.selected.id, c.id)
-    assert.equal(characters.theme.id, c.id)
+    assert.equal(characters.theme.id, 'sprout')
     assert.equal(characters.forMember('me', true).id, c.id)
   }
   assert.equal(characters.forMember('carlos').id, 'fox')
@@ -77,22 +84,39 @@ test('preferencias corruptas usan valores seguros', () => {
 const demoModule = loadStore('../src/mocks/demoGroups.ts', {
   '@/assets/avatars/carlos.jpg': 'carlos.jpg', '@/assets/avatars/valeria.jpg': 'valeria.jpg',
 })
+const leaveRequests = []
+const joinRequests = []
 const { useGroupsStore } = loadStore('../src/stores/groups.ts', {
   './session': sessionModule, './characters': { useCharacterStore }, '@/mocks/demoGroups': demoModule,
+  '@/services/groupService': {
+    groupService: {
+      list: async () => [],
+      requestJoin: async (code) => {
+        joinRequests.push(code)
+        return { group: { name: 'Equipo de prueba' }, request: { id: 'pending-request' } }
+      },
+    },
+  },
+  '@/services/groupsService': {
+    fetchCheckInHistory: async () => [],
+    leaveGroupRequest: async (groupId) => { leaveRequests.push(groupId) },
+  },
 })
-test('salir elimina la membresía, conserva el grupo y permite volver con el código', () => {
+test('salir confirma la petición al servidor y volver por código solicita aprobación', async () => {
   storage.clear()
   const { session } = fresh()
   session.setUser({ id: 'test-owner', name: 'Owner', email: 'owner@example.test' })
-  let groups = useGroupsStore()
+  const groups = useGroupsStore()
+  await groups.refreshRemoteGroups()
+  // Deja terminar la carga iniciada por el watcher de la cuenta.
+  await new Promise(resolve => setImmediate(resolve))
   const group = groups.createGroup({ name: 'Equipo de prueba', category: 'General' }, 'Owner')
-  groups.leaveGroup(group.id)
+  await groups.leaveGroup(group.id)
+  assert.equal(leaveRequests.at(-1), group.id)
   assert.equal(groups.groups.some(g => g.id === group.id), false)
   assert.equal(groups.groupById(group.id), undefined)
-  assert.ok(groups.catalogGroups.some(g => g.id === group.id))
-  fresh().session.setUser({ id: 'test-owner', name: 'Owner', email: 'owner@example.test' })
-  groups = useGroupsStore()
+  const result = await groups.requestGroupJoin(group.inviteCode.toLowerCase())
+  assert.equal(result.ok, true)
+  assert.equal(joinRequests.at(-1), group.inviteCode.toUpperCase())
   assert.equal(groups.groupById(group.id), undefined)
-  assert.equal(groups.joinGroupByCode(group.inviteCode, 'Owner').ok, true)
-  assert.ok(groups.groupById(group.id))
 })

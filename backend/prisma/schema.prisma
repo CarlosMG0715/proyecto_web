@@ -25,6 +25,7 @@ enum MessageType {
 }
 
 enum ContextType {
+  HABIT_CREATED
   CHECK_IN
   PENALTY
   DROPOUT_RISK
@@ -38,6 +39,17 @@ enum RiskLevel {
 }
 
 model User {
+  sentStreakPokes StreakPoke[] @relation("StreakPokeSender")
+  receivedStreakPokes StreakPoke[] @relation("StreakPokeRecipient")
+  notificationPreferences Json?
+  lastReminderDay String?
+  emailVerificationRequired Boolean @default(true)
+  emailVerifiedAt DateTime? @db.Timestamptz(3)
+  emailVerificationHash String? @unique
+  emailVerificationExpiresAt DateTime? @db.Timestamptz(3)
+  emailVerificationSentAt DateTime? @db.Timestamptz(3)
+  dailyGroupChecks GroupDailyCheck[]
+  habitParticipations HabitParticipation[]
   // cuenta de la persona y sus relaciones con actividad del sistema.
   id            String            @id @default(cuid())
   name          String
@@ -62,13 +74,17 @@ model User {
 }
 
 model Group {
+  streakPokes StreakPoke[]
+  dailyChecks GroupDailyCheck[]
   // espacio compartido; la zona horaria define el dia de check-in.
   id               String            @id @default(cuid())
   name             String
   inviteCode       String            @unique
   timeZone         String            @default("America/Bogota")
+  targetDays       Int?
   penaltyThreshold Float             @default(0.6)
   version          Int               @default(0)
+  archivedAt       DateTime?         @db.Timestamptz(3)
   createdById      String
   createdAt        DateTime          @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
@@ -96,6 +112,7 @@ model GroupMembership {
   userId   String
   role     GroupRole @default(MIEMBRO)
   joinedAt DateTime  @default(now()) @db.Timestamptz(3)
+  fallenAt DateTime? @db.Timestamptz(3)
   group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -105,6 +122,7 @@ model GroupMembership {
 }
 
 model Habit {
+  participants HabitParticipation[]
   // meta compartida que los miembros pueden completar cada dia.
   id          String    @id @default(cuid())
   groupId     String
@@ -124,6 +142,30 @@ model Habit {
   @@index([groupId, isActive])
   @@index([createdById])
   @@map("habits")
+}
+
+model GroupDailyCheck {
+  groupId String
+  userId String
+  localDate DateTime @db.Date
+  completedHabitIds String[] @default([])
+  note String?
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId, localDate])
+  @@index([userId, localDate])
+  @@map("group_daily_checks")
+}
+
+model HabitParticipation {
+  habitId String
+  userId String
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([habitId, userId])
+  @@map("habit_participations")
 }
 
 model CheckIn {
@@ -246,6 +288,7 @@ enum JoinRequestStatus {
 }
 
 model GroupJoinRequest {
+  isReturn      Boolean           @default(false)
   id          String            @id @default(cuid())
   groupId     String
   requesterId String
@@ -260,4 +303,19 @@ model GroupJoinRequest {
   @@index([groupId, status, createdAt])
   @@index([requesterId, status])
   @@map("group_join_requests")
+}
+
+model StreakPoke {
+  id          String   @id @default(cuid())
+  groupId     String
+  senderId    String
+  recipientId String
+  localDate   DateTime @db.Date
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender      User     @relation("StreakPokeSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient   User     @relation("StreakPokeRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, senderId, recipientId, localDate])
+  @@index([recipientId, localDate])
+  @@map("streak_pokes")
 }

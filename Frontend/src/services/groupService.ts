@@ -1,6 +1,9 @@
 import { api } from '@/services/api'
+import type { DailyCheckReport } from '@/types/group'
 
 export interface RemoteGroup {
+  targetDays?: 30 | 90 | 120 | null
+  archivedAt?: string | null
   id: string
   name: string
   description?: string
@@ -12,21 +15,25 @@ export interface RemoteGroup {
     user: { id: string; name: string; email: string; characterId: string; themeId: string }
   }>
   members?: Array<{
+    dailyReport?: DailyCheckReport | null
+    fallenAt?: string | null
+    isFallen?: boolean
     id: string; name: string; role: 'ADMIN' | 'MIEMBRO'; characterId?: string; themeId?: string
     habit?: string; daysCompleted?: number; daysTotal?: number; streak?: number; checkedInToday?: boolean; isCurrentUser?: boolean; isOnline?: boolean
   }>
   streak?: number
   health?: number
   completionHistory?: number[]
-  messages?: Array<{ id: string; kind: 'user' | 'system'; authorId: string | null; text: string; sentAt: string }>
-  habits?: Array<{ id: string; name: string; icon?: string; description: string | null; targetDays?: 30 | 90 | 120; checks: Record<string, { done: boolean; note: string }> }>
+  messages?: Array<{ id: string; kind: 'user' | 'system'; authorId: string | null; text: string; sentAt: string; habitId?: string }>
+  habits?: Array<{ id: string; name: string; icon?: string; description: string | null; targetDays?: 30 | 90 | 120; joined?: boolean; checks: Record<string, { done: boolean; note: string }> }>
   timeZone?: string
 }
 
 export interface JoinRequest {
+  isReturn?: boolean
   id: string
   createdAt: string
-  group: { id: string; name: string; inviteCode?: string }
+  group: { id: string; name: string; inviteCode?: string; color?: string }
   requester: { id: string; name: string; email: string; characterId: string }
 }
 
@@ -50,7 +57,7 @@ export const groupService = {
       }
     })
   },
-  async create(payload: { name: string; category: string; color: string; inviteCode?: string; initialHabit: { name: string; icon: string } }) {
+  async create(payload: { name: string; category: string; color: string; description: string; targetDays: 30 | 90 | 120; inviteCode?: string; replaceArchivedGroupId?: string; initialHabit: { name: string; icon: string; description: string } }) {
     const { data } = await api.post<{ group: RemoteGroup }>('/groups', payload)
     return data.group
   },
@@ -64,7 +71,7 @@ export const groupService = {
     const { data } = await api.get<{ requests: JoinRequest[] }>('/groups/join-requests/inbox')
     return data.requests
   },
-  async decide(requestId: string, action: 'ACCEPTED' | 'REJECTED') {
+  async decide(requestId: string, action: 'ACCEPTED' | 'REJECTED' | 'EXPELLED') {
     return api.patch(`/groups/join-requests/${requestId}`, { action })
   },
 }
