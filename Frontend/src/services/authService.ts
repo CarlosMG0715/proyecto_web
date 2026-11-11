@@ -34,13 +34,18 @@ export async function login(credentials: LoginCredentials): Promise<void> {
   }
 }
 
-export async function register(payload: RegisterPayload): Promise<{ verificationSent: boolean }> {
+export interface RegisterResult {
+  verificationSent: boolean
+  verificationRequired?: boolean
+}
+
+export async function register(payload: RegisterPayload): Promise<RegisterResult> {
   // registra la cuenta; esta funcion no inicia sesion automaticamente.
   const session = useSessionStore()
   session.setLoading(true)
   session.setError(null)
   try {
-    const { data } = await api.post<{ verificationSent: boolean }>('/auth/register', payload)
+    const { data } = await api.post<RegisterResult>('/auth/register', payload)
     return data
   } catch (err) {
     session.setError(extractError(err, 'No se pudo crear la cuenta'))

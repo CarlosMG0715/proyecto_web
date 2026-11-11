@@ -98,3 +98,21 @@ test('las cuentas anteriores a la migración conservan el acceso', async () => {
   const session = await authService.login(credentials)
   assert.equal(session.user.id, 'legacy-user')
 })
+
+test('cuando el servicio de correo no está configurado, el usuario se crea verificado sin lanzar 503', async () => {
+  const origKey = process.env.RESEND_API_KEY
+  delete process.env.RESEND_API_KEY
+  try {
+    const getUser = fakeDatabase()
+    const result = await authService.register({ email: 'sin-correo@example.test', password: 'password123', name: 'Sin Correo' })
+    assert.equal(result.verificationRequired, false)
+    assert.equal(result.verificationSent, false)
+    assert.equal(getUser().emailVerificationRequired, false)
+    assert.ok(getUser().emailVerifiedAt instanceof Date)
+    const session = await authService.login({ email: 'sin-correo@example.test', password: 'password123' })
+    assert.ok(session.accessToken)
+  } finally {
+    process.env.RESEND_API_KEY = origKey
+  }
+})
+
