@@ -127,7 +127,7 @@ async function onSubmit(): Promise<void> {
               id="reg-name"
               v-model="name"
               type="text"
-              placeholder="ej. AlexRacha"
+              placeholder="Ej: ValeRacha"
               autocomplete="nickname"
               required
               minlength="1"

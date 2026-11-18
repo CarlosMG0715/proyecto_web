@@ -282,14 +282,16 @@
 }
 
 .character-preview strong {
-  font-size: 12px;
-  background: #ecdfc9;
-  border: 1px solid #6d6855;
-  border-radius: 6px;
-  padding: 6px 9px;
-  color: #343d2f;
+  font-size: 14px;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--profile-accent) 25%, #fff7e8);
+  border: none;
+  border-radius: 8px;
+  padding: 7px 13px;
+  color: color-mix(in srgb, var(--profile-cover) 45%, #17121f);
   max-width: 100%;
   overflow-wrap: anywhere;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .character-saved {
@@ -502,4 +504,24 @@
   .character-preview {
     width: 100%;
   }
+}
+
+.personalization .character-option,
+.personalization .theme-options button {
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+.personalization .character-option.chosen {
+  background: color-mix(in srgb, var(--option-color) 24%, #2b2234);
+  box-shadow: none;
+}
+.personalization .theme-options button.chosen {
+  outline: none;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--swatch) 24%, var(--surface-2));
+}
+.personalization :is(.character-option, .theme-options button):focus-visible {
+  outline: 2px solid var(--profile-accent);
+  outline-offset: 3px;
 }

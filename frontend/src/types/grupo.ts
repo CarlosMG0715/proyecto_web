@@ -23,6 +23,7 @@ export interface MensajeChat {
   author: { id: string; name: string; idPersonaje: string } | null
 }
 export interface Grupo {
+  creadoEn: string
   id: string
   name: string
   color: string

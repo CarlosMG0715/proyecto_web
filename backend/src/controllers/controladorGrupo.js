@@ -66,7 +66,7 @@ exports.enviarMensaje = async (req, res) => {
   responderCambio(req, res)
 }
 exports.reiniciarPersonaje = async (req, res) => {
-  await grupos.reiniciarPersonaje(req.params.idGrupo, req.user.idUsuario)
+  await grupos.reiniciarPersonaje(req.params.idGrupo, req.user.idUsuario, req.params.idMiembro)
   responderCambio(req, res)
 }
 exports.quitarIntegrante = async (req, res) => {

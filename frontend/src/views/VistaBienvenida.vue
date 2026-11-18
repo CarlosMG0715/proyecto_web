@@ -27,13 +27,7 @@ function handleAction(): void {
     </header>
 
     <main class="landing-main-area">
-      <section class="floating-hero-window">
-        <div class="logo-center-wrap">
-          <img :src="kordiaLogo" alt="Kordia Logo" class="window-logo" />
-        </div>
-
-        <div></div>
-      </section>
+      <img :src="kordiaLogo" alt="Kordia" class="logo-bienvenida" />
     </main>
 
     <footer class="bottom-action-container">

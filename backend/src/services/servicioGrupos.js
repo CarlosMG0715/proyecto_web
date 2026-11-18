@@ -70,6 +70,7 @@ function prepararGrupo(grupo) {
   if (todosCompletaron) diasCerrados.push(hoy)
   return {
     id: grupo.id,
+    creadoEn: grupo.creadoEn,
     name: grupo.name,
     color: grupo.color,
     codigoInvitacion: grupo.codigoInvitacion,
@@ -85,7 +86,11 @@ function prepararGrupo(grupo) {
         .filter((registro) => claveFecha(registro.fechaRegistro, 'UTC') === hoy)
         .map((registro) => registro.idUsuario),
     })),
-    messages: [...grupo.messages].reverse().map((message) => ({
+    // chat y avisos de habitos nuevos
+    messages: [...grupo.messages]
+      .reverse()
+      .filter((message) => message.type !== 'SYSTEM' || message.tipoContexto === 'HABIT_CREATED')
+      .map((message) => ({
       id: message.id,
       content: message.content,
       type: message.type,
@@ -204,17 +209,41 @@ async function marcarHabito(idGrupo, idUsuario, idHabito, completado) {
 // Chat y miembros del grupo
 async function enviarMensaje(idGrupo, idUsuario, content) {
   await repo.change(idGrupo, async (db, grupo) => {
-    comprobarMiembro(grupo, idUsuario)
+    const integrante = comprobarMiembro(grupo, idUsuario)
+    if (integrante.caidoEn) throw crearErrorHttp('Tu personaje esta caido', 409)
     await db.mensaje.create({ data: { idGrupo, idUsuario, content } })
   })
 }
 
-async function reiniciarPersonaje(idGrupo, idUsuario) {
+// solo el admin decide los regresos
+async function reiniciarPersonaje(idGrupo, idUsuario, idMiembro) {
   await repo.change(idGrupo, async (db, grupo) => {
-    const integrante = comprobarMiembro(grupo, idUsuario)
+    comprobarMiembro(grupo, idUsuario, true)
+    const todosCaidos = grupo.membresias.every((miembro) => miembro.caidoEn)
+
+    if (!idMiembro && todosCaidos) {
+      await db.membresiaGrupo.updateMany({
+        where: { idGrupo },
+        data: { caidoEn: null },
+      })
+      await db.riesgoDesercion.updateMany({
+        where: { idGrupo },
+        data: { ausenciasConsecutivas: 0, level: 'LOW' },
+      })
+      return
+    }
+
+    const integrante = comprobarMiembro(grupo, idMiembro || idUsuario)
+    if (integrante.idUsuario === idUsuario && integrante.caidoEn) {
+      throw crearErrorHttp('Otro admin debe revivir tu personaje', 403)
+    }
     await db.membresiaGrupo.update({
       where: { id: integrante.id },
       data: { caidoEn: null },
+    })
+    await db.riesgoDesercion.updateMany({
+      where: { idGrupo, idUsuario: integrante.idUsuario },
+      data: { ausenciasConsecutivas: 0, level: 'LOW' },
     })
   })
 }

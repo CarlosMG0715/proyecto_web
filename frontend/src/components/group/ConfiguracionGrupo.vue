@@ -39,6 +39,9 @@ async function save() {
   )
   if (!error.value) emit('close')
 }
+function reviveMember(id: string) {
+  void run(() => servicioGrupos.reiniciarPersonaje(props.group.id, id))
+}
 function removeMember(id: string) {
   if (confirm('¿Quitar a este integrante?'))
     void run(() => servicioGrupos.quitarIntegrante(props.group.id, id))
@@ -69,6 +72,12 @@ async function remove() {
       <span>
         {{ member.name }} · {{ member.role === 'ADMIN' ? 'Admin' : 'Miembro' }}
       </span>
+      <button
+        v-if="member.caidoEn && member.id !== session.usuarioActual?.id"
+        class="boton-juego"
+        :disabled="busy"
+        @click="reviveMember(member.id)"
+      >Revivir</button>
       <button
         v-if="member.id !== session.usuarioActual?.id"
         class="boton-juego secondary"

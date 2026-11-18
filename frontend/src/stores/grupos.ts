@@ -10,6 +10,13 @@ export const usarAlmacenGrupos = defineStore('groups', () => {
   const groups = ref<Grupo[]>([])
   const error = ref('')
   const estaCargando = ref(false)
+  // mas nuevos primero siempre por fecha de creacion
+  function ordenarGrupos() {
+    groups.value.sort((a, b) => {
+      const diferencia = Date.parse(b.creadoEn) - Date.parse(a.creadoEn)
+      return diferencia || a.id.localeCompare(b.id)
+    })
+  }
   function grupoPorId(id: string) {
     return groups.value.find((group) => group.id === id)
   }
@@ -21,6 +28,7 @@ export const usarAlmacenGrupos = defineStore('groups', () => {
       const result = await servicioGrupos.listarGrupos()
       if (session.usuarioActual?.id === idUsuario) {
         groups.value = result
+        ordenarGrupos()
         error.value = ''
       }
     } catch (cause) {
@@ -33,7 +41,13 @@ export const usarAlmacenGrupos = defineStore('groups', () => {
     const idUsuario = session.usuarioActual?.id
     const group = await servicioGrupos.obtenerGrupo(id)
     if (session.usuarioActual?.id !== idUsuario) return
-    groups.value = [...groups.value.filter((item) => item.id !== id), group]
+    const indice = groups.value.findIndex((item) => item.id === id)
+    if (indice === -1) {
+      groups.value.push(group)
+    } else {
+      groups.value[indice] = group
+    }
+    ordenarGrupos()
   }
   watch(
     () => session.usuarioActual?.id,

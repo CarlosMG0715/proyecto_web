@@ -24,12 +24,15 @@ onUnmounted(() => clearInterval(timer))
 .shell {
   display: grid;
   grid-template-columns: 264px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100dvh;
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
   background: var(--bg);
 }
 .content {
   min-width: 0;
-  height: 100vh;
+  min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 @media (max-width: 700px) {
@@ -38,7 +41,7 @@ onUnmounted(() => clearInterval(timer))
     padding-bottom: 68px;
   }
   .content {
-    height: calc(100dvh - 68px);
+    height: 100%;
   }
 }
 </style>

@@ -27,8 +27,11 @@ export const servicioGrupos = {
   async quitarIntegrante(id: string, idMiembro: string) {
     await api.delete(`${path(id)}/members/${encodeURIComponent(idMiembro)}`)
   },
-  async reiniciarPersonaje(id: string) {
-    await api.post(`${path(id)}/revive`)
+  async reiniciarPersonaje(id: string, idMiembro?: string) {
+    const destino = idMiembro
+      ? `${path(id)}/members/${encodeURIComponent(idMiembro)}/revive`
+      : `${path(id)}/revive`
+    await api.post(destino)
   },
   async guardarHabito(id: string, input: DatosHabito, idHabito?: string) {
     if (idHabito)

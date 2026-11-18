@@ -20,6 +20,7 @@ const modal = usarModalCrearGrupo()
         :key="group.id"
         :to="{ name: 'grupo', params: { idGrupo: group.id } }"
         class="group-card"
+        :class="{ caido: group.members.length > 0 && group.members.every((miembro) => miembro.caidoEn) }"
         :style="{ '--accent': group.color }"
       >
         <img
@@ -84,4 +85,8 @@ const modal = usarModalCrearGrupo()
   gap: 8px;
   font-size: 13px;
 }
+</style>
+
+<style scoped>
+.group-card.caido { filter: grayscale(1); border-color: transparent; }
 </style>

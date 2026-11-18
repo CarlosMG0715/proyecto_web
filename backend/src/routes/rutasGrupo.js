@@ -39,6 +39,7 @@ router.delete('/groups/:idGrupo', grupos.eliminarGrupo)
 router.delete('/groups/:idGrupo/membership', grupos.salirDelGrupo)
 router.delete('/groups/:idGrupo/members/:idMiembro', grupos.quitarIntegrante)
 router.post('/groups/:idGrupo/revive', grupos.reiniciarPersonaje)
+router.post('/groups/:idGrupo/members/:idMiembro/revive', grupos.reiniciarPersonaje)
 
 
 // habitos y validacion

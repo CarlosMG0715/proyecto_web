@@ -16,7 +16,6 @@ import { usarAlmacenSesion } from '@/stores/sesion'
 import { servicioGrupos } from '@/services/servicioGrupos'
 import { mensajeError } from '@/services/errores'
 import { usarGrupoEnTiempoReal } from '@/composables/usarGrupoEnTiempoReal'
-import streakLostBanner from '@/assets/Racha perdida.png'
 const route = useRoute()
 const router = useRouter()
 const store = usarAlmacenGrupos()
@@ -27,7 +26,37 @@ const group = computed(() => store.grupoPorId(idGrupo.value))
 const me = computed(() =>
   group.value?.members.find((m) => m.id === session.usuarioActual?.id),
 )
+const idPersonajeEnVista = ref('')
+const integrantesEnVista = computed(() => {
+  const integrantes = group.value?.members ?? []
+  const indice = integrantes.findIndex((integrante) => integrante.id === idPersonajeEnVista.value)
+  const centro = Math.max(0, indice)
+
+  if (integrantes.length <= 2) return integrantes
+  return [-1, 0, 1].map((paso) =>
+    integrantes[(centro + paso + integrantes.length) % integrantes.length]!,
+  )
+})
+
+watch(
+  () => [idGrupo.value, me.value?.id],
+  () => { idPersonajeEnVista.value = me.value?.id ?? '' },
+  { immediate: true },
+)
+
+function recorrerPersonajes(paso: number) {
+  const integrantes = group.value?.members ?? []
+  if (!integrantes.length) return
+  const indice = Math.max(0, integrantes.findIndex(
+    (integrante) => integrante.id === idPersonajeEnVista.value,
+  ))
+  idPersonajeEnVista.value = integrantes[
+    (indice + paso + integrantes.length) % integrantes.length
+  ]!.id
+}
+
 const theme = computed(() => obtenerTemaBannerGrupo(group.value?.color))
+const todosCaidos = computed(() => !!group.value?.members.length && group.value.members.every((miembro) => miembro.caidoEn))
 const configuracionVisible = ref(false)
 const showChat = ref(true)
 const notice = ref('')
@@ -50,11 +79,23 @@ watch(
   },
   { immediate: true },
 )
-async function revive() {
+async function revive(idMiembro?: string) {
   if (busy.value) return
   busy.value = true
   try {
-    await servicioGrupos.reiniciarPersonaje(idGrupo.value)
+    await servicioGrupos.reiniciarPersonaje(idGrupo.value, idMiembro)
+    await refresh()
+  } catch (cause) {
+    notice.value = mensajeError(cause)
+  } finally {
+    busy.value = false
+  }
+}
+async function expulsarCaido(idMiembro: string) {
+  if (busy.value || !confirm('¿Expulsar a este integrante?')) return
+  busy.value = true
+  try {
+    await servicioGrupos.quitarIntegrante(idGrupo.value, idMiembro)
     await refresh()
   } catch (cause) {
     notice.value = mensajeError(cause)
@@ -92,7 +133,23 @@ async function leave() {
       '--group-window-banner': `url('${theme.urlBannerVentana}')`,
     }"
   >
-    <div class="adventure-wrap">
+    <section v-if="me?.caidoEn" class="derrota-grupo">
+      <div class="escena-derrota">
+        <LapidaAventura :size="todosCaidos ? 200 : 160" />
+        <strong>{{ me?.name ?? session.usuarioActual?.name }}</strong>
+      </div>
+      <div class="texto-derrota">
+        <h1>{{ todosCaidos ? 'Aventura cerrada' : 'Tu personaje cayó' }}</h1>
+        <p>{{ todosCaidos
+          ? 'Todo el equipo cayó. Puedes reiniciar la aventura para comenzar de nuevo.'
+          : 'Un admin debe revivir tu personaje para que puedas volver a participar.' }}</p>
+        <button v-if="(todosCaidos && me?.role === 'ADMIN')" class="boton-juego" :disabled="busy" @click="revive()">
+          Reiniciar aventura
+        </button>
+        <p v-if="notice" role="status">{{ notice }}</p>
+      </div>
+    </section>
+    <div v-else class="adventure-wrap">
       <header
         class="adventure-header"
         :style="{
@@ -166,11 +223,19 @@ async function leave() {
           <span class="trail"></span>
           <span class="camp-flag"></span>
         </div>
+        <div class="recorrido-personajes">
+          <button
+            v-if="group.members.length > 1"
+            class="flecha-personajes"
+            aria-label="Ver integrante anterior"
+            @click="recorrerPersonajes(-1)"
+          >‹</button>
         <div class="simple-players">
           <div
-            v-for="member in group.members"
+            v-for="member in integrantesEnVista"
             :key="member.id"
             class="simple-player"
+            :class="{ propio: member.id === session.usuarioActual?.id }"
           >
             <span class="player-bubble">
               {{
@@ -186,30 +251,36 @@ async function leave() {
                 PERSONAJES.find((c) => c.id === member.idPersonaje) ??
                 PERSONAJES[0]
               "
-              :size="88"
+              :size="member.id === session.usuarioActual?.id ? 132 : 112"
               :complete="
                 group.habits.length > 0 &&
                 member.completadosHoy === group.habits.length
               "
             />
             <span class="player-name">
-              {{ member.id === session.usuarioActual?.id ? 'Tú' : member.name }}
+              {{ member.name }}{{ member.id === session.usuarioActual?.id ? ' · Tú' : '' }}
             </span>
+            <div v-if="member.caidoEn && me?.role === 'ADMIN'" class="acciones-caido">
+              <button :disabled="busy" @click="revive(member.id)">Revivir</button>
+              <button :disabled="busy" @click="expulsarCaido(member.id)">Expulsar</button>
+            </div>
             <small v-if="member.diasSinCumplir >= 3">
               {{ member.diasSinCumplir }} días sin cumplir
             </small>
           </div>
         </div>
-      </section>
-      <section v-if="me?.caidoEn" class="simple-fallen panel-juego">
-        <img :src="streakLostBanner" alt="Racha perdida" />
-        <p>
-          Tu personaje cayó por no completar todos los hábitos del grupo. Puedes
-          empezar de nuevo, sin vidas ni solicitudes.
-        </p>
-        <button class="boton-juego" :disabled="busy" @click="revive">
-          Reiniciar personaje
-        </button>
+          <button
+            v-if="group.members.length > 1"
+            class="flecha-personajes"
+            aria-label="Ver siguiente integrante"
+            @click="recorrerPersonajes(1)"
+          >›</button>
+        </div>
+        <button
+          v-if="me && idPersonajeEnVista !== me.id"
+          class="volver-personaje"
+          @click="idPersonajeEnVista = me.id"
+        >Volver a mi personaje</button>
       </section>
       <div class="simple-columns" :class="{ 'chat-open': showChat }">
         <div class="simple-stack">
@@ -270,6 +341,38 @@ async function leave() {
 </template>
 <style scoped src="@/assets/styles/components/VistaGrupo.css"></style>
 <style scoped>
+
+.derrota-grupo {
+  display: grid;
+  min-height: calc(100dvh - 112px);
+  max-width: 1250px;
+  margin: auto;
+  align-content: center;
+  overflow: hidden;
+  color: #f1f1f4;
+  border-radius: 28px;
+  background: #232429;
+  text-align: center;
+}
+.derrota-grupo > .back { display: block; text-align: left; }
+.escena-derrota {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  min-height: clamp(260px, 48vh, 520px);
+  gap: 8px;
+  padding: 24px;
+  filter: grayscale(1);
+  background: linear-gradient(#20212755, #232429), var(--group-section-banner) center / cover;
+}
+.escena-derrota strong { padding: 8px 16px; border-radius: 10px; background: #26262c; }
+.texto-derrota { padding: 8px 24px 40px; }
+.texto-derrota h1 { margin: 0; color: #c5c5cc; font: 800 clamp(34px, 6vw, 64px)/1.1 'Baloo 2', var(--font); }
+.texto-derrota p { max-width: 48ch; margin: 16px auto 26px; color: #a5a5af; line-height: 1.6; }
+.texto-derrota .boton-juego { background: #e4e4ea; color: #212126; padding: 14px 22px; border: none; }
+.acciones-caido { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.acciones-caido button { border: none; border-radius: 12px; padding: 8px 12px; background: #fff1dc; color: #332139; }
+
 .adventure-page {
   height: 100%;
   overflow-y: auto;
@@ -278,22 +381,77 @@ async function leave() {
   display: grid;
   gap: 22px;
 }
-.simple-players {
+.recorrido-personajes {
   position: relative;
-  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 104px 20px 38px;
+  min-height: 410px;
+}
+.simple-players {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: end;
   justify-content: center;
-  gap: 30px;
-  flex-wrap: wrap;
-  padding: 85px 24px 30px;
-  min-height: 280px;
+  gap: clamp(10px, 4vw, 70px);
 }
 .simple-player {
   display: grid;
   justify-items: center;
-  gap: 10px;
-  min-width: 95px;
+  gap: 12px;
+  min-width: 0;
+  flex: 0 1 190px;
+}
+.simple-player.propio .player-name {
+  background: #fff6e4;
+  color: #332139;
+  font-weight: 800;
+  padding: 8px 18px;
+  border: none;
+  box-shadow: 0 5px 20px #3e24542b;
+}
+.flecha-personajes {
+  flex-shrink: 0;
+  width: 36px;
+  height: 48px;
+  border: none;
+  border-radius: 18px;
+  background: #fff5;
+  color: #332139;
+  font-size: 30px;
+}
+.flecha-personajes:hover {
+  background: #fffa;
+}
+.volver-personaje {
+  position: relative;
+  display: block;
+  margin: -24px auto 16px;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  background: #fff8;
+  color: #332139;
+}
+@media (max-width: 650px) {
+  .recorrido-personajes {
+    padding-inline: 8px;
+  }
+  .simple-player :deep(.adventure-character) {
+    font-size: 0.7em;
+    zoom: 0.7;
+  }
+  .simple-player .player-name {
+    font-size: 10px;
+    padding: 5px;
+  }
+  .simple-player .player-bubble {
+    font-size: 9px;
+    white-space: normal;
+    text-align: center;
+  }
 }
 .simple-player .player-bubble,
 .simple-player .player-name {

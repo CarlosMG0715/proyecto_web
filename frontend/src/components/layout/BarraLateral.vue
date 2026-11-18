@@ -98,7 +98,7 @@ async function handleLogout(): Promise<void> {
           :key="group.id"
           :to="{ name: 'grupo', params: { idGrupo: group.id } }"
           class="group-link"
-          :class="{ active: activeGroupId === group.id }"
+          :class="{ active: activeGroupId === group.id, caido: group.members.length > 0 && group.members.every((miembro) => miembro.caidoEn) }"
           :style="estilosBanner(group.color)"
         >
           <div class="group-banner-card">
@@ -160,3 +160,7 @@ async function handleLogout(): Promise<void> {
 </template>
 
 <style scoped src="@/assets/styles/components/BarraLateral.css"></style>
+
+<style scoped>
+.group-link.caido { filter: grayscale(1); }
+</style>

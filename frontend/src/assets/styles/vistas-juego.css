@@ -1,4 +1,5 @@
 .pagina-juego {
+  overscroll-behavior-y: contain;
   --game-line: #393346;
   --game-muted: #b1a7c3;
   --game-purple: #c4a6f5;
