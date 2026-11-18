@@ -92,6 +92,5 @@ async function obtenerDatosConstanciaPerfil(idUsuario) {
 module.exports = {
   buscarGruposYHabitos,
   buscarRegistrosRecientes,
-  contarHabitosActivos,
   obtenerDatosConstanciaPerfil,
 }
