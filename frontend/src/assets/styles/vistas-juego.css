@@ -1,0 +1,207 @@
+.pagina-juego {
+  --game-line: #393346;
+  --game-muted: #b1a7c3;
+  --game-purple: #c4a6f5;
+  height: 100%;
+  overflow-y: auto;
+  padding: 36px;
+  background: #14111e;
+  color: #f3edf9;
+}
+.contenido-juego {
+  max-width: 1150px;
+  margin: auto;
+  display: grid;
+  gap: 24px;
+}
+
+
+.banner-bienvenida {
+  
+  background:
+  linear-gradient(95deg, #1b1525f5, #201729ad),
+  var(--banner-imagen) center 43% / cover;
+
+  padding: 20px 26px;
+  border-radius: 18px;
+
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.banner-bienvenida .nombre-tema{
+  color:var(--profile-color);
+  position: relative;
+  isolation: isolite;
+}
+
+.banner-bienvenida .adornos-tema {
+  position:absolute;
+  inset:0 20%;
+  z-index: -1;
+  pointer-events:none;
+}
+
+.banner-bienvenida h1 {
+  font-size: 34px;
+  letter-spacing: -0.045em;
+  margin: 8px 0;
+}
+.banner-bienvenida p,
+
+
+.game-muted {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--game-muted);
+  margin: 0;
+}
+.panel-juego {
+  background: #211c2d;
+  border: 1px solid var(--game-line);
+  border-bottom-width: 3px;
+  border-radius: 17px;
+  padding: 25px;
+}
+.titulo-seccion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.titulo-seccion h2 {
+  font-size: 16px;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.titulo-seccion small {
+  font-size: 10px;
+  color: var(--game-muted);
+}
+.boton-juego {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #e1c4ff;
+  border-bottom: 4px solid #775397;
+  border-radius: 10px;
+  background: #c6a5f3;
+  color: #271a36;
+  font-weight: 800;
+  font-size: 12px;
+  padding: 12px 18px;
+  transition:
+    transform 0.15s,
+    filter 0.15s;
+}
+.boton-juego:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+.boton-juego:active {
+  transform: translateY(1px);
+}
+.boton-juego.secondary {
+  background: #33253f;
+  border-color: #6d4c87;
+  color: #e1c5f9;
+}
+.game-empty {
+  padding: 20px;
+  color: var(--game-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.pagina-juego button:focus-visible,
+.pagina-juego a:focus-visible,
+.pagina-juego input:focus-visible {
+  outline: 2px solid #e0beff;
+  outline-offset: 4px;
+}
+.pagina-juego h2,
+.pagina-juego h3,
+.pagina-juego p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1100px) {
+  .pagina-juego {
+    padding: 28px 22px;
+  }
+}
+@media (max-width: 650px) {
+  .pagina-juego {
+    padding: 22px 14px;
+  }
+  .panel-juego {
+    padding: 18px;
+  }
+  .banner-bienvenida {
+    flex-wrap: wrap;
+  }
+  .banner-bienvenida h1 {
+    font-size: 28px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pagina-juego * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+.pagina-juego .character-option.chosen {
+  border-color: var(--tema-acento);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tema-acento) 30%, transparent);
+}
+.pagina-juego .titulo-seccion h2 {
+  text-decoration-color: var(--tema-acento);
+}
+.pagina-juego .boton-juego:not(.secondary) {
+  background: var(--tema-acento);
+  border-color: color-mix(in srgb, var(--tema-acento), white 25%);
+  border-bottom-color: var(--tema-oscuro);
+}
+.pagina-juego .boton-juego.secondary {
+  border-color: color-mix(in srgb, var(--tema-acento) 55%, #302737);
+}
+
+[data-kordia-theme] .pagina-juego {
+  background:
+    radial-gradient(
+      ellipse at 88% 0%,
+      color-mix(in srgb, var(--tema-oscuro) 35%, transparent),
+      transparent 43%
+    ),
+    #14111e;
+}
+[data-kordia-theme] .day:hover {
+  border-color: var(--tema-acento);
+}
+[data-kordia-theme] .theme-options button:hover {
+  border-color: var(--swatch);
+}
+.adornos-tema::before,
+.adornos-tema::after {
+  position: absolute;
+  font-family: Georgia, serif;
+  line-height: 1;
+}
+.adornos-tema::before {
+  content: var(--theme-motif);
+  right: 24%;
+  top: 5%;
+  font-size: 47px;
+  opacity: 0.24;
+  transform: rotate(-14deg);
+}
+.adornos-tema::after {
+  content: var(--theme-motif-small);
+  right: 16%;
+  top: 60%;
+  font-size: 18px;
+  opacity: 0.45;
+}

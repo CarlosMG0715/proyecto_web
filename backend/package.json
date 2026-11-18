@@ -2,15 +2,15 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "API Express para el monitor de hábitos grupales",
-  "main": "server.js",
+  "main": "servidor.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node servidor.js",
+    "dev": "nodemon servidor.js",
     "test": "node --test tests/*.test.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "groups:close-day": "node scripts/closeGroupDay.js",
+    "groups:close-day": "node scripts/cerrarDiaGrupo.js",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
@@ -33,6 +33,6 @@
     "prisma": "6.19.0"
   },
   "prisma": {
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/datosIniciales.js"
   }
 }

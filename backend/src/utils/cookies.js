@@ -1,7 +1,7 @@
 // funciones para leer cookies aunque express no tenga parser de cookies instalado.
-const { cookieName } = require('../config')
+const { nombreCookie } = require('../configuracion')
 
-function readCookie(req, name) {
+function leerCookie(req, name) {
   // primero intenta la cookie ya analizada; luego revisa el header crudo.
   if (req.cookies && req.cookies[name]) {
     return req.cookies[name]
@@ -18,8 +18,8 @@ function readCookie(req, name) {
   return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : null
 }
 
-function extractRefreshToken(req) {
-  return readCookie(req, cookieName)
+function extraerTokenRenovacion(req) {
+  return leerCookie(req, nombreCookie)
 }
 
-module.exports = { readCookie, extractRefreshToken }
+module.exports = { leerCookie, extraerTokenRenovacion }

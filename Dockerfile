@@ -1,10 +1,10 @@
 # Compila Vue y sirve sus archivos desde Express para mantener la API y la sesión
 # bajo el mismo origen en producción.
 FROM node:22-bookworm-slim AS frontend-build
-WORKDIR /app/Frontend
-COPY Frontend/package.json Frontend/package-lock.json ./
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
-COPY Frontend/ ./
+COPY frontend/ ./
 RUN npm run build
 
 FROM node:22-bookworm-slim AS app
@@ -21,10 +21,8 @@ COPY backend/prisma/ ./prisma/
 RUN npm ci --include=dev
 
 COPY backend/ ./
-COPY ["Frontend/src/assets/Banner Recuperacion Verificacion.png", "/app/Frontend/src/assets/Banner Recuperacion Verificacion.png"]
-COPY ["Frontend/src/assets/Recordatorio RACHA.png", "/app/Frontend/src/assets/Recordatorio RACHA.png"]
-COPY --from=frontend-build /app/Frontend/dist /app/Frontend/dist
+COPY --from=frontend-build /app/frontend/dist /app/frontend/dist
 
-ENV FRONTEND_DIST_DIR=/app/Frontend/dist
+ENV FRONTEND_DIST_DIR=/app/frontend/dist
 EXPOSE 10000
 CMD ["sh", "-c", "npm run db:deploy && npm start"]

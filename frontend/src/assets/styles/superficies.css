@@ -1,0 +1,18 @@
+body .theme-options button.chosen {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+body .theme-options button.chosen {
+  background: color-mix(in srgb, var(--swatch) 24%, var(--surface-2));
+}
+@keyframes celebration-enter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

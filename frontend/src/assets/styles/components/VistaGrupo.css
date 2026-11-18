@@ -1,0 +1,907 @@
+.adventure-page {
+  height: 100%;
+  overflow-y: auto;
+  background: #151520;
+  color: #f2edf7;
+  padding: 24px 28px 40px;
+}
+
+.adventure-wrap {
+  max-width: 1420px;
+  margin: auto;
+  display: grid;
+  gap: 20px;
+}
+
+.adventure-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.back {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 11px;
+  color: #b9a8cb;
+}
+
+.adventure-header h1 {
+  font-size: 26px;
+  letter-spacing: -0.04em;
+  margin: 8px 0 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invite-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #c2a8df;
+}
+
+.leave-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid #6e3b4c;
+  border-bottom: 4px solid #2b121b;
+  background: #361d28;
+  color: #f9b4c4;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    filter 0.15s;
+}
+
+.leave-btn:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+@keyframes slide-chat-in {
+  from {
+    opacity: 0.6;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.world {
+  height: 430px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 19px;
+  border: 3px solid #5e766d;
+  box-shadow: 0 5px 0 #0b1014;
+  background: var(--sky, #b5dccb);
+  color: #273f38;
+  isolation: isolate;
+}
+
+.world-hud {
+  position: absolute;
+  top: 15px;
+  left: 17px;
+  right: 17px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 10;
+}
+
+.world-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #f5eed3ef;
+  border: 2px solid #6c8873;
+  border-bottom: 4px solid #617d66;
+  border-radius: 9px;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: 0 4px 0 #38524716;
+}
+
+.world-streak {
+  margin-left: auto;
+  padding: 3px 10px;
+  color: #6e452d;
+}
+
+.scenery {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.sun {
+  position: absolute;
+  top: 45px;
+  right: 22%;
+  width: 65px;
+  height: 65px;
+  border-radius: 50%;
+  background: #fff0b7;
+  box-shadow: 0 0 0 14px #fff2c72e;
+}
+
+.cloud {
+  position: absolute;
+  background: #eef6e3;
+  width: 110px;
+  height: 23px;
+  border-radius: 50px;
+  top: 88px;
+  left: 12%;
+}
+
+.cloud:before,
+.cloud:after {
+  content: '';
+  position: absolute;
+  background: inherit;
+  border-radius: 50%;
+  width: 45px;
+  height: 35px;
+  top: -18px;
+  left: 18px;
+}
+
+.cloud:after {
+  width: 35px;
+  height: 30px;
+  left: 55px;
+  top: -11px;
+}
+
+.cloud-two {
+  left: 64%;
+  top: 132px;
+  transform: scale(0.65);
+}
+
+.mountain {
+  position: absolute;
+  bottom: 105px;
+  width: 350px;
+  height: 250px;
+  background: var(--mountain, #82afa0);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.mountain-one {
+  left: -5%;
+  transform: rotate(-6deg);
+}
+
+.mountain-two {
+  left: 23%;
+  bottom: 95px;
+  height: 280px;
+  width: 440px;
+  background: color-mix(in srgb, var(--mountain, #82afa0) 80%, #fff 20%);
+}
+
+.mountain-three {
+  right: -7%;
+  height: 310px;
+  background: color-mix(in srgb, var(--mountain, #82afa0) 85%, #244838 15%);
+}
+
+.hill {
+  position: absolute;
+  bottom: 0;
+  border-radius: 50% 50% 0 0;
+  background: var(--grass, #95b975);
+  width: 85%;
+  height: 205px;
+  left: -13%;
+  transform: rotate(7deg);
+}
+
+.hill-two {
+  left: 40%;
+  height: 185px;
+  bottom: 5px;
+  transform: rotate(-8deg);
+  background: color-mix(in srgb, var(--grass, #95b975) 80%, #355d40 20%);
+}
+
+.trail {
+  position: absolute;
+  left: 20%;
+  bottom: -60px;
+  width: 70%;
+  height: 175px;
+  background: #d5c290;
+  border-radius: 50%;
+  transform: rotate(-11deg);
+  box-shadow: 0 -10px 0 #afbc7c;
+}
+
+.camp-flag {
+  position: absolute;
+  right: 12%;
+  bottom: 102px;
+  height: 73px;
+  width: 4px;
+  background: #655742;
+}
+
+.camp-flag:after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 4px;
+  width: 35px;
+  height: 23px;
+  background: #b27a85;
+  clip-path: polygon(0 0, 100% 0, 80% 50%, 100% 100%, 0 100%);
+}
+
+.player-bubble {
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff7df;
+  border: 1px solid #8d9272;
+  border-bottom: 3px solid #718164;
+  border-radius: 7px;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.completed .player-bubble {
+  background: #e0efb6;
+  color: #486135;
+}
+
+.player-name {
+  display: block;
+  max-width: 160px;
+  overflow-wrap: anywhere;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fbf5e6;
+  color: #2d2634;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-align: center;
+}
+
+@keyframes heart-warning {
+  from {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 #ffbf5c00);
+  }
+  to {
+    transform: scale(1.16);
+    filter: drop-shadow(0 0 5px #ffbf5caa);
+  }
+}
+
+.adventure-page button:focus-visible,
+.adventure-page a:focus-visible {
+  outline: 2px solid #d9b0f5;
+  outline-offset: 4px;
+}
+
+@media (max-width: 1250px) {
+  .adventure-page {
+    padding: 23px 20px;
+  }
+}
+
+@media (max-width: 1050px) {
+  .world {
+    height: 420px;
+  }
+}
+
+@media (max-width: 650px) {
+  .adventure-page {
+    padding: 18px 12px;
+  }
+  .adventure-header {
+    flex-wrap: wrap;
+  }
+  .adventure-header h1 {
+    font-size: 23px;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .leave-btn span {
+    display: none;
+  }
+  .world {
+    height: 410px;
+  }
+  .world-hud {
+    left: 9px;
+    right: 9px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .world-streak {
+    font-size: 9px;
+  }
+  .player-name {
+    font-size: 10px;
+  }
+  .mountain {
+    width: 230px;
+  }
+  .mountain-two {
+    width: 300px;
+  }
+}
+
+.adventure-header .header-actions > .boton-juego.secondary {
+  min-height: 42px;
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px #ffffff12,
+    0 3px 0 #17111e;
+  transition:
+    transform 0.16s,
+    filter 0.16s,
+    border-color 0.16s;
+}
+
+.adventure-header .header-actions > .boton-juego.secondary:hover {
+  border-color: #b28bd1;
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+}
+
+.adventure-header .header-actions > .boton-juego.secondary:active {
+  transform: translateY(1px);
+}
+
+.adventure-header .leave-btn {
+  min-height: 44px;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow:
+    inset 0 1px #ffffff18,
+    0 4px 0 #17111e;
+  transition:
+    transform 0.16s,
+    filter 0.16s,
+    box-shadow 0.16s;
+}
+
+.adventure-header .leave-btn {
+  padding: 0 14px;
+  color: #ffcbd2;
+  background: linear-gradient(145deg, #542d3b, #3e2530);
+  border: 1px solid #98586a;
+  border-bottom: 4px solid #211119;
+}
+
+.adventure-header .leave-btn:hover {
+  filter: brightness(1.12);
+  transform: translateY(-2px);
+}
+
+.adventure-header .leave-btn:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px #ffffff12,
+    0 1px 0 #17111e;
+}
+
+@media (max-width: 700px) {
+  .header-actions .leave-btn {
+    min-height: 40px;
+    font-size: 10px;
+  }
+}
+
+.adventure-page {
+  background:
+    radial-gradient(ellipse at 50% -20%, #6e438340, transparent 48%),
+    linear-gradient(180deg, #1c1429, #120d1c 62%);
+}
+
+.adventure-header {
+  padding: 2px 3px 15px;
+  border-bottom: 1px solid #624374;
+}
+
+.adventure-header h1 {
+  color: #f9e5c5;
+  font-size: 24px;
+}
+.adventure-header .back {
+  color: #d9aef4;
+}
+
+.world {
+  height: 276px;
+  border: 2px solid #8c6ca3;
+  border-bottom: 5px solid #26162f;
+  border-radius: 20px;
+  background: linear-gradient(
+    180deg,
+    #4e3f78 0%,
+    #6b568d 42%,
+    #364d6d 43%,
+    #223b4e 100%
+  );
+  box-shadow: 0 12px 25px #0d081b75;
+}
+
+.world-hud {
+  top: 12px;
+  left: 14px;
+  right: 14px;
+}
+.world-streak {
+  padding: 6px 9px;
+  color: #5a3850;
+  background: #fff0d1;
+  border-color: #d09a7d;
+  border-bottom-width: 3px;
+}
+.world-streak {
+  margin-left: auto;
+}
+.sun {
+  top: 52px;
+  right: 24%;
+  width: 34px;
+  height: 34px;
+  background: #f6daa0;
+  box-shadow: 0 0 0 9px #f6d79524;
+}
+.cloud {
+  opacity: 0.34;
+  top: 78px;
+  background: #cfbfdf;
+  transform: scale(0.7);
+}
+.cloud-two {
+  top: 96px;
+}
+.mountain {
+  bottom: 59px;
+  height: 148px;
+  background: #394365;
+  opacity: 0.9;
+}
+.mountain-two {
+  bottom: 58px;
+  height: 167px;
+  background: #534b78;
+}
+.mountain-three {
+  bottom: 54px;
+  height: 150px;
+  background: #30395d;
+}
+.hill {
+  bottom: 0;
+  height: 104px;
+  background: #344d55;
+}
+.hill-two {
+  bottom: -5px;
+  height: 102px;
+  background: #283f4d;
+}
+.trail {
+  bottom: -78px;
+  width: 58%;
+  height: 130px;
+  background: #8e9677;
+  box-shadow: 0 -6px 0 #5c7967;
+}
+.camp-flag {
+  right: 9%;
+  bottom: 58px;
+  height: 52px;
+  background: #604447;
+}
+.camp-flag:after {
+  background: #d85a6c;
+}
+@keyframes firefly {
+  to {
+    transform: translateY(-8px);
+    opacity: 0.25;
+  }
+}
+
+@media (max-width: 860px) {
+  .world {
+    height: 300px;
+  }
+}
+
+.adventure-page {
+  background:
+    radial-gradient(
+      ellipse at 88% 0%,
+      color-mix(in srgb, var(--tema-oscuro) 38%, transparent),
+      transparent 43%
+    ),
+    #151520;
+}
+.adventure-header {
+  padding: 0 0 14px;
+  border: 0;
+}
+.adventure-header h1,
+.adventure-page .titulo-seccion h2 {
+  font-family: 'Baloo 2', var(--font);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+.adventure-header h1 {
+  color: #f7f1dd;
+  font-size: clamp(28px, 3vw, 36px);
+  line-height: 0.95;
+}
+.adventure-header .back {
+  color: #cdb6de;
+}
+
+.world {
+  height: 360px;
+  background: var(--sky, #b5dccb);
+  border: 3px solid #5e766d;
+  border-bottom: 5px solid #0b1014;
+  border-radius: 19px;
+  box-shadow: 0 5px 0 #0b1014;
+}
+.world-hud {
+  top: 15px;
+  left: 17px;
+  right: 17px;
+}
+.world-streak {
+  color: #273f38;
+  background: #f5eed3ef;
+  border-color: #6c8873;
+  border-bottom-color: #617d66;
+}
+.world-streak {
+  padding: 7px 10px;
+}
+@keyframes countdown-pulse {
+  50% {
+    transform: scale(1.045);
+    filter: brightness(1.12);
+  }
+}
+.sun {
+  top: 45px;
+  right: 22%;
+  width: 65px;
+  height: 65px;
+  background: #fff0b7;
+  box-shadow: 0 0 0 14px #fff2c72e;
+}
+.cloud {
+  opacity: 1;
+  top: 88px;
+  background: #eef6e3;
+  transform: none;
+}
+.cloud-two {
+  top: 132px;
+}
+.mountain {
+  bottom: 105px;
+  height: 250px;
+  background: var(--mountain, #82afa0);
+  opacity: 1;
+}
+.mountain-two {
+  bottom: 95px;
+  height: 280px;
+  background: color-mix(in srgb, var(--mountain, #82afa0) 80%, #fff 20%);
+}
+.mountain-three {
+  bottom: 105px;
+  height: 310px;
+  background: color-mix(in srgb, var(--mountain, #82afa0) 85%, #244838 15%);
+}
+.hill {
+  bottom: 0;
+  height: 205px;
+  background: var(--grass, #95b975);
+}
+.hill-two {
+  bottom: 5px;
+  height: 185px;
+  background: color-mix(in srgb, var(--grass, #95b975) 80%, #355d40 20%);
+}
+.trail {
+  bottom: -60px;
+  width: 70%;
+  height: 175px;
+  background: #d5c290;
+  box-shadow: 0 -10px 0 #afbc7c;
+}
+.camp-flag {
+  right: 12%;
+  bottom: 102px;
+  height: 73px;
+  background: #655742;
+}
+.camp-flag:after {
+  background: #b27a85;
+}
+
+@media (max-width: 860px) {
+  .world {
+    height: 410px;
+  }
+}
+
+.world {
+  height: clamp(330px, 33vw, 390px);
+}
+
+@media (max-width: 660px) {
+  .world {
+    height: 340px;
+  }
+  .player-bubble {
+    margin-bottom: 14px;
+  }
+}
+
+@media (min-width: 661px) {
+  .player-bubble {
+    margin-bottom: 14px;
+  }
+}
+.group-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+.group-header-emblem {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  padding: 0;
+  color: #fff;
+  background: linear-gradient(145deg, var(--emblem-color, #b995db), #30213d);
+  border: 0;
+  border-bottom: 4px solid #1b1123;
+  border-radius: 15px;
+  box-shadow: 0 5px 14px rgba(10, 5, 18, 0.5);
+  cursor: default;
+  transition:
+    transform 0.16s,
+    filter 0.16s;
+}
+.group-brand-copy {
+  min-width: 0;
+}
+.group-brand-copy h1 {
+  margin: 2px 0 0;
+}
+.adventure-header {
+  position: relative;
+  overflow: hidden;
+  padding: 16px 20px;
+  border-radius: 20px;
+  border: 0;
+  border-bottom: 4px solid #100a19;
+  background: #1d1329;
+  box-shadow: 0 10px 26px rgba(10, 6, 20, 0.5);
+}
+.adventure-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--header-banner);
+  background-size: cover;
+  background-position: center;
+  filter: var(--header-banner-filter, none);
+  z-index: 0;
+}
+.adventure-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    92deg,
+    rgba(16, 10, 26, 0.72) 0%,
+    rgba(16, 10, 26, 0.28) 45%,
+    rgba(16, 10, 26, 0.08) 100%
+  );
+  z-index: 0;
+}
+.adventure-header > * {
+  position: relative;
+  z-index: 1;
+}
+.world {
+  position: relative;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 22px;
+  background: #0b0813;
+}
+.world::before {
+  content: '';
+  position: absolute;
+  inset: -4% -4% 34px -4%;
+  background-image: var(--world-bg);
+  background-size: cover;
+  background-position: center bottom;
+  z-index: 0;
+  pointer-events: none;
+}
+.world > .scenery {
+  display: none;
+}
+.world > :not(.scenery) {
+  z-index: 1;
+}
+.adventure-page {
+  --group-soft: color-mix(in srgb, var(--group-accent, #8b5cf6) 66%, #f4ebff);
+  --group-window-bg: color-mix(in srgb, var(--group-accent) 8%, #201b28);
+  --group-card-bg: color-mix(in srgb, var(--group-accent) 11%, #251f2d);
+}
+.adventure-page {
+  --group-soft: color-mix(in srgb, var(--group-accent, #8b5cf6) 66%, #f4ebff);
+  --group-surface: var(--group-card-bg);
+}
+.adventure-wrap {
+  container: group-layout / inline-size;
+}
+.adventure-page .adventure-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px clamp(16px, 3vw, 32px);
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 12px 28px #0b081b45;
+}
+.adventure-page .adventure-header::after {
+  background: linear-gradient(95deg, #17131eea, #211b29ab);
+}
+.adventure-page .adventure-header h1 {
+  font-size: clamp(29px, 3.2vw, 43px);
+  line-height: 1.05;
+  color: #fff5ed;
+  overflow-wrap: anywhere;
+}
+.header-identity {
+  min-width: 0;
+}
+.adventure-page .header-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+.invite-copy-text {
+  display: grid;
+  gap: 3px;
+}
+.adventure-header .invite-label {
+  color: #f0e3f7;
+  font-size: 11px;
+}
+.adventure-page .adventure-header .header-actions > .boton-juego.secondary {
+  min-height: 42px;
+  border-radius: 12px;
+  background: #292433eb;
+  color: #fbf3ff;
+}
+@container group-layout (min-width: 950px) {
+  .adventure-page .adventure-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+.world .world-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 13px 5px 6px;
+  border-radius: 16px;
+  background: #231927e8;
+  color: #ffd6a1;
+}
+.world-streak > span:not(.streak-fire) {
+  display: grid;
+  gap: 3px;
+}
+.world-streak strong {
+  font-size: 19px;
+  line-height: 1;
+}
+.world-streak small {
+  color: #f0d4bb;
+  font-size: 10px;
+}
+@keyframes team-celebration-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.adventure-page {
+  --poke-accent: var(--group-accent);
+}
+
+/* El código usa la misma tarjeta violeta que los botones del encabezado. */
+.invite-copy {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background: #30203f;
+  color: #f4e9ff;
+  border: 1px solid #806195;
+  border-bottom: 3px solid #190f24;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.invite-copy-text {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+}
+.invite-copy .invite-label {
+  color: #d8c2eb;
+  font-size: 10px;
+}
+.invite-copy strong {
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: 0.07em;
+}
+@media (max-width: 650px) {
+  .adventure-wrap,
+  .simple-columns,
+  .simple-stack {
+    min-width: 0;
+  }
+  .adventure-header {
+    flex-wrap: wrap;
+  }
+  .header-actions {
+    flex-wrap: wrap;
+  }
+}

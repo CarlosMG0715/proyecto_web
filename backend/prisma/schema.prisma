@@ -8,326 +8,218 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum GroupRole {
+enum RolGrupo {
   ADMIN
   MIEMBRO
+
+  @@map("GroupRole")
 }
 
-enum PenaltyStatus {
-  PENDING
-  RESOLVED
-  WAIVED
-}
-
-enum MessageType {
+enum TipoMensaje {
   USER
   SYSTEM
+
+  @@map("MessageType")
 }
 
-enum ContextType {
+enum TipoContexto {
   HABIT_CREATED
   CHECK_IN
   PENALTY
   DROPOUT_RISK
   DAILY_CLOSURE
+
+  @@map("ContextType")
 }
 
-enum RiskLevel {
+enum NivelRiesgo {
   LOW
   MEDIUM
   HIGH
+
+  @@map("RiskLevel")
 }
 
-model User {
-  sentStreakPokes StreakPoke[] @relation("StreakPokeSender")
-  receivedStreakPokes StreakPoke[] @relation("StreakPokeRecipient")
-  expulsions GroupExpulsion[]
-  notificationPreferences Json?
-  lastReminderDay String?
-  emailVerificationRequired Boolean @default(true)
-  emailVerifiedAt DateTime? @db.Timestamptz(3)
-  emailVerificationHash String? @unique
-  emailVerificationExpiresAt DateTime? @db.Timestamptz(3)
-  emailVerificationSentAt DateTime? @db.Timestamptz(3)
-  dailyGroupChecks GroupDailyCheck[]
-  habitParticipations HabitParticipation[]
+model Usuario {
   // cuenta de la persona y sus relaciones con actividad del sistema.
-  id            String            @id @default(cuid())
-  name          String
-  email         String            @unique
-  passwordHash  String
-  characterId   String            @default("sprout")
-  themeId       String            @default("sprout")
-  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
-  memberships   GroupMembership[]
-  joinRequests  GroupJoinRequest[] @relation("JoinRequester")
-  handledJoinRequests GroupJoinRequest[] @relation("JoinDecisionMaker")
-  createdGroups Group[]           @relation("GroupCreator")
-  createdHabits Habit[]           @relation("HabitCreator")
-  checkIns      CheckIn[]
-  penalties     Penalty[]
-  messages      Message[]
-  sessions      Session[]
-  dropoutRisks  DropoutRisk[]
+  id String            @id @default(cuid())
+  name String
+  email String            @unique
+  hashContrasena String @map("passwordHash")
+  idPersonaje String            @default("sprout") @map("characterId")
+  idTema String            @default("sprout") @map("themeId")
+  creadoEn DateTime          @default(now()) @db.Timestamptz(3) @map("createdAt")
+  actualizadoEn DateTime          @updatedAt @db.Timestamptz(3) @map("updatedAt")
+  membresias MembresiaGrupo[]
+  gruposCreados Grupo[]           @relation("GroupCreator")
+  habitosCreados Habito[]           @relation("HabitCreator")
+  registrosHabito RegistroHabito[]
+  penalizaciones Penalizacion[]
+  messages Mensaje[]
+  sessions Sesion[]
+  riesgosDesercion RiesgoDesercion[]
 
   @@map("users")
 }
 
-model Group {
-  streakPokes StreakPoke[]
-  dailyChecks GroupDailyCheck[]
+model Grupo {
   // espacio compartido; la zona horaria define el dia de check-in.
-  id               String            @id @default(cuid())
-  name             String
-  inviteCode       String            @unique
-  timeZone         String            @default("America/Bogota")
-  targetDays       Int?
-  penaltyThreshold Float             @default(0.6)
-  version          Int               @default(0)
-  archivedAt       DateTime?         @db.Timestamptz(3)
-  createdById      String
-  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
-  createdBy        User              @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  memberships      GroupMembership[]
-  joinRequests     GroupJoinRequest[]
-  habits           Habit[]
-  penalties        Penalty[]
-  messages         Message[]
-  closures         DailyClosure[]
-  dropoutRisks     DropoutRisk[]
-  description      String            @default("")
-  category         String            @default("General")
-  color            String            @default("#8b5cf6")
+  id String            @id @default(cuid())
+  name String
+  codigoInvitacion String            @unique @map("inviteCode")
+  timeZone String            @default("America/Bogota")
+  version Int               @default(0)
+  idCreador String @map("createdById")
+  creadoEn DateTime          @default(now()) @db.Timestamptz(3) @map("createdAt")
+  actualizadoEn DateTime          @updatedAt @db.Timestamptz(3) @map("updatedAt")
+  creador Usuario              @relation("GroupCreator", fields: [idCreador], references: [id], onDelete: Restrict)
+  membresias MembresiaGrupo[]
+  habits Habito[]
+  penalizaciones Penalizacion[]
+  messages Mensaje[]
+  cierres CierreDiario[]
+  riesgosDesercion RiesgoDesercion[]
+  color String            @default("#8b5cf6")
 
-
-  @@index([createdById])
+  @@index([idCreador])
   @@map("groups")
 }
 
-model GroupMembership {
+model MembresiaGrupo {
   // union entre cuenta y grupo, con rol y fecha de ingreso.
-  id       String    @id @default(cuid())
-  groupId  String
-  userId   String
-  role     GroupRole @default(MIEMBRO)
-  joinedAt DateTime  @default(now()) @db.Timestamptz(3)
-  fallenAt DateTime? @db.Timestamptz(3)
-  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id String    @id @default(cuid())
+  idGrupo String @map("groupId")
+  idUsuario String @map("userId")
+  role RolGrupo @default(MIEMBRO)
+  ingresoEn DateTime  @default(now()) @db.Timestamptz(3) @map("joinedAt")
+  caidoEn DateTime? @db.Timestamptz(3) @map("fallenAt")
+  group Grupo     @relation(fields: [idGrupo], references: [id], onDelete: Cascade)
+  user Usuario      @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
 
-  @@unique([groupId, userId])
-  @@index([userId])
+  @@unique([idGrupo, idUsuario])
+  @@index([idUsuario])
   @@map("group_memberships")
 }
 
-model Habit {
-  participants HabitParticipation[]
+model Habito {
   // meta compartida que los miembros pueden completar cada dia.
-  id          String    @id @default(cuid())
-  groupId     String
-  createdById String
-  name        String
-  icon        String    @default("🎯")
+  id String    @id @default(cuid())
+  idGrupo String @map("groupId")
+  idCreador String @map("createdById")
+  name String
   description String?
-  targetDays  Int       @default(30)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
-  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  createdBy   User      @relation("HabitCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  checkIns    CheckIn[]
-  penalties   Penalty[]
+  diasMeta Int       @default(30) @map("targetDays")
+  activo Boolean   @default(true) @map("isActive")
+  creadoEn DateTime  @default(now()) @db.Timestamptz(3) @map("createdAt")
+  actualizadoEn DateTime  @updatedAt @db.Timestamptz(3) @map("updatedAt")
+  group Grupo     @relation(fields: [idGrupo], references: [id], onDelete: Cascade)
+  creador Usuario      @relation("HabitCreator", fields: [idCreador], references: [id], onDelete: Restrict)
+  registrosHabito RegistroHabito[]
 
-  @@index([groupId, isActive])
-  @@index([createdById])
+  @@index([idGrupo, activo])
+  @@index([idCreador])
   @@map("habits")
 }
 
-model GroupDailyCheck {
-  groupId String
-  userId String
-  localDate DateTime @db.Date
-  completedHabitIds String[] @default([])
-  note String?
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+model RegistroHabito {
+  // cumplimiento diario unico por persona y habito, .
+  id String   @id @default(cuid())
+  idHabito String @map("habitId")
+  idUsuario String @map("userId")
+  fechaRegistro DateTime @db.Date @map("checkInDate")
+  registradoEn DateTime @default(now()) @db.Timestamptz(3) @map("checkedAt")
+  habit Habito    @relation(fields: [idHabito], references: [id], onDelete: Cascade)
+  user Usuario     @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
 
-  @@id([groupId, userId, localDate])
-  @@index([userId, localDate])
-  @@map("group_daily_checks")
-}
-
-model HabitParticipation {
-  habitId String
-  userId String
-  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([habitId, userId])
-  @@map("habit_participations")
-}
-
-model CheckIn {
-  // cumplimiento diario unico por persona y habito, con una nota opcional.
-  id          String   @id @default(cuid())
-  habitId     String
-  userId      String
-  checkInDate DateTime @db.Date
-  checkedAt   DateTime @default(now()) @db.Timestamptz(3)
-  note        String   @default("")
-  habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([habitId, userId, checkInDate])
-  @@index([userId, checkInDate])
+  @@unique([idHabito, idUsuario, fechaRegistro])
+  @@index([idUsuario, fechaRegistro])
   @@map("check_ins")
 }
 
-model DailyClosure {
-  id                String    @id @default(cuid())
-  groupId           String
-  localDate         DateTime  @db.Date
-  expectedCheckIns  Int
-  completedCheckIns Int
-  completionRate    Float
-  penaltyApplied    Boolean   @default(false)
-  processedAt       DateTime  @default(now()) @db.Timestamptz(3)
-  group             Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  penalties         Penalty[]
+model CierreDiario {
+  id String    @id @default(cuid())
+  idGrupo String @map("groupId")
+  fechaLocal DateTime  @db.Date @map("localDate")
+  registrosEsperados Int @map("expectedCheckIns")
+  registrosCompletados Int @map("completedCheckIns")
+  tasaCumplimiento Float @map("completionRate")
+  penalizacionAplicada Boolean   @default(false) @map("penaltyApplied")
+  procesadoEn DateTime  @default(now()) @db.Timestamptz(3) @map("processedAt")
+  group Grupo     @relation(fields: [idGrupo], references: [id], onDelete: Cascade)
+  penalizaciones Penalizacion[]
 
-  @@unique([groupId, localDate])
-  @@index([groupId, processedAt])
+  @@unique([idGrupo, fechaLocal])
+  @@index([idGrupo, procesadoEn])
   @@map("daily_closures")
 }
 
-model Penalty {
-  id             String        @id @default(cuid())
-  groupId        String
-  userId         String
-  habitId        String?
-  closureId      String?
-  idempotencyKey String        @unique
-  reason         String
-  points         Int           @default(1)
-  status         PenaltyStatus @default(PENDING)
-  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
-  group          Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  habit          Habit?        @relation(fields: [habitId], references: [id], onDelete: SetNull)
-  closure        DailyClosure? @relation(fields: [closureId], references: [id], onDelete: SetNull)
+model Penalizacion {
+  id String        @id @default(cuid())
+  idGrupo String @map("groupId")
+  idUsuario String @map("userId")
+  idCierre String? @map("closureId")
+  claveUnica String        @unique @map("idempotencyKey")
+  reason String
+  creadoEn DateTime      @default(now()) @db.Timestamptz(3) @map("createdAt")
+  group Grupo         @relation(fields: [idGrupo], references: [id], onDelete: Cascade)
+  user Usuario          @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+  closure CierreDiario? @relation(fields: [idCierre], references: [id], onDelete: SetNull)
 
-  @@index([groupId, createdAt])
-  @@index([userId, status])
-  @@index([closureId])
+  @@index([idGrupo, creadoEn])
+  @@index([idUsuario])
+  @@index([idCierre])
   @@map("penalties")
 }
 
-model DropoutRisk {
-  id                  String    @id @default(cuid())
-  groupId             String
-  userId              String
-  score               Float
-  level               RiskLevel @default(LOW)
-  consecutiveMisses   Int       @default(0)
-  recentRate          Float     @default(0)
-  previousRate        Float     @default(0)
-  lastNotifiedLevel   RiskLevel?
-  computedAt          DateTime  @default(now()) @db.Timestamptz(3)
-  group               Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+model RiesgoDesercion {
+  id String    @id @default(cuid())
+  idGrupo String @map("groupId")
+  idUsuario String @map("userId")
+  level NivelRiesgo @default(LOW)
+  ausenciasConsecutivas Int       @default(0) @map("consecutiveMisses")
+  calculadoEn DateTime  @default(now()) @db.Timestamptz(3) @map("computedAt")
+  group Grupo     @relation(fields: [idGrupo], references: [id], onDelete: Cascade)
+  user Usuario      @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
 
-  @@unique([groupId, userId])
-  @@index([groupId, level])
+  @@unique([idGrupo, idUsuario])
+  @@index([idGrupo, level])
   @@map("dropout_risks")
 }
 
-model Message {
+model Mensaje {
   // texto que pertenece a un grupo y puede tener autor o ser del sistema.
-  id          String       @id @default(cuid())
-  groupId     String
-  userId      String?
-  type        MessageType  @default(USER)
-  content     String
-  contextType ContextType?
-  contextId   String?
-  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
-  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id String       @id @default(cuid())
+  idGrupo String @map("groupId")
+  idUsuario String? @map("userId")
+  type TipoMensaje  @default(USER)
+  content String
+  tipoContexto TipoContexto? @map("contextType")
+  creadoEn DateTime     @default(now()) @db.Timestamptz(3) @map("createdAt")
+  group Grupo        @relation(fields: [idGrupo], references: [id], onDelete: Cascade)
+  user Usuario?        @relation(fields: [idUsuario], references: [id], onDelete: SetNull)
 
-  @@index([groupId, createdAt])
-  @@index([contextType, contextId])
+  @@index([idGrupo, creadoEn])
+  @@index([tipoContexto])
   @@map("messages")
 }
 
-model Session {
+model Sesion {
   // refresh token representado como hash y vinculado a su rotacion.
-  id           String    @id @default(cuid())
-  userId       String
-  familyId     String    @default(cuid())
-  tokenHash    String    @unique
-  replacedById String?
-  userAgent    String?
-  ipAddress    String?
-  isRevoked    Boolean   @default(false)
-  revokedAt    DateTime? @db.Timestamptz(3)
-  lastUsedAt   DateTime? @db.Timestamptz(3)
-  expiresAt    DateTime  @db.Timestamptz(3)
-  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id String    @id @default(cuid())
+  idUsuario String @map("userId")
+  idFamilia String    @default(cuid()) @map("familyId")
+  hashToken String    @unique @map("tokenHash")
+  idReemplazo String? @map("replacedById")
+  agenteUsuario String? @map("userAgent")
+  direccionIp String? @map("ipAddress")
+  revocado Boolean   @default(false) @map("isRevoked")
+  revocadoEn DateTime? @db.Timestamptz(3) @map("revokedAt")
+  ultimoUsoEn DateTime? @db.Timestamptz(3) @map("lastUsedAt")
+  venceEn DateTime  @db.Timestamptz(3) @map("expiresAt")
+  creadoEn DateTime  @default(now()) @db.Timestamptz(3) @map("createdAt")
+  user Usuario      @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
 
-  @@index([userId, isRevoked])
-  @@index([familyId])
+  @@index([idUsuario, revocado])
+  @@index([idFamilia])
   @@map("sessions")
-}
-
-enum JoinRequestStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-}
-
-model GroupJoinRequest {
-  isReturn      Boolean           @default(false)
-  id          String            @id @default(cuid())
-  groupId     String
-  requesterId String
-  status      JoinRequestStatus @default(PENDING)
-  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
-  decidedAt   DateTime?         @db.Timestamptz(3)
-  decidedById String?
-  group       Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  requester   User              @relation("JoinRequester", fields: [requesterId], references: [id], onDelete: Cascade)
-  decidedBy   User?             @relation("JoinDecisionMaker", fields: [decidedById], references: [id], onDelete: SetNull)
-
-  @@index([groupId, status, createdAt])
-  @@index([requesterId, status])
-  @@map("group_join_requests")
-}
-
-model GroupExpulsion {
-  id        String   @id @default(cuid())
-  userId    String
-  groupName String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("group_expulsions")
-}
-
-model StreakPoke {
-  id          String   @id @default(cuid())
-  groupId     String
-  senderId    String
-  recipientId String
-  localDate   DateTime @db.Date
-  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  sender      User     @relation("StreakPokeSender", fields: [senderId], references: [id], onDelete: Cascade)
-  recipient   User     @relation("StreakPokeRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-
-  @@unique([groupId, senderId, recipientId, localDate])
-  @@index([recipientId, localDate])
-  @@map("streak_pokes")
 }
