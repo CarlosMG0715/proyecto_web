@@ -50,7 +50,7 @@ async function send() {
       <span class="chat-emblem"><IconoAplicacion name="message" /></span>
       <div class="chat-title">
         <h3>Chat del grupo</h3>
-        <span>Mensajes y actividad del equipo</span>
+        <span>{{ group.members.length }} integrantes</span>
       </div>
     </header>
     <div
@@ -118,7 +118,7 @@ async function send() {
 <style scoped>
 .chat {
   height: 580px;
-  border: 1px solid #59416b;
+  border: none;
   border-radius: 18px;
   overflow: hidden;
 }
@@ -129,4 +129,5 @@ async function send() {
 .messages {
   min-height: 200px;
 }
+
 </style>

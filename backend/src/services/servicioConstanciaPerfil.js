@@ -47,92 +47,44 @@ async function buscarRegistrosRecientes(idUsuario) {
 }
 
 
-// calculos
-
-
-function contarHabitosActivos(membresias) {
-  let total = 0
-
-  for (const membresia of membresias) {
-    total = total + membresia.group.habits.length
-  }
-
-  return total
-}
-
-
-// 7 dias hasta hoy
-function crearFechasUltimosSieteDias(fechaFinal = claveFecha()) {
-  const fechas = []
-
-  for (let i = -6; i <= 0; i++) {
-    fechas.push(desplazarDia(fechaFinal, i))
-  }
-
-  return fechas
-}
-
-
-function calcularPorcentajeDelDia(registros, totalHabitos, fecha) {
-  if (totalHabitos === 0) return 0
-
-  let cantidadChecks = 0
-
-  for (const registro of registros) {
-    // fecha de la base en UTC
-    const fechaRegistro = claveFecha(registro.fechaRegistro, 'UTC')
-
-    if (fechaRegistro === fecha) {
-      cantidadChecks++
-    }
-  }
-
-  return Math.round((cantidadChecks / totalHabitos) * 100)
-}
-
-
-// datos para las barras
-function crearResumenSemanal(registros, totalHabitos) {
-  const fechas = crearFechasUltimosSieteDias()
-  const resumen = []
-
-  for (const fecha of fechas) {
-    const porcentaje = calcularPorcentajeDelDia(
-      registros,
-      totalHabitos,
-      fecha,
-    )
-
-    resumen.push({ fecha, porcentaje })
-  }
-
-  return resumen
-}
-
-
-// 30 dias con los habitos activos actuales
-function calcularConstanciaTreintaDias(registros, totalHabitos) {
-  const checksEsperados = totalHabitos * 30
-
-  if (checksEsperados === 0) return 0
-
-  return Math.round((registros.length / checksEsperados) * 100)
-}
-
-
 // funcion principal
 async function obtenerDatosConstanciaPerfil(idUsuario) {
   const membresias = await buscarGruposYHabitos(idUsuario)
   const registros = await buscarRegistrosRecientes(idUsuario)
-  const totalHabitos = contarHabitosActivos(membresias)
+  const hoy = claveFecha()
+  const dias = []
 
-  const resumenSemanal = crearResumenSemanal(registros, totalHabitos)
-  const constanciaTreintaDias = calcularConstanciaTreintaDias(
-    registros,
-    totalHabitos,
-  )
+  // cada dia cuenta solo los habitos que ya existian al ingresar al grupo
+  for (let paso = -29; paso <= 0; paso++) {
+    const fecha = desplazarDia(hoy, paso)
+    const habitosDelDia = membresias.flatMap((membresia) =>
+      membresia.group.habits.filter((habito) =>
+        claveFecha(membresia.ingresoEn) <= fecha &&
+        claveFecha(habito.creadoEn) <= fecha,
+      ),
+    )
+    const ids = new Set(habitosDelDia.map((habito) => habito.id))
+    const completados = registros.filter((registro) =>
+      ids.has(registro.idHabito) && claveFecha(registro.fechaRegistro, 'UTC') === fecha,
+    ).length
+    dias.push({
+      fecha,
+      esperados: ids.size,
+      completados,
+      porcentaje: ids.size ? Math.round(completados / ids.size * 100) : 0,
+    })
+  }
 
-  return { resumenSemanal, constanciaTreintaDias }
+  const resumenSemanal = dias.slice(-7).map(({ fecha, porcentaje }) => ({ fecha, porcentaje }))
+  const esperados = dias.reduce((total, dia) => total + dia.esperados, 0)
+  const completados = dias.reduce((total, dia) => total + dia.completados, 0)
+  const semana = dias.slice(-7)
+  const esperadosSemana = semana.reduce((total, dia) => total + dia.esperados, 0)
+  const completadosSemana = semana.reduce((total, dia) => total + dia.completados, 0)
+  const constanciaTreintaDias = esperados ? Math.round(completados / esperados * 100) : 0
+  const promedioSemanal = esperadosSemana ? Math.round(completadosSemana / esperadosSemana * 100) : 0
+
+  return { resumenSemanal, constanciaTreintaDias, promedioSemanal }
 }
 
 

@@ -61,12 +61,22 @@ router.put(
 )
 
 
+// check grupal
+router.post(
+  '/groups/:idGrupo/check',
+  validate(validadores.esquemaCheckGrupal),
+  grupos.registrarCheckGrupal,
+)
+
+
 // chat
 router.post(
   '/groups/:idGrupo/messages',
   validate(validadores.esquemaMensaje),
   grupos.enviarMensaje,
 )
+
+
 
 
 module.exports = router

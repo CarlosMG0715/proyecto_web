@@ -1,0 +1,3 @@
+ALTER TABLE "groups" ADD COLUMN "descripcion" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "habits" ADD COLUMN "insignia" TEXT NOT NULL DEFAULT 'target';
+ALTER TABLE "check_ins" ADD COLUMN "mensaje" TEXT NOT NULL DEFAULT '';

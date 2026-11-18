@@ -50,6 +50,9 @@ export const servicioGrupos = {
       { completed },
     )
   },
+  async registrarCheckGrupal(id: string, idHabitos: string[], mensaje: string) {
+    await api.post(path(id) + '/check', { idHabitos, mensaje })
+  },
   async enviarMensaje(id: string, content: string) {
     await api.post(`${path(id)}/messages`, { content })
   },

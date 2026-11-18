@@ -4,6 +4,7 @@ import IconoAplicacion from '@/components/ui/IconoAplicacion.vue'
 import IconoPersonaje from '@/components/ui/IconoPersonaje.vue'
 import PersonajeAventura from '@/components/ui/PersonajeAventura.vue'
 import ConfiguracionCuenta from '@/components/profile/ConfiguracionCuenta.vue'
+import ConstanciaPerfil from '@/components/profile/ConstanciaPerfil.vue'
 import TarjetasGrupo from '@/components/group/TarjetasGrupo.vue'
 import {
   PERSONAJES,
@@ -64,6 +65,7 @@ const email = computed(() => session.usuarioActual?.email ?? '')
         </span>
       </header>
 
+      <div class="resumen-perfil">
       <section
         class="identity panel-juego"
         :style="{
@@ -96,6 +98,9 @@ const email = computed(() => session.usuarioActual?.email ?? '')
           </span>
         </div>
       </section>
+
+      <ConstanciaPerfil />
+      </div>
 
       <section
         id="personalizar"
@@ -202,3 +207,9 @@ const email = computed(() => session.usuarioActual?.email ?? '')
   </div>
 </template>
 <style scoped src="@/assets/styles/components/VistaPerfil.css"></style>
+
+<style scoped>
+.resumen-perfil { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 22px; align-items: stretch; }
+.resumen-perfil .identity { min-width: 0; }
+@media (max-width: 1100px) { .resumen-perfil { grid-template-columns: minmax(0, 1fr); } }
+</style>

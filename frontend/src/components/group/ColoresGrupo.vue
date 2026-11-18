@@ -20,33 +20,9 @@ const color = defineModel<string>({ required: true })
   </div>
 </template>
 <style scoped>
-.colors {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.colors button {
-  position: relative;
-  padding: 0;
-  border: 2px solid;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  background: #20192d;
-  color: white;
-}
-.colors img {
-  width: 100%;
-  height: 62px;
-  object-fit: cover;
-}
-.colors span {
-  display: block;
-  font-size: 10px;
-  padding: 6px;
-}
-.colors .chosen {
-  outline: 2px solid #fff;
-  outline-offset: 3px;
-}
+.colors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.colors button { position: relative; padding: 0; border: 1px solid transparent; border-radius: 10px; overflow: hidden; background: #20192d; color: white; min-height: 46px; }
+.colors img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.colors span { position: relative; display: block; padding: 24px 8px 6px; font-size: 9px; font-weight: 800; background: linear-gradient(transparent, #120c1cb0); }
+.colors .chosen { box-shadow: 0 0 0 2px #eee2ff; }
 </style>

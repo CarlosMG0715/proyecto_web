@@ -41,6 +41,9 @@ function prepararIntegrantes(grupo, hoy) {
       completadosHoy: registros.filter(
         (registro) => claveFecha(registro.fechaRegistro, 'UTC') === hoy,
       ).length,
+      mensajeHoy: registros
+        .filter((registro) => registro.mensaje && claveFecha(registro.fechaRegistro, 'UTC') === hoy)
+        .sort((a, b) => b.registradoEn.getTime() - a.registradoEn.getTime())[0]?.mensaje ?? '',
       diasSinCumplir: riesgo?.ausenciasConsecutivas ?? 0,
     }
   })
@@ -72,6 +75,7 @@ function prepararGrupo(grupo) {
     id: grupo.id,
     creadoEn: grupo.creadoEn,
     name: grupo.name,
+    descripcion: grupo.descripcion,
     color: grupo.color,
     codigoInvitacion: grupo.codigoInvitacion,
     today: hoy,
@@ -80,6 +84,10 @@ function prepararGrupo(grupo) {
     habits: grupo.habits.map((habit) => ({
       id: habit.id,
       name: habit.name,
+      insignia: habit.insignia,
+      mensajesHoy: habit.registrosHabito
+        .filter((registro) => registro.mensaje && claveFecha(registro.fechaRegistro, 'UTC') === hoy)
+        .map((registro) => ({ idUsuario: registro.idUsuario, mensaje: registro.mensaje })),
       description: habit.description,
       diasMeta: habit.diasMeta,
       completadoPor: habit.registrosHabito
@@ -115,18 +123,28 @@ async function obtenerGrupo(idGrupo, idUsuario) {
 }
 
 async function crearGrupo(idUsuario, input) {
-  const grupo = await repo.prisma.grupo.create({
-    data: {
-      ...input,
-      codigoInvitacion: crypto.randomBytes(6).toString('hex').toUpperCase(),
-      idCreador: idUsuario,
-      membresias: { create: { idUsuario, role: 'ADMIN' } },
-      messages: {
-        create: { content: '¡El grupo comienza su aventura!', type: 'SYSTEM' },
-      },
-    },
-  })
-  return obtenerGrupo(grupo.id, idUsuario)
+  const prefijo = input.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4).padEnd(4, 'X')
+
+  // grupo y primer habito se guardan juntos
+  for (let intento = 0; intento < 3; intento++) {
+    try {
+      const grupo = await repo.prisma.grupo.create({
+        data: {
+          name: input.name,
+          descripcion: input.descripcion,
+          color: input.color,
+          codigoInvitacion: prefijo + '-' + crypto.randomBytes(2).toString('hex').toUpperCase(),
+          idCreador: idUsuario,
+          membresias: { create: { idUsuario, role: 'ADMIN' } },
+          habits: { create: { ...input.primerHabito, idCreador: idUsuario } },
+        },
+      })
+      return obtenerGrupo(grupo.id, idUsuario)
+    } catch (error) {
+      if (error.code !== 'P2002' || intento === 2) throw error
+    }
+  }
 }
 
 async function unirseAlGrupo(idUsuario, code) {
@@ -203,6 +221,26 @@ async function marcarHabito(idGrupo, idUsuario, idHabito, completado) {
         )
     } else
       await db.registroHabito.deleteMany({ where: { idHabito, idUsuario, fechaRegistro } })
+  })
+}
+
+// un envio guarda los habitos seleccionados y el mensaje del dia
+async function registrarCheckGrupal(idGrupo, idUsuario, input) {
+  await repo.change(idGrupo, async (db, grupo) => {
+    const integrante = comprobarMiembro(grupo, idUsuario)
+    if (integrante.caidoEn) throw crearErrorHttp('Tu personaje esta caido', 409)
+    const ids = [...new Set(input.idHabitos)]
+    if (ids.some((id) => !grupo.habits.some((habito) => habito.id === id))) {
+      throw crearErrorHttp('Hay un habito que no pertenece al grupo', 400)
+    }
+    const fechaRegistro = convertirAFecha(claveFecha(new Date(), grupo.timeZone))
+    for (const idHabito of ids) {
+      await db.registroHabito.upsert({
+        where: { idHabito_idUsuario_fechaRegistro: { idHabito, idUsuario, fechaRegistro } },
+        create: { idHabito, idUsuario, fechaRegistro, mensaje: input.mensaje },
+        update: { mensaje: input.mensaje },
+      })
+    }
   })
 }
 
@@ -286,6 +324,7 @@ async function eliminarGrupo(idGrupo, idUsuario) {
 }
 
 module.exports = {
+  registrarCheckGrupal,
   listarGrupos,
   obtenerGrupo,
   crearGrupo,

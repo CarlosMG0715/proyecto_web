@@ -59,6 +59,7 @@ const theme = computed(() => obtenerTemaBannerGrupo(group.value?.color))
 const todosCaidos = computed(() => !!group.value?.members.length && group.value.members.every((miembro) => miembro.caidoEn))
 const configuracionVisible = ref(false)
 const showChat = ref(true)
+const codigoCopiado = ref(false)
 const notice = ref('')
 const busy = ref(false)
 async function refresh() {
@@ -106,9 +107,11 @@ async function expulsarCaido(idMiembro: string) {
 async function copyCode() {
   try {
     await navigator.clipboard.writeText(group.value?.codigoInvitacion ?? '')
-    notice.value = 'Código copiado'
+    codigoCopiado.value = true
+    notice.value = ''
+    window.setTimeout(() => { codigoCopiado.value = false }, 1800)
   } catch {
-    notice.value = 'Selecciona y copia el código que aparece en el encabezado.'
+    notice.value = 'No se pudo copiar. Selecciona el código del botón.'
   }
 }
 async function leave() {
@@ -159,7 +162,6 @@ async function leave() {
         }"
       >
         <div class="header-identity">
-          <RouterLink to="/app/perfil" class="back">‹ Mis grupos</RouterLink>
           <div class="group-brand-row">
             <div
               class="group-header-emblem"
@@ -169,13 +171,21 @@ async function leave() {
             </div>
             <div class="group-brand-copy">
               <h1>{{ group.name }}</h1>
+              <p v-if="group.descripcion" class="descripcion-grupo">{{ group.descripcion }}</p>
             </div>
           </div>
         </div>
         <div class="header-actions">
-          <button class="invite-copy" @click="copyCode">
+          <button
+            class="invite-copy"
+            :style="{ '--invite-color': theme.color }"
+            :aria-label="codigoCopiado ? 'Código copiado' : 'Copiar código de invitación'"
+            @click="copyCode"
+          >
             <span class="invite-copy-text">
-              <span class="invite-label">Copiar código</span>
+              <span class="invite-label" aria-live="polite">
+                {{ codigoCopiado ? 'Código copiado' : 'Copiar código' }}
+              </span>
               <strong>{{ group.codigoInvitacion }}</strong>
             </span>
           </button>
@@ -187,7 +197,7 @@ async function leave() {
             class="boton-juego secondary"
             @click="configuracionVisible = true"
           >
-            Opciones
+            Editar grupo
           </button>
           <button class="leave-btn" @click="leave">Salir del grupo</button>
         </div>
@@ -237,12 +247,9 @@ async function leave() {
             class="simple-player"
             :class="{ propio: member.id === session.usuarioActual?.id }"
           >
-            <span class="player-bubble">
-              {{
-                member.caidoEn
-                  ? 'Caído'
-                  : `${member.completadosHoy}/${group.habits.length} hábitos`
-              }}
+            <span class="player-bubble" :class="{ 'con-mensaje': !member.caidoEn && member.mensajeHoy }">
+              <span v-if="!member.caidoEn && member.mensajeHoy" class="mensaje-personaje">{{ member.mensajeHoy }}</span>
+              <span class="estado-habitos">{{ member.caidoEn ? 'Caído' : member.completadosHoy + '/' + group.habits.length + ' hábitos completados' }}</span>
             </span>
             <LapidaAventura v-if="member.caidoEn" :size="100" />
             <PersonajeAventura
@@ -285,39 +292,6 @@ async function leave() {
       <div class="simple-columns" :class="{ 'chat-open': showChat }">
         <div class="simple-stack">
           <HabitosGrupo :key="group.id" :group="group" @changed="refresh" />
-          <section class="panel-juego">
-            <h2>Estadísticas del grupo</h2>
-            <p>
-              {{
-                group.members.filter(
-                  (m) =>
-                    m.completadosHoy === group!.habits.length &&
-                    group!.habits.length > 0,
-                ).length
-              }}
-              de {{ group.members.length }} integrantes completaron todo hoy.
-            </p>
-            <div class="simple-history">
-              <div v-for="day in group.history" :key="day.date">
-                <strong>{{ day.percent }}%</strong>
-                <meter
-                  min="0"
-                  max="100"
-                  :value="day.percent"
-                  :aria-label="day.date"
-                />
-                <small>{{ day.date.slice(5) }}</small>
-              </div>
-            </div>
-            <p v-if="!group.history.length" class="game-muted">
-              Las estadísticas aparecen después del primer cierre diario.
-            </p>
-            <p class="game-muted">
-              A medianoche, si falta algún hábito, el equipo pierde la racha y
-              cae el personaje que incumplió. Tres días seguidos sin cumplir
-              generan una alerta de deserción.
-            </p>
-          </section>
         </div>
         <ChatGrupo
           :key="group.id"
@@ -386,7 +360,7 @@ async function leave() {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 104px 20px 38px;
+  padding: 104px 20px 30px;
   min-height: 410px;
 }
 .simple-players {
@@ -453,7 +427,36 @@ async function leave() {
     text-align: center;
   }
 }
-.simple-player .player-bubble,
+.simple-player .player-bubble {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  max-width: 220px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  padding: 9px 13px;
+  margin-bottom: 9px;
+  border: none;
+  background: #fff7e7;
+  color: #3b3040;
+  border-radius: 14px;
+  box-shadow: 0 5px 15px #39244220;
+}
+.simple-player .player-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -21px;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 24px;
+  background: #fff7e7;
+  clip-path: polygon(0 0, 100% 0, 57% 100%);
+  filter: drop-shadow(0 2px 2px #39244220);
+}
+.mensaje-personaje { font-size: 13px; line-height: 1.4; font-weight: 700; }
+.estado-habitos { font-size: 10px; opacity: .8; }
 .simple-player .player-name {
   position: static;
   transform: none;
@@ -472,6 +475,8 @@ async function leave() {
 .simple-columns.chat-open {
   grid-template-columns: minmax(0, 1fr) 360px;
 }
+
+
 .simple-stack {
   display: grid;
   gap: 22px;
@@ -515,3 +520,4 @@ async function leave() {
   }
 }
 </style>
+

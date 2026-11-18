@@ -762,10 +762,10 @@
 .world::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -5% -4%;
   background-image: var(--world-bg);
   background-size: cover;
-  background-position: center bottom;
+  background-position: center;
   z-index: 0;
   pointer-events: none;
 }
@@ -867,17 +867,22 @@
   --poke-accent: var(--group-accent);
 }
 
-/* El código usa la misma tarjeta violeta que los botones del encabezado. */
+/* El código usa una versión oscura del color del grupo. */
 .invite-copy {
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  background: #30203f;
+  background: color-mix(in srgb, var(--invite-color, #73558c) 38%, #171320);
   color: #f4e9ff;
-  border: 1px solid #806195;
-  border-bottom: 3px solid #190f24;
+  border: 1px solid color-mix(in srgb, var(--invite-color, #73558c) 70%, #d8c2eb);
+  border-bottom: 3px solid color-mix(in srgb, var(--invite-color, #73558c) 35%, #100c16);
   border-radius: 12px;
   cursor: pointer;
+  transition: filter 0.16s, transform 0.16s;
+}
+.invite-copy:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
 }
 .invite-copy-text {
   display: grid;
@@ -885,7 +890,7 @@
   text-align: left;
 }
 .invite-copy .invite-label {
-  color: #d8c2eb;
+  color: color-mix(in srgb, var(--invite-color, #c4a5df) 60%, white);
   font-size: 10px;
 }
 .invite-copy strong {
@@ -906,3 +911,14 @@
     flex-wrap: wrap;
   }
 }
+
+.adventure-page .header-actions > .boton-juego.secondary,
+.adventure-page .crear-habito {
+  background: color-mix(in srgb, var(--group-accent) 65%, #bde8d1);
+  color: #172824;
+  border: none;
+  box-shadow: none;
+}
+.adventure-page .group-header-emblem { display: none; }
+.descripcion-grupo { color: #e4ddea; font-size: 12px; margin: 8px 0 0; }
+.adventure-page .adventure-header h1 { font: 800 clamp(32px, 4vw, 50px)/1.05 'Baloo 2', var(--font); }

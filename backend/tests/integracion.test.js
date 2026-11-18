@@ -74,10 +74,13 @@ test(
       const created = await request(
         'POST',
         '/groups',
-        { name: 'Prueba de integración', color: '#8b5cf6' },
+        { name: 'Prueba de integración', color: '#8b5cf6', descripcion: 'Equipo de prueba', primerHabito: { name: 'Leer', description: 'Diez paginas', insignia: 'target' } },
         a.token,
       )
       assert.equal(created.status, 201)
+      assert.match(created.data.codigoInvitacion, /^PRUE-[A-F0-9]{4}$/)
+      assert.equal(created.data.descripcion, 'Equipo de prueba')
+      assert.equal(created.data.habits.length, 1)
       const group = created.data
       groups.push(group.id)
       const route = '/groups/' + group.id
@@ -130,7 +133,15 @@ test(
         204,
       )
       let detail = (await request('GET', route, undefined, a.token)).data
-      const idHabito = detail.habits[0].id
+      const idHabito = group.habits[0].id
+      const segundoHabito = detail.habits.find((habito) => habito.id !== idHabito)
+      assert.equal((await request('DELETE', route + '/habits/' + segundoHabito.id, undefined, a.token)).status, 204)
+      assert.equal((await request('POST', route + '/check', { idHabitos: [idHabito], mensaje: 'Lei diez paginas' }, b.token)).status, 204)
+      detail = (await request('GET', route, undefined, a.token)).data
+      assert.equal(detail.habits[0].mensajesHoy[0].mensaje, 'Lei diez paginas')
+      assert.equal(detail.members.find((miembro) => miembro.id === b.id).mensajeHoy, 'Lei diez paginas')
+      assert.equal((await request('POST', route + '/check', { idHabitos: ['inexistente'], mensaje: '' }, b.token)).status, 400)
+      assert.equal((await request('GET', '/profile/constancia', undefined, b.token)).data.resumenSemanal.length, 7)
       const checkRoute = route + '/habits/' + idHabito + '/check-in'
       assert.equal(
         (await request('PUT', checkRoute, { completed: true }, b.token)).status,
@@ -262,8 +273,9 @@ test(
       )
       assert.equal(
         (await request('POST', route + '/revive', {}, b.token)).status,
-        204,
+        403,
       )
+      assert.equal((await request('POST', route + '/members/' + b.id + '/revive', {}, a.token)).status, 204)
       assert.equal(
         (await request('PUT', checkRoute, { completed: true }, b.token)).status,
         204,

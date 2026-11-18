@@ -12,6 +12,7 @@ const props = defineProps<{ group: Grupo }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 const name = ref(props.group.name)
 const color = ref(props.group.color)
+const descripcion = ref(props.group.descripcion)
 const error = ref('')
 const busy = ref(false)
 const router = useRouter()
@@ -35,6 +36,7 @@ async function save() {
     servicioGrupos.actualizarGrupo(props.group.id, {
       name: name.value,
       color: color.value,
+      descripcion: descripcion.value,
     }),
   )
   if (!error.value) emit('close')
@@ -63,6 +65,7 @@ async function remove() {
         Nombre
         <input v-model="name" required maxlength="80" />
       </label>
+      <label>Descripción<textarea v-model="descripcion" maxlength="300" rows="2" /></label>
       <ColoresGrupo v-model="color" />
       <button class="boton-juego" :disabled="busy">Guardar</button>
     </form>

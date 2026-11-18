@@ -63,6 +63,7 @@ model Usuario {
 }
 
 model Grupo {
+  descripcion String @default("")
   // espacio compartido; la zona horaria define el dia de check-in.
   id String            @id @default(cuid())
   name String
@@ -102,6 +103,7 @@ model MembresiaGrupo {
 }
 
 model Habito {
+  insignia String @default("target")
   // meta compartida que los miembros pueden completar cada dia.
   id String    @id @default(cuid())
   idGrupo String @map("groupId")
@@ -122,6 +124,7 @@ model Habito {
 }
 
 model RegistroHabito {
+  mensaje String @default("")
   // cumplimiento diario unico por persona y habito, .
   id String   @id @default(cuid())
   idHabito String @map("habitId")

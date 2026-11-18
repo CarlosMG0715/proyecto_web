@@ -6,18 +6,20 @@
 
 .identity {
   display: flex;
-  align-items: center;
-  gap: 32px;
+  align-items: stretch;
+  gap: 0;
+  border: none;
+  border-radius: 24px;
   padding: 0;
   position: relative;
   overflow: hidden;
   background: #251e30;
-  min-height: 230px;
+  min-height: 310px;
 }
 
 .identity-art {
-  width: 250px;
-  min-height: 230px;
+  width: 42%;
+  min-height: 310px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -28,8 +30,7 @@
     var(--profile-cover, #4d3865) 0%,
     color-mix(in srgb, var(--profile-cover, #4d3865) 60%, #150f1f) 100%
   );
-  border-right: 2px solid
-    color-mix(in srgb, var(--profile-accent, #a37bbd) 20%, #20182b);
+  border: none;
   flex-shrink: 0;
   transition: background 0.3s;
 }
@@ -48,7 +49,7 @@
 .avatar-stage::before {
   content: '';
   position: absolute;
-  top: 45%;
+  top: 50%;
   left: 50%;
   width: 210px;
   height: 210px;
@@ -83,7 +84,7 @@
 
 .orbit {
   position: absolute;
-  top: 45%;
+  top: 50%;
   left: 50%;
   border-radius: 50%;
   pointer-events: none;
@@ -113,19 +114,24 @@
 .identity-info {
   flex: 1;
   min-width: 0;
-  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 30px clamp(18px, 3vw, 36px);
 }
 
 .identity-info h2 {
-  font-size: 32px;
-  letter-spacing: -0.04em;
-  margin: 10px 0 6px;
+  font: 800 clamp(30px, 3vw, 42px)/1.1 'Baloo 2', var(--font);
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
 }
 
 .identity-info p {
   color: #c0adc9;
   font-size: 13px;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .member-label {
@@ -357,13 +363,13 @@
 
 @media (max-width: 1200px) {
   .identity-art {
-    width: 200px;
+    width: 42%;
   }
   .identity {
-    gap: 20px;
+    gap: 0;
   }
   .identity-info h2 {
-    font-size: 26px;
+    font-size: 32px;
   }
 }
 
@@ -384,11 +390,11 @@
     width: 100%;
     min-height: 200px;
     border-right: none;
-    border-bottom: 2px solid
-      color-mix(in srgb, var(--profile-accent, #a37bbd) 20%, #20182b);
+    border: none;
   }
   .identity-info {
-    padding: 22px 24px 12px;
+    padding: 24px;
+    align-items: center;
     text-align: center;
   }
   .identity-info h2 {

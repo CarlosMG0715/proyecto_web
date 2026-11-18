@@ -27,8 +27,8 @@ onMounted(() => dialog.value?.showModal())
 .kordia-dialog {
   background: #211a2d;
   color: #f4edff;
-  border: 1px solid #7953a4;
-  border-bottom: 4px solid #63438b;
+  border: none;
+
   border-radius: 22px;
   padding: 24px;
   width: min(580px, calc(100vw - 32px));
@@ -47,7 +47,7 @@ onMounted(() => dialog.value?.showModal())
   gap: 12px;
 }
 .kordia-dialog h2 {
-  font-size: 22px;
+  font: 800 26px/1.1 'Baloo 2', var(--font);
 }
 .kordia-dialog header button {
   background: none;
@@ -69,7 +69,7 @@ onMounted(() => dialog.value?.showModal())
 .kordia-dialog textarea {
   width: 100%;
   background: #171120;
-  border: 1px solid #685177;
+  border: none;
   color: #fff;
   padding: 12px;
   border-radius: 10px;

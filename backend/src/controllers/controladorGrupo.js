@@ -89,3 +89,8 @@ exports.eliminarGrupo = async (req, res) => {
   await grupos.eliminarGrupo(req.params.idGrupo, req.user.idUsuario)
   responderCambio(req, res)
 }
+
+exports.registrarCheckGrupal = async (req, res) => {
+  await grupos.registrarCheckGrupal(req.params.idGrupo, req.user.idUsuario, req.body)
+  responderCambio(req, res)
+}

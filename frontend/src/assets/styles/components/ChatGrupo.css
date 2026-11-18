@@ -473,3 +473,12 @@
     opacity: 1;
   }
 }
+
+.chat { background: var(--group-surface, #202a2b); }
+.chat-head { border: none; min-height: 88px; }
+.chat-title h3 { font: 800 25px 'Baloo 2', var(--font); margin: 0; }
+.chat-emblem { border: none; box-shadow: none; background: color-mix(in srgb, var(--chat-accent) 65%, #bde8d1); }
+.composer input { border: none; background: #181722; border-radius: 14px; padding: 16px; }
+.chat .bubble { border: none; border-radius: 18px 18px 18px 5px; padding: 14px 18px; }
+.chat .mine .bubble { background: color-mix(in srgb, var(--chat-accent) 22%, #263b37); border-radius: 18px 18px 5px 18px; }
+.chat .send { border: none; box-shadow: none; border-radius: 16px; }

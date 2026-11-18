@@ -16,10 +16,10 @@ No necesitas Docker. El frontend usa `/api`; Vite lo redirige al backend en el p
 - Registro con apodo, correo y contraseña hasheada; login, logout, cambio de apodo/contraseña y borrado de cuenta.
 - Perfil con los personajes y temas originales. Mis grupos debajo.
 - Grupos con nombre, color y código generado en el servidor. Entrada directa con código.
-- Hábitos compartidos: nombre, descripción, meta en días y un check por persona/hábito/día.
-- Chat sincronizado con Socket.IO, incluyendo eventos de hábitos y penalizaciones.
-- Racha grupal, cumplimiento de los últimos siete cierres y alerta al acumular tres días sin cumplir.
-- Si falta un hábito al cerrar el día, cae el personaje responsable y el equipo pierde la racha. El usuario puede reiniciar su personaje. No hay vidas.
+- Hábitos compartidos: nombre, descripción e insignia; el primer hábito es obligatorio al crear el grupo. Un check por persona/hábito/día, con mensaje opcional sobre el personaje.
+- Chat sincronizado con Socket.IO y avisos de creación de hábitos.
+- Racha grupal y gráfico de compromiso personal en el perfil: últimos siete días y constancia de treinta días.
+- Si falta un hábito al cerrar el día, cae el personaje responsable y el equipo pierde la racha. El administrador puede revivir o expulsar a integrantes caídos. Si cae todo el grupo, el administrador puede reiniciar la aventura. No hay vidas.
 
 ## Dónde está cada cosa
 
@@ -49,7 +49,7 @@ No necesitas Docker. El frontend usa `/api`; Vite lo redirige al backend en el p
 Ejemplo: el nombre de un hábito debe tener entre 12 y 18 caracteres.
 
 1. `frontend/src/components/group/HabitosGrupo.vue`: `minlength="12" maxlength="18"` en el input. El usuario ve el límite.
-2. `frontend/src/services/servicioGrupos.ts`: envía `{ name, description, diasMeta }` a la API.
+2. `frontend/src/services/servicioGrupos.ts`: envía `{ name, description, insignia }` a la API.
 3. `backend/src/routes/rutasGrupo.js`: encuentra POST/PATCH de hábitos y su validador.
 4. `backend/src/validators/validadoresGrupo.js`: cambia el campo del hábito a `z.string().trim().min(12).max(18)`. El backend siempre valida, aunque alguien evite el formulario.
 5. `backend/src/controllers/controladorGrupo.js`: recibe la petición validada y llama al servicio.
@@ -127,3 +127,40 @@ Ejemplos de nombres que aparecen en el historial:
 - daily_check_report: informe de cumplimiento diario.
 - group_target_days y habit_target_days: días de meta de grupos y hábitos.
 - add_sessions: creación de sesiones.
+## Recorrido para entender la version simplificada
+
+Empieza por una accion concreta y sigue sus llamadas. Las carpetas mantienen las responsabilidades del proyecto original; los archivos de esta version usan nombres en español.
+
+### Ejemplo: registrar los habitos del dia
+
+1. `frontend/src/views/app/VistaGrupo.vue` muestra el grupo y coloca `HabitosGrupo.vue` y `ChatGrupo.vue`.
+2. `frontend/src/components/group/HabitosGrupo.vue` recoge los habitos seleccionados y el mensaje.
+3. `frontend/src/services/servicioGrupos.ts` envia la peticion con Axios, configurado en `clienteHttp.ts`.
+4. `backend/src/routes/rutasGrupo.js` conecta POST `/groups/:idGrupo/check` con el validador y el controlador.
+5. `backend/src/middleware/verificarSesion.js` identifica al usuario; `validators/validadoresGrupo.js` revisa los campos enviados.
+6. `backend/src/controllers/controladorGrupo.js` recibe los datos y llama a `registrarCheckGrupal`.
+7. `backend/src/services/servicioGrupos.js` comprueba permisos y habitos, y guarda los registros dentro de la transaccion del repositorio.
+8. `backend/prisma/schema.prisma` define los modelos; `conexionBaseDatos.js` proporciona el cliente Prisma.
+9. El controlador avisa por Socket.IO. `usarGrupoEnTiempoReal.ts` vuelve a cargar el grupo y `stores/grupos.ts` actualiza lo visible.
+
+### Donde cambiar el diseño
+
+- `views`: pantallas y distribucion general
+- `components/group`: tarjetas, formularios, habitos y chat
+- `components/profile`: configuracion de cuenta y compromiso personal
+- `assets/styles/components`: estilos de cada pantalla o componente; algunos componentes tambien tienen estilos locales
+- `constants/bannersGrupos.ts`: colores y banners de los grupos
+- `constants/fondosTemas.ts` y `stores/personajes.ts`: fondos y personalizacion del usuario
+
+El fondo de los personajes depende del tema personal. Los encabezados, tarjetas y chat dependen del tema del grupo.
+
+### Reglas para mantener el orden
+
+- Una ruta conecta una URL con su controlador y validador
+- Un controlador recibe la peticion y devuelve la respuesta
+- Un servicio aplica permisos y reglas; puede consultar Prisma directamente o usar el repositorio para operaciones compartidas
+- El repositorio centraliza la carga y las transacciones de grupos
+- Un componente recoge datos y muestra resultados; las peticiones HTTP se escriben en services
+- Las migraciones aplicadas se conservan: no se borran ni renombran para limpiar el proyecto
+
+Solicitudes de ingreso todavia no esta implementado en esta version: el codigo de invitacion permite entrar directamente.
