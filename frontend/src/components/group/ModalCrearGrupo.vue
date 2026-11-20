@@ -50,17 +50,21 @@ async function enviar() {
   guardando.value = true
   error.value = ''
   try {
-    const grupo = modal.activeTab.value === 'create'
-      ? await servicioGrupos.crearGrupo({
+    if (modal.activeTab.value === 'create') {
+      const grupo = await servicioGrupos.crearGrupo({
           name: nombre.value,
           descripcion: descripcion.value,
           color: color.value,
           primerHabito: { name: nombreHabito.value, description: descripcionHabito.value, insignia: insignia.value },
         })
-      : await servicioGrupos.unirseAlGrupo(codigo.value)
-    await grupos.recargarGrupos()
-    modal.close()
-    await router.push({ name: 'grupo', params: { idGrupo: grupo.id } })
+      await grupos.recargarGrupos()
+      modal.close()
+      await router.push({ name: 'grupo', params: { idGrupo: grupo.id } })
+    } else {
+      await servicioGrupos.unirseAlGrupo(codigo.value)
+      modal.close()
+      await router.push({ name: 'perfil', query: { enviada: String(Date.now()) } })
+    }
   } catch (causa) {
     error.value = mensajeError(causa)
   } finally {

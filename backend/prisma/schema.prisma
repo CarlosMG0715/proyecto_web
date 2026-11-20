@@ -58,6 +58,7 @@ model Usuario {
   messages Mensaje[]
   sessions Sesion[]
   riesgosDesercion RiesgoDesercion[]
+  solicitudesEnviadas SolicitudIngreso[]
 
   @@map("users")
 }
@@ -80,6 +81,7 @@ model Grupo {
   messages Mensaje[]
   cierres CierreDiario[]
   riesgosDesercion RiesgoDesercion[]
+  solicitudesIngreso SolicitudIngreso[]
   color String            @default("#8b5cf6")
 
   @@index([idCreador])
@@ -100,6 +102,19 @@ model MembresiaGrupo {
   @@unique([idGrupo, idUsuario])
   @@index([idUsuario])
   @@map("group_memberships")
+}
+
+model SolicitudIngreso {
+  id String @id @default(cuid())
+  idGrupo String @map("groupId")
+  idUsuario String @map("requesterId")
+  creadoEn DateTime @default(now()) @db.Timestamptz(3) @map("createdAt")
+  grupo Grupo @relation(fields: [idGrupo], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+
+  @@unique([idGrupo, idUsuario])
+  @@index([idGrupo, creadoEn])
+  @@map("group_join_requests")
 }
 
 model Habito {

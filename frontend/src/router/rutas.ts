@@ -53,6 +53,10 @@ export const router = createRouter({
           name: 'perfil',
           component: () => import('@/views/app/VistaPerfil.vue'),
         },
+        {
+          path: 'solicitudes',
+          redirect: { name: 'perfil' },
+        },
       ],
     },
   ],

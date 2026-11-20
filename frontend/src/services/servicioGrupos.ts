@@ -3,6 +3,12 @@ import { api } from './clienteHttp'
 import type { Grupo, DatosGrupo, DatosHabito } from '@/types/grupo'
 const path = (id: string) => `/groups/${encodeURIComponent(id)}`
 export const servicioGrupos = {
+  async listarSolicitudes() {
+    return (await api.get<SolicitudIngreso[]>('/solicitudes')).data
+  },
+  async resolverSolicitud(id: string, aceptar: boolean) {
+    await api.patch(`/solicitudes/${encodeURIComponent(id)}`, { aceptar })
+  },
   async listarGrupos(): Promise<Grupo[]> {
     return (await api.get<Grupo[]>('/groups')).data
   },
@@ -12,8 +18,8 @@ export const servicioGrupos = {
   async crearGrupo(input: DatosGrupo): Promise<Grupo> {
     return (await api.post<Grupo>('/groups', input)).data
   },
-  async unirseAlGrupo(code: string): Promise<Grupo> {
-    return (await api.post<Grupo>('/groups/join', { code })).data
+  async unirseAlGrupo(code: string): Promise<{ idGrupo: string; pendiente: true }> {
+    return (await api.post<{ idGrupo: string; pendiente: true }>('/groups/join', { code })).data
   },
   async actualizarGrupo(id: string, input: DatosGrupo) {
     await api.patch(path(id), input)
@@ -56,4 +62,11 @@ export const servicioGrupos = {
   async enviarMensaje(id: string, content: string) {
     await api.post(`${path(id)}/messages`, { content })
   },
+}
+
+export interface SolicitudIngreso {
+  id: string
+  creadoEn: string
+  grupo: { id: string; name: string; color: string }
+  usuario: { id: string; name: string; idPersonaje: string }
 }

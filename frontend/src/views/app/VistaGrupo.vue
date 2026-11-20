@@ -235,7 +235,7 @@ async function leave() {
         </div>
         <div class="recorrido-personajes">
           <button
-            v-if="group.members.length > 1"
+            v-if="group.members.length > 3"
             class="flecha-personajes"
             aria-label="Ver integrante anterior"
             @click="recorrerPersonajes(-1)"
@@ -258,7 +258,7 @@ async function leave() {
                 PERSONAJES.find((c) => c.id === member.idPersonaje) ??
                 PERSONAJES[0]
               "
-              :size="member.id === session.usuarioActual?.id ? 132 : 112"
+              :size="132"
               :complete="
                 group.habits.length > 0 &&
                 member.completadosHoy === group.habits.length
@@ -277,14 +277,14 @@ async function leave() {
           </div>
         </div>
           <button
-            v-if="group.members.length > 1"
+            v-if="group.members.length > 3"
             class="flecha-personajes"
             aria-label="Ver siguiente integrante"
             @click="recorrerPersonajes(1)"
           >›</button>
         </div>
         <button
-          v-if="me && idPersonajeEnVista !== me.id"
+          v-if="group.members.length > 3 && me && idPersonajeEnVista !== me.id"
           class="volver-personaje"
           @click="idPersonajeEnVista = me.id"
         >Volver a mi personaje</button>

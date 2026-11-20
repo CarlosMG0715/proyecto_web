@@ -152,12 +152,53 @@ async function unirseAlGrupo(idUsuario, code) {
     where: { codigoInvitacion: code },
   })
   if (!grupoEncontrado) throw crearErrorHttp('No existe un grupo con ese código', 404)
-  await repo.change(grupoEncontrado.id, async (db, grupo) => {
-    if (grupo.membresias.some((integrante) => integrante.idUsuario === idUsuario)) return
-    await db.membresiaGrupo.create({ data: { idGrupo: grupoEncontrado.id, idUsuario } })
-    await registrarEvento(db, grupoEncontrado.id, 'Se unió un nuevo integrante al grupo.')
+  const yaEsIntegrante = await repo.prisma.membresiaGrupo.findUnique({
+    where: { idGrupo_idUsuario: { idGrupo: grupoEncontrado.id, idUsuario } },
   })
-  return obtenerGrupo(grupoEncontrado.id, idUsuario)
+  if (yaEsIntegrante) throw crearErrorHttp('Ya perteneces a este grupo', 409)
+  await repo.prisma.solicitudIngreso.upsert({
+    where: { idGrupo_idUsuario: { idGrupo: grupoEncontrado.id, idUsuario } },
+    create: { idGrupo: grupoEncontrado.id, idUsuario },
+    update: {},
+  })
+  return { idGrupo: grupoEncontrado.id, pendiente: true }
+}
+
+async function listarSolicitudes(idUsuario) {
+  return repo.prisma.solicitudIngreso.findMany({
+    where: { grupo: { membresias: { some: { idUsuario, role: 'ADMIN' } } } },
+    select: {
+      id: true,
+      creadoEn: true,
+      grupo: { select: { id: true, name: true, color: true } },
+      usuario: { select: { id: true, name: true, idPersonaje: true } },
+    },
+    orderBy: { creadoEn: 'asc' },
+  })
+}
+
+async function resolverSolicitud(idSolicitud, idUsuario, aceptar) {
+  const solicitud = await repo.prisma.solicitudIngreso.findUnique({
+    where: { id: idSolicitud },
+  })
+  if (!solicitud) throw crearErrorHttp('La solicitud ya no está disponible', 404)
+  await repo.change(solicitud.idGrupo, async (db, grupo) => {
+    comprobarMiembro(grupo, idUsuario, true)
+    if (aceptar) {
+      await db.membresiaGrupo.upsert({
+        where: {
+          idGrupo_idUsuario: {
+            idGrupo: solicitud.idGrupo,
+            idUsuario: solicitud.idUsuario,
+          },
+        },
+        create: { idGrupo: solicitud.idGrupo, idUsuario: solicitud.idUsuario },
+        update: {},
+      })
+    }
+    await db.solicitudIngreso.delete({ where: { id: idSolicitud } })
+  })
+  return solicitud.idGrupo
 }
 
 async function actualizarGrupo(idGrupo, idUsuario, input) {
@@ -329,6 +370,8 @@ module.exports = {
   obtenerGrupo,
   crearGrupo,
   unirseAlGrupo,
+  listarSolicitudes,
+  resolverSolicitud,
   actualizarGrupo,
   guardarHabito,
   eliminarHabito,

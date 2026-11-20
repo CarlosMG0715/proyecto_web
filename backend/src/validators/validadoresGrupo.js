@@ -23,6 +23,7 @@ const esquemaActualizarGrupo = z.object({ name, color, descripcion: descripcion.
 const esquemaUnirseGrupo = z
   .object({ code: z.string().trim().toUpperCase().min(4).max(40) })
   .strict()
+const esquemaResolverSolicitud = z.object({ aceptar: z.boolean() }).strict()
 const esquemaCrearHabito = z
   .object({
     name,
@@ -44,6 +45,7 @@ module.exports = {
   esquemaCrearGrupo,
   esquemaActualizarGrupo,
   esquemaUnirseGrupo,
+  esquemaResolverSolicitud,
   esquemaCrearHabito,
   esquemaRegistrarHabito,
   esquemaMensaje,

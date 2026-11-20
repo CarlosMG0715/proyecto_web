@@ -3,7 +3,8 @@
  * Menú lateral: marca, navegación principal, lista de grupos con sus banners temáticos,
  * botón "Crear grupo" y la tarjeta de tu cuenta con el botón de cerrar sesión.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import SolicitudesGrupo from '@/components/notifications/SolicitudesGrupo.vue'
 import { useRoute, useRouter } from 'vue-router'
 import IconoAplicacion, { type IconName } from '@/components/ui/IconoAplicacion.vue'
 import IconoPersonaje from '@/components/ui/IconoPersonaje.vue'
@@ -21,9 +22,12 @@ interface NavItem {
   icon: IconName
 }
 
-const NAV_ITEMS: NavItem[] = [{ name: 'perfil', label: 'Perfil', icon: 'user' }]
+const NAV_ITEMS: NavItem[] = [
+  { name: 'perfil', label: 'Perfil', icon: 'user' },
+]
 
 const route = useRoute()
+const solicitudesVisibles = ref(false)
 const router = useRouter()
 const session = usarAlmacenSesion()
 const characters = usarAlmacenPersonajes()
@@ -84,7 +88,19 @@ async function handleLogout(): Promise<void> {
           <span>{{ item.label }}</span>
         </RouterLink>
       </template>
+      <button type="button" class="nav-link solicitudes-boton" :class="{ active: solicitudesVisibles }" :aria-expanded="solicitudesVisibles" @click="solicitudesVisibles = !solicitudesVisibles">
+        <IconoAplicacion name="users" :size="17" /><span>Solicitudes</span>
+      </button>
     </nav>
+    <Teleport to="body">
+      <template v-if="solicitudesVisibles">
+        <button class="fondo-solicitudes" aria-label="Cerrar solicitudes" @click="solicitudesVisibles = false" />
+        <section class="desplegable-solicitudes" aria-label="Solicitudes de ingreso" @keydown.esc="solicitudesVisibles = false">
+          <button class="cerrar-solicitudes" aria-label="Cerrar solicitudes" @click="solicitudesVisibles = false">×</button>
+          <SolicitudesGrupo />
+        </section>
+      </template>
+    </Teleport>
 
     <div class="groups">
       <div class="section-row">
@@ -163,4 +179,11 @@ async function handleLogout(): Promise<void> {
 
 <style scoped>
 .group-link.caido { filter: grayscale(1); }
+.solicitudes-boton { width:100%; border:0; background:transparent; color:var(--text-soft); font-family:inherit; text-align:left; cursor:pointer; }
+.solicitudes-boton:hover { background:var(--surface); color:var(--text); }
+.solicitudes-boton.active { background:var(--primary-soft); color:#c4b5fd; }
+.fondo-solicitudes { position:fixed; inset:0; border:0; background:transparent; z-index:100; }
+.desplegable-solicitudes { position:fixed; left:280px; top:110px; width:min(380px,calc(100vw - 32px)); max-height:calc(100dvh - 140px); overflow:auto; z-index:101; background:#211a2c; border-radius:22px; box-shadow:0 18px 65px #0008; }
+.cerrar-solicitudes { position:absolute; right:14px; top:12px; border:0; background:#392b48; color:white; border-radius:10px; width:30px; height:30px; font-size:22px; cursor:pointer; }
+@media(max-width:700px) { .desplegable-solicitudes { left:16px; top:70px; max-height:calc(100dvh - 160px); } }
 </style>

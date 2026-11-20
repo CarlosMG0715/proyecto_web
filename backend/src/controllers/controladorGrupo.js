@@ -24,8 +24,19 @@ exports.crearGrupo = async (req, res) => {
 }
 exports.unirseAlGrupo = async (req, res) => {
   const resultado = await grupos.unirseAlGrupo(req.user.idUsuario, req.body.code)
-  notificarGrupo(resultado.id)
-  res.json(resultado)
+  res.status(202).json(resultado)
+}
+exports.listarSolicitudes = async (req, res) => {
+  res.json(await grupos.listarSolicitudes(req.user.idUsuario))
+}
+exports.resolverSolicitud = async (req, res) => {
+  const idGrupo = await grupos.resolverSolicitud(
+    req.params.idSolicitud,
+    req.user.idUsuario,
+    req.body.aceptar,
+  )
+  notificarGrupo(idGrupo)
+  res.sendStatus(204)
 }
 exports.actualizarGrupo = async (req, res) => {
   await grupos.actualizarGrupo(req.params.idGrupo, req.user.idUsuario, req.body)

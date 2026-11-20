@@ -18,6 +18,12 @@ router.get('/profile/constancia', perfil.obtenerConstanciaPerfil)
 
 
 // grupos
+router.get('/solicitudes', grupos.listarSolicitudes)
+router.patch(
+  '/solicitudes/:idSolicitud',
+  validate(validadores.esquemaResolverSolicitud),
+  grupos.resolverSolicitud,
+)
 router.get('/groups', grupos.listarGrupos)
 router.post('/groups', validate(validadores.esquemaCrearGrupo), grupos.crearGrupo)
 
